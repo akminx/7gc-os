@@ -1,0 +1,36 @@
+[project]
+name = "7gc-os"
+version = "0.1.0"
+description = "7GC OS — Valuation Evidence Ledger"
+requires-python = ">=3.13"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+# The oracle is deliberately independent of production code and is validated by
+# evals/oracle/anchors.py rather than by types. See docs/ORACLE.md.
+exclude = "^evals/oracle/"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "evals"]
+
+[tool.coverage.run]
+omit = ["evals/oracle/*"]

@@ -1,0 +1,293 @@
+# Oracle primitives — hand-transcribed from source documents, pre-implementation.
+#
+# THIS FILE CONTAINS NO DERIVED VALUES.
+# No row verdicts, no totals, no subtotals, no R3 applicability, no
+# fully_supported flags, no pro_forma labels. Every one of those is computed by
+# derive.py, which imports nothing from production code.
+#
+# The rule that produced this split (diagnosis review, 2026-07-24): two fixer
+# cycles failed because ~200 hand-maintained derived cells drifted from the
+# predicates stated elsewhere. Six of six unsupported subtotals were wrong, and
+# the adversary reviewing them hand-computed one wrong too. Hand-maintained
+# derived cells are unreliable regardless of who maintains them.
+#
+# Contentious judgements stay HERE as reviewed inputs: whether source language
+# means with_counsel, whether a claim is authoritative, whether a document's
+# applicability window closes. derive.py calculates consequences only.
+
+meta:
+  corpus: "7GC Audit Case Study"
+  positions: 14
+  # Q1-10: these were one conflated number. Banzai's single saved-quote PDF
+  # carries three dated observations; Jio's delivery email is an attribute of
+  # the statement it transmits. _validate() now asserts both counts.
+  physical_source_files: 19
+  evidence_records: 22
+  packet_periods: 6
+  lot_count: 17
+
+# ── Periods ──────────────────────────────────────────────────────────────
+# audit_scope: packet | lineage_only  (INV-20)
+periods:
+  - {id: f2_23q4, fund: fund_ii, date: "2023-12-31", audit_scope: packet}
+  - {id: f2_24q2, fund: fund_ii, date: "2024-06-30", audit_scope: lineage_only}
+  - {id: f2_24q4, fund: fund_ii, date: "2024-12-31", audit_scope: packet}
+  - {id: f2_25q2, fund: fund_ii, date: "2025-06-30", audit_scope: lineage_only}
+  - {id: f2_25q3, fund: fund_ii, date: "2025-09-30", audit_scope: lineage_only}
+  - {id: f2_25q4, fund: fund_ii, date: "2025-12-31", audit_scope: packet}
+  - {id: f2_26q1, fund: fund_ii, date: "2026-03-31", audit_scope: lineage_only}
+  - {id: f1_2021, fund: fund_i,  date: "2021-12-31", audit_scope: lineage_only}
+  - {id: f1_2022, fund: fund_i,  date: "2022-12-31", audit_scope: lineage_only}
+  - {id: f1_2023, fund: fund_i,  date: "2023-12-31", audit_scope: packet}
+  - {id: f1_2024, fund: fund_i,  date: "2024-12-31", audit_scope: packet}
+  - {id: f1_2025, fund: fund_i,  date: "2025-12-31", audit_scope: packet}
+
+# ── Holdings and lots ────────────────────────────────────────────────────
+holdings:
+  because_market: {fund: fund_ii, position_type: direct_equity}
+  moonfare:       {fund: fund_ii, position_type: fx_denominated_interest, currency: EUR}
+  sway:           {fund: fund_ii, position_type: direct_equity}
+  anthropic:      {fund: fund_ii, position_type: direct_equity}
+  lucra:          {fund: fund_ii, position_type: direct_equity}
+  poolside:       {fund: fund_ii, position_type: direct_equity}
+  fluidstack:     {fund: fund_ii, position_type: direct_equity}
+  dream:          {fund: fund_ii, position_type: direct_equity}
+  jackpocket:     {fund: fund_ii, position_type: direct_equity}
+  capsule:        {fund: fund_i,  position_type: direct_equity}
+  mom_project:    {fund: fund_i,  position_type: direct_equity}
+  roofstock:      {fund: fund_i,  position_type: direct_equity}
+  jio:            {fund: fund_i,  position_type: indirect_feeder}
+  banzai:         {fund: fund_i,  position_type: public_listed}
+
+# shares: null means the lot has no share count (fund/feeder interests, notes).
+# realized_date: null means still held.
+lots:
+  - {id: bm_1,     holding: because_market, security_class: series_b1, shares: 625000, entry_pps: "1.60",  cost: "1000000", acquired: "2021-11-02", realized: null}
+  - {id: mf_1,     holding: moonfare,       security_class: fund_interest, shares: null, entry_pps: null,  cost: "1000000", acquired: "2023-03-17", realized: null, foreign_amount: "950000", foreign_currency: EUR}
+  # Sway's recapitalisation converted Series A into Series A-3 at 1.09375:1.
+  # The security class changes at a date, so derive.py resolves class-at-date
+  # rather than treating the lot as one immutable class (INV-17 depends on this:
+  # post-recap the held class equals the priced class, so Sway is NOT cross-class).
+  - {id: sway_1,   holding: sway,           security_class: series_a,  shares: 800000, entry_pps: "2.50",  cost: "2000000", acquired: "2023-10-18", realized: null,
+     converted: {date: "2025-09-30", security_class: series_a3, shares: 875000, ratio: "1.09375"}}
+  - {id: anth_1,   holding: anthropic,      security_class: preferred, shares: 40000,  entry_pps: "50.00", cost: "2000000", acquired: "2024-02-07", realized: null}
+  - {id: lucra_1,  holding: lucra,          security_class: series_a1, shares: 750000, entry_pps: "2.00",  cost: "1500000", acquired: "2024-06-28", realized: null}
+  - {id: pool_1,   holding: poolside,       security_class: series_b,  shares: 50000,  entry_pps: "40.00", cost: "2000000", acquired: "2024-08-01", realized: null}
+  - {id: fluid_1,  holding: fluidstack,     security_class: series_a,  shares: 100000, entry_pps: "10.00", cost: "1000000", acquired: "2024-10-10", realized: null}
+  - {id: fluid_2,  holding: fluidstack,     security_class: series_a2, shares: 100000, entry_pps: "15.00", cost: "1500000", acquired: "2025-05-30", realized: null}
+  - {id: dream_1,  holding: dream,          security_class: series_a1, shares: 625000, entry_pps: "3.20",  cost: "2000000", acquired: "2025-08-01", realized: null}
+  - {id: jack_1,   holding: jackpocket,     security_class: series_b,  shares: 500000, entry_pps: "4.00",  cost: "2000000", acquired: "2021-12-30", realized: "2024-05-20",
+     realization: {shares: 500000, cash_per_share: "6.20", gross: "3100000", fees: "0", escrow: "0", earnout: "0", withholding: "0", net: "3100000"}}
+  - {id: caps_1,   holding: capsule,        security_class: series_b,  shares: 500000, entry_pps: "4.00",  cost: "2000000", acquired: "2019-06-12", realized: null}
+  - {id: mom_1,    holding: mom_project,    security_class: series_b,  shares: 400000, entry_pps: "2.50",  cost: "1000000", acquired: "2020-04-23", realized: null}
+  - {id: mom_2,    holding: mom_project,    security_class: series_c,  shares: 100000, entry_pps: "5.00",  cost: "500000",  acquired: "2021-09-15", realized: null}
+  - {id: mom_3,    holding: mom_project,    security_class: conv_note, shares: null,   entry_pps: null,    cost: "250000",  acquired: "2023-03-22", realized: null}
+  - {id: roof_1,   holding: roofstock,      security_class: series_e,  shares: 60000,  entry_pps: "25.00", cost: "1500000", acquired: "2021-11-08", realized: null}
+  - {id: jio_1,    holding: jio,            security_class: lp_interest, shares: null, entry_pps: null,    cost: "1000000", acquired: "2020-07-01", realized: null}
+  - {id: banz_1,   holding: banzai,         security_class: common,    shares: 50000,  entry_pps: "10.00", cost: "500000",  acquired: "2021-03-04", realized: null}
+
+# ── Mark observations ────────────────────────────────────────────────────
+# Transcribed from the two trackers. Includes lineage-only periods, which the
+# R3 equality limb may use as a predecessor observation but which never reset
+# support age, never generate their own assessment, and never enter packet
+# completeness (INV-20, as revised after the diagnosis review).
+mark_observations:
+  because_market: {f2_23q4: "1000000", f2_24q2: "1000000", f2_24q4: "1000000", f2_25q2: "1000000", f2_25q3: "1000000", f2_25q4: "1000000", f2_26q1: "1000000"}
+  moonfare:       {f2_23q4: "1000000", f2_24q2: "1000000", f2_24q4: "1048515", f2_25q2: "1048515", f2_25q3: "1048515", f2_25q4: "1048515", f2_26q1: "1048515"}
+  sway:           {f2_23q4: "2000000", f2_24q2: "2000000", f2_24q4: "2000000", f2_25q2: "2000000", f2_25q3: "350000",  f2_25q4: "350000",  f2_26q1: "350000"}
+  anthropic:      {f2_24q2: "2000000", f2_24q4: "2000000", f2_25q2: "2000000", f2_25q3: "2000000", f2_25q4: "8000000", f2_26q1: "8000000"}
+  lucra:          {f2_24q2: "1500000", f2_24q4: "1500000", f2_25q2: "1500000", f2_25q3: "1500000", f2_25q4: "2250000", f2_26q1: "2250000"}
+  poolside:       {f2_24q4: "2000000", f2_25q2: "2000000", f2_25q3: "2000000", f2_25q4: "2000000", f2_26q1: "2000000"}
+  fluidstack:     {f2_24q4: "1000000", f2_25q2: "2500000", f2_25q3: "2500000", f2_25q4: "6000000", f2_26q1: "6000000"}
+  dream:          {f2_25q3: "2000000", f2_25q4: "5000000", f2_26q1: "5000000"}
+  jackpocket:     {f2_23q4: "2000000"}
+  capsule:        {f1_2021: "2000000", f1_2022: "600000", f1_2023: "600000", f1_2024: "600000", f1_2025: "600000"}
+  mom_project:    {f1_2021: "2500000", f1_2022: "2500000", f1_2023: "2750000", f1_2024: "2750000", f1_2025: "2750000"}
+  roofstock:      {f1_2021: "1500000", f1_2022: "1500000", f1_2023: "1500000", f1_2024: "1500000", f1_2025: "1500000"}
+  jio:            {f1_2021: "1000000", f1_2022: "1000000", f1_2023: "1000000", f1_2024: "1000000", f1_2025: "1000000"}
+  banzai:         {f1_2021: "500000",  f1_2022: "500000",  f1_2023: "120000",  f1_2024: "55000",   f1_2025: "31000"}
+
+# Tracker-stated totals, transcribed for reconciliation. NOT expected outputs —
+# derive.py computes held-at-date totals independently and the difference is the
+# reconciliation finding.
+tracker_totals:
+  fund_ii: {f2_23q4: "4000000", f2_24q2: "7500000", f2_24q4: "10548515", f2_25q2: "12048515", f2_25q3: "12398515", f2_25q4: "25648515", f2_26q1: "25648515"}
+  fund_i:  {f1_2021: "7500000", f1_2022: "6100000", f1_2023: "5970000", f1_2024: "5905000", f1_2025: "5881000"}
+
+# ── Documents ────────────────────────────────────────────────────────────
+# applicable_from / applicable_to encode the source-stated reliance window
+# (INV-16). applicable_to: null means open until superseded.
+# priced_class is the security class whose price the document establishes;
+# derive.py compares it against held lot classes to detect cross-class pricing.
+documents:
+  poolside_spa:      {source_file: "Poolside SPA.pdf", claim: poolside/series_b_price, holding: poolside,   source_class: executed_transaction_doc,  execution_status: executed,             date: "2024-08-01", applicable_from: "2024-08-01", applicable_to: null, priced_class: series_b,  pps: "40.00"}
+  roofstock_spa:     {source_file: "Roofstock SPA.pdf", claim: roofstock/series_e_price, holding: roofstock,  source_class: executed_transaction_doc,  execution_status: executed,             date: "2021-11-08", applicable_from: "2021-11-08", applicable_to: null, priced_class: series_e,  pps: "25.00"}
+  fluidstack_a_spa:  {source_file: "Fluidstack A SPA.pdf", claim: fluidstack/series_a_price, holding: fluidstack, source_class: executed_transaction_doc,  execution_status: executed,             date: "2024-10-10", applicable_from: "2024-10-10", applicable_to: null, priced_class: series_a, pps: "10.00"}
+  fluidstack_b_cap:  {source_file: "Fluidstack B captable.pdf", claim: fluidstack/series_b_price, holding: fluidstack, source_class: company_cap_table,         execution_status: pro_forma,            date: "2025-12-18", applicable_from: "2025-12-18", applicable_to: null, priced_class: series_b,  pps: "30.00"}
+  dream_b_cap:       {source_file: "Dream B captable.pdf", claim: dream/series_b_price, holding: dream,      source_class: company_cap_table,         execution_status: pro_forma,            date: "2025-11-14", applicable_from: "2025-11-14", applicable_to: null, priced_class: series_b,  pps: "8.00"}
+  dream_close_email: {source_file: "Dream closing email.txt", claim: dream/series_b_price, holding: dream,      source_class: company_communication,     execution_status: unexecuted_referenced, date: "2025-11-17", applicable_from: "2025-11-17", applicable_to: null, priced_class: series_b, pps: "8.00"}
+  sway_recap_cap:    {source_file: "Sway recap captable.pdf", claim: sway/series_a3_price, holding: sway,       source_class: company_cap_table,         execution_status: pro_forma,            date: "2025-09-30", applicable_from: "2025-09-30", applicable_to: null, priced_class: series_a3, pps: "0.40"}
+  lucra_term_sheet:  {source_file: "Lucra term sheet.pdf", claim: lucra/series_a1_price, holding: lucra,      source_class: company_communication,     execution_status: non_binding,          date: "2024-05-20", applicable_from: "2024-05-20", applicable_to: null, priced_class: series_a1, pps: "2.00"}
+  lucra_ceo_email:   {source_file: "Lucra CEO email.txt", claim: lucra/series_a2_price, holding: lucra,      source_class: company_communication,     execution_status: unexecuted_referenced, date: "2025-10-17", applicable_from: "2025-10-17", applicable_to: null, priced_class: series_a2, pps: "3.00"}
+  anthropic_press:   {source_file: "The Signal.txt", claim: anthropic/round_rumour, holding: anthropic,  source_class: press,                     execution_status: not_applicable,       date: "2025-12-09", applicable_from: "2025-12-09", applicable_to: null, priced_class: null,      pps: null}
+  moonfare_memo_23:  {source_file: "Moonfare FY2023 memo.pdf", claim: moonfare/fy2023_value, holding: moonfare,   source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2023-12-31", applicable_from: "2023-12-31", applicable_to: "2023-12-31", priced_class: null, pps: null, concluded_value: "1000000", fx_rate: "1.0526"}
+  moonfare_fx_24:    {source_file: "Moonfare FX memo.pdf", claim: moonfare/fy2024_value, holding: moonfare,   source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: null, pps: null, concluded_value: "1048515", fx_rate: "1.1037"}
+  capsule_memo_22:   {source_file: "Capsule FY2022 memo.pdf", claim: capsule/fy2022_value, holding: capsule,    source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2022-12-31", applicable_from: "2022-12-31", applicable_to: "2022-12-31", priced_class: series_b, pps: "1.20"}
+  mom_c_term_sheet:  {source_file: "MomProject C term sheet.pdf", claim: mom_project/series_c_price, holding: mom_project, source_class: company_communication,    execution_status: non_binding,          date: "2021-09-15", applicable_from: "2021-09-15", applicable_to: null, priced_class: series_c,  pps: "5.00"}
+  jackpocket_merger: {source_file: "Jackpocket merger notice.pdf", claim: jackpocket/merger_consideration, holding: jackpocket, source_class: executed_transaction_doc,  execution_status: executed,             date: "2024-05-20", applicable_from: "2024-05-20", applicable_to: null, priced_class: series_b,  pps: "6.20"}
+  jio_stmt_23:       {source_file: "Jio statement 2023.pdf", claim: jio/fy2023_nav, holding: jio,        source_class: administrator_statement,   execution_status: not_applicable,       date: "2023-12-31", applicable_from: "2023-12-31", applicable_to: "2023-12-31", priced_class: null, pps: null, nav: "1000000"}
+  jio_stmt_24:       {source_file: "Jio statement 2024.pdf", claim: jio/fy2024_nav, holding: jio,        source_class: administrator_statement,   execution_status: not_applicable,       date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: null, pps: null, nav: "1000000"}
+  jio_stmt_25:       {source_file: "Jio statement 2025.pdf", claim: jio/fy2025_nav, holding: jio,        source_class: administrator_statement,   execution_status: not_applicable,       date: "2025-12-31", applicable_from: "2025-12-31", applicable_to: "2025-12-31", priced_class: null, pps: null, nav: "1000000", delivered: "2026-01-30"}
+  # One saved quote-record PDF, but three distinct observations. Modelled as
+  # three documents so each measurement date resolves to its own quote date —
+  # F10 is precisely that the FY2023 close is dated 12/29, the last trading day.
+  # Collapsing them into one document dated 2025-12-31 made the FY2023 quote
+  # read as subsequent evidence, which it is not.
+  # One artifact, two claims, two authority classes (INV-15, Q1-7): the email is
+  # a company communication; the statement it transmits is an administrator
+  # statement. Authority belongs to the claim, never to the container.
+  jio_delivery_email: {source_file: "Jio statement 2025.pdf", claim: jio/fy2025_delivery, holding: jio, source_class: company_communication, execution_status: not_applicable, date: "2026-01-30", applicable_from: "2026-01-30", applicable_to: null, priced_class: null, pps: null}
+  banzai_quote_23:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2023_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2023-12-29", applicable_from: "2023-12-29", applicable_to: "2023-12-31", priced_class: common, pps: "2.40"}
+  banzai_quote_24:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2024_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: common, pps: "1.10"}
+  banzai_quote_25:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2025_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2025-12-31", applicable_from: "2025-12-31", applicable_to: "2025-12-31", priced_class: common, pps: "0.62"}
+
+# ── Document gaps ────────────────────────────────────────────────────────
+# Reviewed classification of source wording. Immutable observation (INV-12).
+# security_class scopes the gap to the lot it affects, so a holding with one
+# documented lot and one undocumented lot resolves to `partial`, not `sufficient`.
+document_gaps:
+  - {holding: lucra,          requirement: R1, security_class: series_a1,     missing: "Series A-1 SPA",              kind: with_counsel,                     quote: "on file with company counsel and have not been located in the Fund's document repository"}
+  - {holding: fluidstack,     requirement: R1, security_class: series_a2,     missing: "Series A-2 executed docs",    kind: with_counsel,                     quote: "executed documents on file with company counsel"}
+  - {holding: sway,           requirement: R1, security_class: series_a,      missing: "Series A SPA (Oct 2023)",     kind: with_counsel,                     quote: "Original Series A SPA (Oct 2023) on file with counsel"}
+  - {holding: banzai,         requirement: R1, security_class: common,        missing: "pre-listing 2021 SPA",        kind: with_counsel,                     quote: "Pre-listing 2021 SPA on file with counsel"}
+  - {holding: anthropic,      requirement: R1, security_class: preferred,     missing: "Feb 2024 subscription docs",  kind: referenced_location_unspecified,  quote: "Entry: executed subscription docs on file (Feb 2024)."}
+  - {holding: because_market, requirement: R1, security_class: series_b1,     missing: "Series B-1 SPA",              kind: not_located,                      quote: "SPA referenced above not yet located in Drive"}
+  - {holding: capsule,        requirement: R1, security_class: series_b,      missing: "2019 Series B SPA",           kind: not_located,                      quote: "Original 2019 Series B SPA not located in Drive."}
+  - {holding: jackpocket,     requirement: R1, security_class: series_b,      missing: "2021 SPA",                    kind: not_located,                      quote: "Original 2021 SPA not yet located in Drive"}
+  - {holding: mom_project,    requirement: R1, security_class: series_b,      missing: "2020 Series B SPA",           kind: not_located,                      quote: "2020 Series B SPA not located in Drive."}
+  - {holding: mom_project,    requirement: R1, security_class: conv_note,     missing: "2023 Note Purchase Agreement", kind: not_located,                     quote: "2023 Note Purchase Agreement referenced in prior records but not located in Drive."}
+  - {holding: dream,          requirement: R1, security_class: series_a1,     missing: "Series A-1 acquisition docs", kind: not_located,                      quote: "no executed acquisition document in corpus"}
+  - {holding: moonfare,       requirement: R1, security_class: fund_interest, missing: "March 2023 acquisition docs", kind: not_located,                      quote: "no executed acquisition document in corpus"}
+
+  # R2 gaps: the mark is carried at a price whose supporting document is absent.
+  - {holding: because_market, requirement: R2, security_class: series_b1,     missing: "any fair value support",      kind: not_located,                      quote: "no evidence of any kind in corpus"}
+  - {holding: sway,           requirement: R2, security_class: series_a,      missing: "Series A SPA (Oct 2023)",     kind: with_counsel,                     quote: "Original Series A SPA (Oct 2023) on file with counsel"}
+  - {holding: jackpocket,     requirement: R2, security_class: series_b,      missing: "2021 SPA",                    kind: not_located,                      quote: "Original 2021 SPA not yet located in Drive"}
+  - {holding: anthropic,      requirement: R2, security_class: preferred,     missing: "Feb 2024 subscription docs",  kind: referenced_location_unspecified,  quote: "Entry: executed subscription docs on file (Feb 2024)."}
+
+# ── Evidence links ───────────────────────────────────────────────────────
+# Reviewed: which document is relied upon for which requirement.
+# derive.py filters by the document's applicability window at each date.
+evidence_links:
+  - {holding: poolside,   requirement: R1, document: poolside_spa}
+  - {holding: roofstock,  requirement: R1, document: roofstock_spa}
+  - {holding: fluidstack, requirement: R1, document: fluidstack_a_spa}
+  - {holding: jio,        requirement: R1, document: jio_stmt_23}
+  - {holding: jio,        requirement: R1, document: jio_stmt_24}
+  - {holding: jio,        requirement: R1, document: jio_stmt_25}
+  - {holding: lucra,      requirement: R1, document: lucra_term_sheet}
+  - {holding: mom_project, requirement: R1, document: mom_c_term_sheet}
+
+  - {holding: poolside,   requirement: R2, document: poolside_spa}
+  - {holding: roofstock,  requirement: R2, document: roofstock_spa}
+  - {holding: fluidstack, requirement: R2, document: fluidstack_a_spa}
+  - {holding: fluidstack, requirement: R2, document: fluidstack_b_cap}
+  - {holding: dream,      requirement: R2, document: dream_b_cap}
+  # The CFO's closing notice corroborates the same Series B round. It was
+  # transcribed as a document but never linked, so it was never consulted.
+  - {holding: dream,      requirement: R2, document: dream_close_email}
+  - {holding: sway,       requirement: R2, document: sway_recap_cap}
+  - {holding: lucra,      requirement: R2, document: lucra_term_sheet}
+  - {holding: lucra,      requirement: R2, document: lucra_ceo_email}
+  - {holding: anthropic,  requirement: R2, document: anthropic_press}
+  - {holding: moonfare,   requirement: R2, document: moonfare_memo_23}
+  - {holding: moonfare,   requirement: R2, document: moonfare_fx_24}
+  - {holding: capsule,    requirement: R2, document: capsule_memo_22}
+  - {holding: mom_project, requirement: R2, document: mom_c_term_sheet}
+  - {holding: jio,        requirement: R2, document: jio_stmt_23}
+  - {holding: jio,        requirement: R2, document: jio_stmt_24}
+  - {holding: jio,        requirement: R2, document: jio_stmt_25}
+  - {holding: banzai,     requirement: R2, document: banzai_quote_23}
+  - {holding: banzai,     requirement: R2, document: banzai_quote_24}
+  - {holding: banzai,     requirement: R2, document: banzai_quote_25}
+
+  - {holding: jackpocket, requirement: R4, document: jackpocket_merger}
+
+# Sway's Series A entry (pre-recap) is supported only by the counsel-held SPA;
+# no R2 link exists before the recap, so 23Q4/24Q4 fall to the gap rule.
+
+# ── Valuation support observations for R3 ────────────────────────────────
+# Per material component: the date of the most recent qualifying support.
+# "Qualifying" = a financing round, valuation memo, administrator statement or
+# market quote. Absent support is modelled as an explicit null entry, which
+# counts as stale (SPEC §7.2).
+support_observations:
+  because_market: [{component: valuation, dates: []}]
+  moonfare:       [{component: underlying_valuation, dates: ["2023-03-17"]},
+                   {component: fx_rate, dates: ["2023-12-31", "2024-12-31"]}]
+  sway:           [{component: valuation, dates: ["2023-10-18", "2025-09-30"]}]
+  anthropic:      [{component: valuation, dates: ["2024-02-07"]}]
+  lucra:          [{component: valuation, dates: ["2024-05-20", "2025-10-17"]}]
+  poolside:       [{component: valuation, dates: ["2024-08-01"]}]
+  fluidstack:     [{component: valuation, dates: ["2024-10-10", "2025-05-30", "2025-12-18"]}]
+  dream:          [{component: valuation, dates: ["2025-11-14"]}]
+  jackpocket:     [{component: valuation, dates: []}]
+  capsule:        [{component: valuation, dates: ["2022-12-31"]}]
+  mom_project:    [{component: equity_valuation, dates: ["2021-09-15"]},
+                   {component: note_valuation, dates: []}]
+  roofstock:      [{component: valuation, dates: ["2021-11-08"]}]
+  jio:            [{component: valuation, dates: ["2023-12-31", "2024-12-31", "2025-12-31"]}]
+  banzai:         [{component: valuation, dates: ["2023-12-29", "2024-12-31", "2025-12-31"]}]
+
+# ── Management's own labels ──────────────────────────────────────────────
+# A PRIMITIVE observation of what the tracker asserts — never the derived
+# assessment label. Where the two disagree, that is a reconciliation finding
+# (INV-4). Anthropic is the case: management calls the 25Q4 mark PRO FORMA, but
+# no pro forma document exists — there is no document at all, only press.
+tracker_labels:
+  anthropic: {f2_25q4: [pro_forma], f2_26q1: [pro_forma]}
+
+# ── Human/management decisions present in the corpus ─────────────────────
+# Both are empty, and that is the point: the auditor asks for management
+# assessments (PBC ¶3) and none exists, and no cross-class valuation policy has
+# been recorded. derive.py must not invent either.
+# Shape: {holding, date, status: draft|approved|superseded, mark_revision,
+#          evidence_set_hash}. Only `approved` closes R3 (INV-18).
+management_assessments: []
+
+# Shape: {holding, date, method, citation}. Scoped per holding+date — a
+# decision recorded for one position must not clear another (INV-17).
+valuation_policy_decisions: []
+# SPEC §6.3: sufficiency is a PREREQUISITE to valuation_approval, not the
+# same thing. Empty here, so no fund-date may report an approved total.
+# Shape: {holding, date, mark_revision, evidence_set_hash, policy_version}.
+# Per MARK, not per fund-date: V3 requires every held member approved.
+valuation_approvals: []
+
+# ── Policy matrix — oracle-owned ─────────────────────────────────────────
+# Scoped to cells this corpus exercises plus deliberate negatives, per the
+# diagnosis review's cut list. An unenumerated tuple raises rather than
+# defaulting: fail-closed, never a guess.
+policy_matrix:
+  - {req: R1, source_class: executed_transaction_doc,   execution_status: executed,              position_type: direct_equity,           verdict: sufficient}
+  - {req: R1, source_class: administrator_statement,    execution_status: not_applicable,        position_type: indirect_feeder,         verdict: sufficient, note: "owner determination: administrator statement accepted as equivalent for a feeder interest"}
+  - {req: R1, source_class: company_communication,      execution_status: non_binding,           position_type: direct_equity,           verdict: insufficient, reason: NON_BINDING_TERM_SHEET, next_action: REQUEST_EXECUTED_DOC}
+
+  - {req: R2, source_class: executed_transaction_doc,   execution_status: executed,              position_type: direct_equity,           verdict: sufficient}
+  - {req: R2, source_class: company_cap_table,          execution_status: pro_forma,             position_type: direct_equity,           verdict: partial,      reason: PRO_FORMA_PENDING_EXECUTION}
+  - {req: R2, source_class: company_communication,      execution_status: unexecuted_referenced, position_type: direct_equity,           verdict: partial,      reason: CLOSING_SET_PENDING}
+  - {req: R2, source_class: company_communication,      execution_status: non_binding,           position_type: direct_equity,           verdict: insufficient, reason: NON_BINDING_TERM_SHEET}
+  - {req: R2, source_class: public_market_quote,        execution_status: not_applicable,        position_type: public_listed,           verdict: sufficient}
+  - {req: R2, source_class: administrator_statement,    execution_status: not_applicable,        position_type: indirect_feeder,         verdict: sufficient}
+  - {req: R2, source_class: third_party_valuation_memo, execution_status: not_applicable,        position_type: fx_denominated_interest, verdict: sufficient}
+  - {req: R2, source_class: third_party_valuation_memo, execution_status: not_applicable,        position_type: direct_equity,           verdict: sufficient}
+  - {req: R2, source_class: press,                      execution_status: not_applicable,        position_type: direct_equity,           verdict: insufficient, reason: PRESS_CANNOT_SUPPORT_FAIR_VALUE, next_action: REQUEST_PRIMARY_EVIDENCE}
+
+  - {req: R4, source_class: executed_transaction_doc,   execution_status: executed,              position_type: direct_equity,           verdict: sufficient}
+
+# Verdict when a requirement has no applicable evidence link, keyed by gap kind.
+gap_verdicts:
+  with_counsel:                    {verdict: partial,     next_action: REQUEST_FROM_COUNSEL}
+  referenced_location_unspecified: {verdict: insufficient, next_action: REQUEST_WITH_LOCATION}
+  not_located:                     {verdict: missing,     next_action: REQUEST_FROM_COMPANY}
+  none:                            {verdict: missing,     next_action: REQUEST_FROM_COMPANY}

@@ -1,0 +1,26 @@
+name: check-all
+on: [push, pull_request]
+jobs:
+  check-all-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install tooling + project deps (CI parity with local .venv)
+        run: |
+          pip install ruff pytest pytest-cov mypy detect-secrets bandit pip-audit
+          python - <<'PY'
+          import glob, subprocess, sys, tomllib
+          deps = []
+          for f in glob.glob("**/pyproject.toml", recursive=True):
+              if "/.venv/" in f or "/node_modules/" in f:
+                  continue
+              proj = tomllib.load(open(f, "rb")).get("project", {})
+              deps += proj.get("dependencies", [])
+              deps += proj.get("optional-dependencies", {}).get("dev", [])
+          if deps:
+              subprocess.check_call([sys.executable, "-m", "pip", "install", *deps])
+          PY
+      - run: python3 scripts/check_all.py

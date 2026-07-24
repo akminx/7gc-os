@@ -1,0 +1,3280 @@
+{
+  "entry_costs": [
+    {
+      "lot": "bm_1",
+      "shares": 625000,
+      "entry_pps": "1.60",
+      "computed": "1000000",
+      "stated": "1000000",
+      "check": "pass"
+    },
+    {
+      "lot": "mf_1",
+      "check": "not_applicable",
+      "cost": "1000000",
+      "reason": "no share count"
+    },
+    {
+      "lot": "sway_1",
+      "shares": 800000,
+      "entry_pps": "2.50",
+      "computed": "2000000",
+      "stated": "2000000",
+      "check": "pass"
+    },
+    {
+      "lot": "anth_1",
+      "shares": 40000,
+      "entry_pps": "50.00",
+      "computed": "2000000",
+      "stated": "2000000",
+      "check": "pass"
+    },
+    {
+      "lot": "lucra_1",
+      "shares": 750000,
+      "entry_pps": "2.00",
+      "computed": "1500000",
+      "stated": "1500000",
+      "check": "pass"
+    },
+    {
+      "lot": "pool_1",
+      "shares": 50000,
+      "entry_pps": "40.00",
+      "computed": "2000000",
+      "stated": "2000000",
+      "check": "pass"
+    },
+    {
+      "lot": "fluid_1",
+      "shares": 100000,
+      "entry_pps": "10.00",
+      "computed": "1000000",
+      "stated": "1000000",
+      "check": "pass"
+    },
+    {
+      "lot": "fluid_2",
+      "shares": 100000,
+      "entry_pps": "15.00",
+      "computed": "1500000",
+      "stated": "1500000",
+      "check": "pass"
+    },
+    {
+      "lot": "dream_1",
+      "shares": 625000,
+      "entry_pps": "3.20",
+      "computed": "2000000",
+      "stated": "2000000",
+      "check": "pass"
+    },
+    {
+      "lot": "jack_1",
+      "shares": 500000,
+      "entry_pps": "4.00",
+      "computed": "2000000",
+      "stated": "2000000",
+      "check": "pass"
+    },
+    {
+      "lot": "caps_1",
+      "shares": 500000,
+      "entry_pps": "4.00",
+      "computed": "2000000",
+      "stated": "2000000",
+      "check": "pass"
+    },
+    {
+      "lot": "mom_1",
+      "shares": 400000,
+      "entry_pps": "2.50",
+      "computed": "1000000",
+      "stated": "1000000",
+      "check": "pass"
+    },
+    {
+      "lot": "mom_2",
+      "shares": 100000,
+      "entry_pps": "5.00",
+      "computed": "500000",
+      "stated": "500000",
+      "check": "pass"
+    },
+    {
+      "lot": "mom_3",
+      "check": "not_applicable",
+      "cost": "250000",
+      "reason": "no share count"
+    },
+    {
+      "lot": "roof_1",
+      "shares": 60000,
+      "entry_pps": "25.00",
+      "computed": "1500000",
+      "stated": "1500000",
+      "check": "pass"
+    },
+    {
+      "lot": "jio_1",
+      "check": "not_applicable",
+      "cost": "1000000",
+      "reason": "no share count"
+    },
+    {
+      "lot": "banz_1",
+      "shares": 50000,
+      "entry_pps": "10.00",
+      "computed": "500000",
+      "stated": "500000",
+      "check": "pass"
+    }
+  ],
+  "recap_checks": [
+    {
+      "lot": "sway_1",
+      "prior_shares": 800000,
+      "ratio": "1.09375",
+      "computed": "875000",
+      "stated": 875000,
+      "check": "pass"
+    }
+  ],
+  "concluded_value_checks": [
+    {
+      "document": "moonfare_memo_23",
+      "concluded_value": "1000000",
+      "reported_amount": "1000000",
+      "recomputed": "999970",
+      "variance": "30",
+      "authoritative": "concluded_value",
+      "classification": "ROUNDING_VARIANCE",
+      "check": "pass"
+    },
+    {
+      "document": "moonfare_fx_24",
+      "concluded_value": "1048515",
+      "reported_amount": "1048515",
+      "recomputed": "1048515",
+      "variance": "0",
+      "authoritative": "concluded_value",
+      "classification": "EXACT",
+      "check": "pass"
+    }
+  ],
+  "realization_checks": [
+    {
+      "lot": "jack_1",
+      "realized": "2024-05-20",
+      "shares": 500000,
+      "cash_per_share": "6.20",
+      "gross": "3100000",
+      "stated_gross": "3100000",
+      "fees": "0",
+      "escrow": "0",
+      "earnout": "0",
+      "withholding": "0",
+      "net": "3100000",
+      "stated_net": "3100000",
+      "check": "pass"
+    }
+  ],
+  "basis_checks": [
+    {
+      "holding": "fluidstack",
+      "period": "f2_25q2",
+      "date": "2025-06-30",
+      "audit_scope": "lineage_only",
+      "tracker_amount": "2500000",
+      "cost_basis": "2500000",
+      "last_round_basis": "3000000",
+      "variance": "500000",
+      "declared_basis": "cost"
+    },
+    {
+      "holding": "fluidstack",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "tracker_amount": "2500000",
+      "cost_basis": "2500000",
+      "last_round_basis": "3000000",
+      "variance": "500000",
+      "declared_basis": "cost"
+    }
+  ],
+  "change_view": [
+    {
+      "holding": "because_market",
+      "period": "f2_23q4",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "1000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "because_market",
+      "period": "f2_24q2",
+      "date": "2024-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "because_market",
+      "period": "f2_24q4",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "because_market",
+      "period": "f2_25q2",
+      "date": "2025-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "because_market",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "because_market",
+      "period": "f2_25q4",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "because_market",
+      "period": "f2_26q1",
+      "date": "2026-03-31",
+      "audit_scope": "lineage_only",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "moonfare",
+      "period": "f2_23q4",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "1000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "moonfare",
+      "period": "f2_24q2",
+      "date": "2024-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "moonfare",
+      "period": "f2_24q4",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "1048515",
+      "previous_amount": "1000000",
+      "delta": "48515",
+      "changed": true
+    },
+    {
+      "holding": "moonfare",
+      "period": "f2_25q2",
+      "date": "2025-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "1048515",
+      "previous_amount": "1048515",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "moonfare",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "amount": "1048515",
+      "previous_amount": "1048515",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "moonfare",
+      "period": "f2_25q4",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "1048515",
+      "previous_amount": "1048515",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "moonfare",
+      "period": "f2_26q1",
+      "date": "2026-03-31",
+      "audit_scope": "lineage_only",
+      "amount": "1048515",
+      "previous_amount": "1048515",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "sway",
+      "period": "f2_23q4",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "2000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "sway",
+      "period": "f2_24q2",
+      "date": "2024-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "sway",
+      "period": "f2_24q4",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "sway",
+      "period": "f2_25q2",
+      "date": "2025-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "sway",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "amount": "350000",
+      "previous_amount": "2000000",
+      "delta": "-1650000",
+      "changed": true
+    },
+    {
+      "holding": "sway",
+      "period": "f2_25q4",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "350000",
+      "previous_amount": "350000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "sway",
+      "period": "f2_26q1",
+      "date": "2026-03-31",
+      "audit_scope": "lineage_only",
+      "amount": "350000",
+      "previous_amount": "350000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "anthropic",
+      "period": "f2_24q2",
+      "date": "2024-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "anthropic",
+      "period": "f2_24q4",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "anthropic",
+      "period": "f2_25q2",
+      "date": "2025-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "anthropic",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "anthropic",
+      "period": "f2_25q4",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "8000000",
+      "previous_amount": "2000000",
+      "delta": "6000000",
+      "changed": true
+    },
+    {
+      "holding": "anthropic",
+      "period": "f2_26q1",
+      "date": "2026-03-31",
+      "audit_scope": "lineage_only",
+      "amount": "8000000",
+      "previous_amount": "8000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "lucra",
+      "period": "f2_24q2",
+      "date": "2024-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "1500000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "lucra",
+      "period": "f2_24q4",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "1500000",
+      "previous_amount": "1500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "lucra",
+      "period": "f2_25q2",
+      "date": "2025-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "1500000",
+      "previous_amount": "1500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "lucra",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "amount": "1500000",
+      "previous_amount": "1500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "lucra",
+      "period": "f2_25q4",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "2250000",
+      "previous_amount": "1500000",
+      "delta": "750000",
+      "changed": true
+    },
+    {
+      "holding": "lucra",
+      "period": "f2_26q1",
+      "date": "2026-03-31",
+      "audit_scope": "lineage_only",
+      "amount": "2250000",
+      "previous_amount": "2250000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "poolside",
+      "period": "f2_24q4",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "2000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "poolside",
+      "period": "f2_25q2",
+      "date": "2025-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "poolside",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "poolside",
+      "period": "f2_25q4",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "poolside",
+      "period": "f2_26q1",
+      "date": "2026-03-31",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": "2000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "fluidstack",
+      "period": "f2_24q4",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "1000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "fluidstack",
+      "period": "f2_25q2",
+      "date": "2025-06-30",
+      "audit_scope": "lineage_only",
+      "amount": "2500000",
+      "previous_amount": "1000000",
+      "delta": "1500000",
+      "changed": true
+    },
+    {
+      "holding": "fluidstack",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "amount": "2500000",
+      "previous_amount": "2500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "fluidstack",
+      "period": "f2_25q4",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "6000000",
+      "previous_amount": "2500000",
+      "delta": "3500000",
+      "changed": true
+    },
+    {
+      "holding": "fluidstack",
+      "period": "f2_26q1",
+      "date": "2026-03-31",
+      "audit_scope": "lineage_only",
+      "amount": "6000000",
+      "previous_amount": "6000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "dream",
+      "period": "f2_25q3",
+      "date": "2025-09-30",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "dream",
+      "period": "f2_25q4",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "5000000",
+      "previous_amount": "2000000",
+      "delta": "3000000",
+      "changed": true
+    },
+    {
+      "holding": "dream",
+      "period": "f2_26q1",
+      "date": "2026-03-31",
+      "audit_scope": "lineage_only",
+      "amount": "5000000",
+      "previous_amount": "5000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "jackpocket",
+      "period": "f2_23q4",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "2000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "capsule",
+      "period": "f1_2021",
+      "date": "2021-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "2000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "capsule",
+      "period": "f1_2022",
+      "date": "2022-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "600000",
+      "previous_amount": "2000000",
+      "delta": "-1400000",
+      "changed": true
+    },
+    {
+      "holding": "capsule",
+      "period": "f1_2023",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "600000",
+      "previous_amount": "600000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "capsule",
+      "period": "f1_2024",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "600000",
+      "previous_amount": "600000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "capsule",
+      "period": "f1_2025",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "600000",
+      "previous_amount": "600000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "mom_project",
+      "period": "f1_2021",
+      "date": "2021-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "2500000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "mom_project",
+      "period": "f1_2022",
+      "date": "2022-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "2500000",
+      "previous_amount": "2500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "mom_project",
+      "period": "f1_2023",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "2750000",
+      "previous_amount": "2500000",
+      "delta": "250000",
+      "changed": true
+    },
+    {
+      "holding": "mom_project",
+      "period": "f1_2024",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "2750000",
+      "previous_amount": "2750000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "mom_project",
+      "period": "f1_2025",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "2750000",
+      "previous_amount": "2750000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "roofstock",
+      "period": "f1_2021",
+      "date": "2021-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "1500000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "roofstock",
+      "period": "f1_2022",
+      "date": "2022-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "1500000",
+      "previous_amount": "1500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "roofstock",
+      "period": "f1_2023",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "1500000",
+      "previous_amount": "1500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "roofstock",
+      "period": "f1_2024",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "1500000",
+      "previous_amount": "1500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "roofstock",
+      "period": "f1_2025",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "1500000",
+      "previous_amount": "1500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "jio",
+      "period": "f1_2021",
+      "date": "2021-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "1000000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "jio",
+      "period": "f1_2022",
+      "date": "2022-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "jio",
+      "period": "f1_2023",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "jio",
+      "period": "f1_2024",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "jio",
+      "period": "f1_2025",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "1000000",
+      "previous_amount": "1000000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "banzai",
+      "period": "f1_2021",
+      "date": "2021-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "500000",
+      "previous_amount": null,
+      "delta": null,
+      "changed": null
+    },
+    {
+      "holding": "banzai",
+      "period": "f1_2022",
+      "date": "2022-12-31",
+      "audit_scope": "lineage_only",
+      "amount": "500000",
+      "previous_amount": "500000",
+      "delta": "0",
+      "changed": false
+    },
+    {
+      "holding": "banzai",
+      "period": "f1_2023",
+      "date": "2023-12-31",
+      "audit_scope": "packet",
+      "amount": "120000",
+      "previous_amount": "500000",
+      "delta": "-380000",
+      "changed": true
+    },
+    {
+      "holding": "banzai",
+      "period": "f1_2024",
+      "date": "2024-12-31",
+      "audit_scope": "packet",
+      "amount": "55000",
+      "previous_amount": "120000",
+      "delta": "-65000",
+      "changed": true
+    },
+    {
+      "holding": "banzai",
+      "period": "f1_2025",
+      "date": "2025-12-31",
+      "audit_scope": "packet",
+      "amount": "31000",
+      "previous_amount": "55000",
+      "delta": "-24000",
+      "changed": true
+    }
+  ],
+  "rows": [
+    {
+      "holding": "because_market",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "1000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "bm_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "missing",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_NOT_LOCATED"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "no preceding mark observation"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "moonfare",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "1000000",
+      "validated_amount": "1000000",
+      "derivation_status": "derivable",
+      "derivation_reason": "THIRD_PARTY_CONCLUSION",
+      "derivation_lineage": [],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "mf_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "moonfare_memo_23"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "no preceding mark observation"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 1,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "sway",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "2000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "sway_1": "partial"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "partial",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_WITH_COUNSEL"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "no preceding mark observation"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "partial",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "jackpocket",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "2000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "jack_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "missing",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_NOT_LOCATED"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "no preceding mark observation"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "because_market",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "1000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "bm_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "missing",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_NOT_LOCATED"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": null
+            }
+          ],
+          "unchanged_since": "2024-06-30",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "moonfare",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "1048515",
+      "validated_amount": "1048515",
+      "derivation_status": "derivable",
+      "derivation_reason": "THIRD_PARTY_CONCLUSION",
+      "derivation_lineage": [],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "mf_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "moonfare_fx_24"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2024-06-30"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 1,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "sway",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "2000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "sway_1": "partial"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "partial",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_WITH_COUNSEL"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": "2023-10-18"
+            }
+          ],
+          "unchanged_since": "2024-06-30",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "anthropic",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "2000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "insufficient",
+          "per_lot": {
+            "anth_1": "insufficient"
+          },
+          "next_actions": [
+            "REQUEST_WITH_LOCATION"
+          ]
+        },
+        "R2": {
+          "verdict": "insufficient",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_REFERENCED_LOCATION_UNSPECIFIED"
+          ],
+          "next_actions": [
+            "REQUEST_WITH_LOCATION"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "all components have support within 12 months"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "insufficient",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "lucra",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "1500000",
+      "validated_amount": "1500000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "lucra_1",
+          "class": "series_a1",
+          "pps": "2.00",
+          "shares": 750000,
+          "amount": "1500000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "lucra_1": "partial"
+          },
+          "next_actions": [
+            "REQUEST_EXECUTED_DOC",
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "insufficient",
+          "reasons": [
+            "NON_BINDING_TERM_SHEET"
+          ],
+          "next_actions": [],
+          "relied_on": [
+            "lucra_term_sheet"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "all components have support within 12 months"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "insufficient",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "poolside",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "2000000",
+      "validated_amount": "2000000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "pool_1",
+          "class": "series_b",
+          "pps": "40.00",
+          "shares": 50000,
+          "amount": "2000000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "pool_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "poolside_spa"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "no preceding mark observation"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 2,
+      "row_verdict": "sufficient",
+      "fully_supported": true,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "fluidstack",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "1000000",
+      "validated_amount": "1000000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "fluid_1",
+          "class": "series_a",
+          "pps": "10.00",
+          "shares": 100000,
+          "amount": "1000000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "fluid_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "fluidstack_a_spa"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "no preceding mark observation"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 2,
+      "row_verdict": "sufficient",
+      "fully_supported": true,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "jackpocket",
+      "date": "2024-12-31",
+      "held_at_date": false,
+      "reported_amount": null,
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "not_applicable",
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "not_applicable",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "no mark at this date"
+        },
+        "R4": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "jack_1": "sufficient"
+          },
+          "events": [
+            "jack_1"
+          ],
+          "relied_on": [
+            "jackpocket_merger"
+          ],
+          "next_actions": []
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 1,
+      "sufficient_count": 1,
+      "row_verdict": "sufficient",
+      "fully_supported": true,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "because_market",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "1000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "bm_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "missing",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_NOT_LOCATED"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": null
+            }
+          ],
+          "unchanged_since": "2025-09-30",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "moonfare",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "1048515",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "mf_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "missing",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_NONE"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "underlying_valuation",
+              "latest": "2023-03-17"
+            }
+          ],
+          "unchanged_since": "2025-09-30",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "sway",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "350000",
+      "validated_amount": "350000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "sway_1",
+          "class": "series_a3",
+          "pps": "0.40",
+          "shares": 875000,
+          "amount": "350000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "sway_1": "partial"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "partial",
+          "reasons": [
+            "PRO_FORMA_PENDING_EXECUTION"
+          ],
+          "next_actions": [],
+          "relied_on": [
+            "sway_recap_cap"
+          ],
+          "cross_class": false,
+          "pro_forma": true,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "all components have support within 12 months"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "sufficient",
+          "note": "label present and derived from relied-upon inputs"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 1,
+      "row_verdict": "partial",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": [
+        "pro_forma"
+      ]
+    },
+    {
+      "holding": "anthropic",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "8000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_PRICE_IN_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "insufficient",
+          "per_lot": {
+            "anth_1": "insufficient"
+          },
+          "next_actions": [
+            "REQUEST_WITH_LOCATION"
+          ]
+        },
+        "R2": {
+          "verdict": "insufficient",
+          "reasons": [
+            "PRESS_CANNOT_SUPPORT_FAIR_VALUE"
+          ],
+          "next_actions": [
+            "REQUEST_PRIMARY_EVIDENCE"
+          ],
+          "relied_on": [
+            "anthropic_press"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2025-09-30"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "insufficient",
+      "fully_supported": false,
+      "tracker_label": [
+        "pro_forma"
+      ],
+      "unsupported_tracker_labels": [
+        "pro_forma"
+      ],
+      "labels": []
+    },
+    {
+      "holding": "lucra",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "2250000",
+      "validated_amount": "1500000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "lucra_1",
+          "class": "series_a1",
+          "pps": "2.00",
+          "shares": 750000,
+          "amount": "1500000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": false,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "lucra_1": "partial"
+          },
+          "next_actions": [
+            "REQUEST_EXECUTED_DOC",
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "partial",
+          "reasons": [
+            "CLOSING_SET_PENDING",
+            "CROSS_CLASS_POLICY_DECISION_REQUIRED",
+            "NON_BINDING_TERM_SHEET"
+          ],
+          "next_actions": [
+            "RECORD_VALUATION_POLICY_DECISION"
+          ],
+          "relied_on": [
+            "lucra_term_sheet",
+            "lucra_ceo_email"
+          ],
+          "cross_class": true,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2025-09-30"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "partial",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": [
+        "cross_class_policy"
+      ]
+    },
+    {
+      "holding": "poolside",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "2000000",
+      "validated_amount": "2000000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "pool_1",
+          "class": "series_b",
+          "pps": "40.00",
+          "shares": 50000,
+          "amount": "2000000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "pool_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "poolside_spa"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": "2024-08-01"
+            }
+          ],
+          "unchanged_since": "2025-09-30",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 2,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "fluidstack",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "6000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_PRICE_FOR_CLASS:series_a2",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "fluid_1": "sufficient",
+            "fluid_2": "partial"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "partial",
+          "reasons": [
+            "CROSS_CLASS_POLICY_DECISION_REQUIRED",
+            "PRO_FORMA_PENDING_EXECUTION",
+            "UNCOVERED_SECURITY_CLASS"
+          ],
+          "next_actions": [
+            "RECORD_VALUATION_POLICY_DECISION",
+            "REQUEST_SUPPORT_FOR_CLASS"
+          ],
+          "relied_on": [
+            "fluidstack_a_spa",
+            "fluidstack_b_cap"
+          ],
+          "cross_class": true,
+          "pro_forma": true,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2025-09-30"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "sufficient",
+          "note": "label present and derived from relied-upon inputs"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 1,
+      "row_verdict": "partial",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": [
+        "cross_class_policy",
+        "pro_forma"
+      ]
+    },
+    {
+      "holding": "dream",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "5000000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_PRICE_FOR_CLASS:series_a1",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "dream_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "partial",
+          "reasons": [
+            "CLOSING_SET_PENDING",
+            "CROSS_CLASS_POLICY_DECISION_REQUIRED",
+            "PRO_FORMA_PENDING_EXECUTION"
+          ],
+          "next_actions": [
+            "RECORD_VALUATION_POLICY_DECISION"
+          ],
+          "relied_on": [
+            "dream_b_cap",
+            "dream_close_email"
+          ],
+          "cross_class": true,
+          "pro_forma": true,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2025-09-30"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "sufficient",
+          "note": "label present and derived from relied-upon inputs"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 1,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": [
+        "cross_class_policy",
+        "pro_forma"
+      ]
+    },
+    {
+      "holding": "capsule",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "600000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "caps_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "missing",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_NONE"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "all components have support within 12 months"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "mom_project",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "2750000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "COMPONENT_WITHOUT_SHARE_COUNT",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "mom_1": "missing",
+            "mom_2": "insufficient",
+            "mom_3": "missing"
+          },
+          "next_actions": [
+            "REQUEST_EXECUTED_DOC",
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "insufficient",
+          "reasons": [
+            "CROSS_CLASS_POLICY_DECISION_REQUIRED",
+            "NON_BINDING_TERM_SHEET"
+          ],
+          "next_actions": [
+            "RECORD_VALUATION_POLICY_DECISION"
+          ],
+          "relied_on": [
+            "mom_c_term_sheet"
+          ],
+          "cross_class": true,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2022-12-31"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": [
+        "cross_class_policy"
+      ]
+    },
+    {
+      "holding": "roofstock",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "1500000",
+      "validated_amount": "1500000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "roof_1",
+          "class": "series_e",
+          "pps": "25.00",
+          "shares": 60000,
+          "amount": "1500000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "roof_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "roofstock_spa"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": "2021-11-08"
+            }
+          ],
+          "unchanged_since": "2022-12-31",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 2,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "jio",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "1000000",
+      "validated_amount": "1000000",
+      "derivation_status": "derivable",
+      "derivation_reason": "ADMINISTRATOR_NAV",
+      "derivation_lineage": [],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "jio_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "jio_stmt_23"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "all components have support within 12 months"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 2,
+      "row_verdict": "sufficient",
+      "fully_supported": true,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "banzai",
+      "date": "2023-12-31",
+      "held_at_date": true,
+      "reported_amount": "120000",
+      "validated_amount": "120000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "banz_1",
+          "class": "common",
+          "pps": "2.40",
+          "shares": 50000,
+          "amount": "120000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "banz_1": "partial"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "banzai_quote_23"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2022-12-31"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 1,
+      "row_verdict": "partial",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "capsule",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "600000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "caps_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "missing",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_NONE"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": "2022-12-31"
+            }
+          ],
+          "unchanged_since": "2023-12-31",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "mom_project",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "2750000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "COMPONENT_WITHOUT_SHARE_COUNT",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "mom_1": "missing",
+            "mom_2": "insufficient",
+            "mom_3": "missing"
+          },
+          "next_actions": [
+            "REQUEST_EXECUTED_DOC",
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "insufficient",
+          "reasons": [
+            "CROSS_CLASS_POLICY_DECISION_REQUIRED",
+            "NON_BINDING_TERM_SHEET"
+          ],
+          "next_actions": [
+            "RECORD_VALUATION_POLICY_DECISION"
+          ],
+          "relied_on": [
+            "mom_c_term_sheet"
+          ],
+          "cross_class": true,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "equity_valuation",
+              "latest": "2021-09-15"
+            },
+            {
+              "component": "note_valuation",
+              "latest": null
+            }
+          ],
+          "unchanged_since": "2023-12-31",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": [
+        "cross_class_policy"
+      ]
+    },
+    {
+      "holding": "roofstock",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "1500000",
+      "validated_amount": "1500000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "roof_1",
+          "class": "series_e",
+          "pps": "25.00",
+          "shares": 60000,
+          "amount": "1500000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "roof_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "roofstock_spa"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": "2021-11-08"
+            }
+          ],
+          "unchanged_since": "2023-12-31",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 2,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "jio",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "1000000",
+      "validated_amount": "1000000",
+      "derivation_status": "derivable",
+      "derivation_reason": "ADMINISTRATOR_NAV",
+      "derivation_lineage": [],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "jio_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "jio_stmt_24"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "all components have support within 12 months"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 2,
+      "row_verdict": "sufficient",
+      "fully_supported": true,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "banzai",
+      "date": "2024-12-31",
+      "held_at_date": true,
+      "reported_amount": "55000",
+      "validated_amount": "55000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "banz_1",
+          "class": "common",
+          "pps": "1.10",
+          "shares": 50000,
+          "amount": "55000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "banz_1": "partial"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "banzai_quote_24"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2023-12-31"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 1,
+      "row_verdict": "partial",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "capsule",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "600000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "NO_APPLICABLE_EVIDENCE",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "caps_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "missing",
+          "reasons": [
+            "NO_APPLICABLE_SUPPORT_NONE"
+          ],
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ],
+          "relied_on": [],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": "2022-12-31"
+            }
+          ],
+          "unchanged_since": "2024-12-31",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "mom_project",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "2750000",
+      "validated_amount": null,
+      "derivation_status": "not_derivable",
+      "derivation_reason": "COMPONENT_WITHOUT_SHARE_COUNT",
+      "derivation_lineage": [],
+      "validated_matches_reported": null,
+      "requirements": {
+        "R1": {
+          "verdict": "missing",
+          "per_lot": {
+            "mom_1": "missing",
+            "mom_2": "insufficient",
+            "mom_3": "missing"
+          },
+          "next_actions": [
+            "REQUEST_EXECUTED_DOC",
+            "REQUEST_FROM_COMPANY"
+          ]
+        },
+        "R2": {
+          "verdict": "insufficient",
+          "reasons": [
+            "CROSS_CLASS_POLICY_DECISION_REQUIRED",
+            "NON_BINDING_TERM_SHEET"
+          ],
+          "next_actions": [
+            "RECORD_VALUATION_POLICY_DECISION"
+          ],
+          "relied_on": [
+            "mom_c_term_sheet"
+          ],
+          "cross_class": true,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "equity_valuation",
+              "latest": "2021-09-15"
+            },
+            {
+              "component": "note_valuation",
+              "latest": null
+            }
+          ],
+          "unchanged_since": "2024-12-31",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 0,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": [
+        "cross_class_policy"
+      ]
+    },
+    {
+      "holding": "roofstock",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "1500000",
+      "validated_amount": "1500000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "roof_1",
+          "class": "series_e",
+          "pps": "25.00",
+          "shares": 60000,
+          "amount": "1500000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "roof_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "roofstock_spa"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "missing",
+          "stale_components": [
+            {
+              "component": "valuation",
+              "latest": "2021-11-08"
+            }
+          ],
+          "unchanged_since": "2024-12-31",
+          "next_actions": [
+            "DRAFT_MANAGEMENT_ASSESSMENT"
+          ]
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 3,
+      "sufficient_count": 2,
+      "row_verdict": "missing",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    },
+    {
+      "holding": "jio",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "1000000",
+      "validated_amount": "1000000",
+      "derivation_status": "derivable",
+      "derivation_reason": "ADMINISTRATOR_NAV",
+      "derivation_lineage": [],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "sufficient",
+          "per_lot": {
+            "jio_1": "sufficient"
+          },
+          "next_actions": []
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "jio_stmt_25"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": true
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "all components have support within 12 months"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 2,
+      "row_verdict": "sufficient",
+      "fully_supported": true,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": [
+        "subsequent_evidence"
+      ]
+    },
+    {
+      "holding": "banzai",
+      "date": "2025-12-31",
+      "held_at_date": true,
+      "reported_amount": "31000",
+      "validated_amount": "31000",
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "banz_1",
+          "class": "common",
+          "pps": "0.62",
+          "shares": 50000,
+          "amount": "31000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": true,
+      "requirements": {
+        "R1": {
+          "verdict": "partial",
+          "per_lot": {
+            "banz_1": "partial"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COUNSEL"
+          ]
+        },
+        "R2": {
+          "verdict": "sufficient",
+          "reasons": [],
+          "next_actions": [],
+          "relied_on": [
+            "banzai_quote_25"
+          ],
+          "cross_class": false,
+          "pro_forma": false,
+          "subsequent_evidence": false
+        },
+        "R3": {
+          "verdict": "not_applicable",
+          "reason": "value changed since 2024-12-31"
+        },
+        "R4": {
+          "verdict": "not_applicable"
+        },
+        "R5": {
+          "verdict": "not_applicable"
+        }
+      },
+      "applicable_count": 2,
+      "sufficient_count": 1,
+      "row_verdict": "partial",
+      "fully_supported": false,
+      "tracker_label": [],
+      "unsupported_tracker_labels": [],
+      "labels": []
+    }
+  ],
+  "totals": [
+    {
+      "fund": "fund_ii",
+      "date": "2023-12-31",
+      "positions_held": 4,
+      "held_at_date_reported_total": "6000000",
+      "tracker_stated_total": "4000000",
+      "reconciliation_delta": "2000000",
+      "unsupported_subtotal": "6000000",
+      "unsupported_row_count": 4,
+      "packet_gap_row_count": 4,
+      "approved_fair_value_total": null,
+      "approved_blocked_by": "unsupported_rows",
+      "unapproved_marks": [
+        "because_market",
+        "jackpocket",
+        "moonfare",
+        "sway"
+      ],
+      "labels": [
+        "contains_unsupported_inputs"
+      ]
+    },
+    {
+      "fund": "fund_ii",
+      "date": "2024-12-31",
+      "positions_held": 7,
+      "held_at_date_reported_total": "10548515",
+      "tracker_stated_total": "10548515",
+      "reconciliation_delta": "0",
+      "unsupported_subtotal": "7548515",
+      "unsupported_row_count": 5,
+      "packet_gap_row_count": 5,
+      "approved_fair_value_total": null,
+      "approved_blocked_by": "unsupported_rows",
+      "unapproved_marks": [
+        "anthropic",
+        "because_market",
+        "fluidstack",
+        "lucra",
+        "moonfare",
+        "poolside",
+        "sway"
+      ],
+      "labels": [
+        "contains_unsupported_inputs"
+      ]
+    },
+    {
+      "fund": "fund_ii",
+      "date": "2025-12-31",
+      "positions_held": 8,
+      "held_at_date_reported_total": "25648515",
+      "tracker_stated_total": "25648515",
+      "reconciliation_delta": "0",
+      "unsupported_subtotal": "25648515",
+      "unsupported_row_count": 8,
+      "packet_gap_row_count": 8,
+      "approved_fair_value_total": null,
+      "approved_blocked_by": "unsupported_rows",
+      "unapproved_marks": [
+        "anthropic",
+        "because_market",
+        "dream",
+        "fluidstack",
+        "lucra",
+        "moonfare",
+        "poolside",
+        "sway"
+      ],
+      "labels": [
+        "contains_unsupported_inputs"
+      ]
+    },
+    {
+      "fund": "fund_i",
+      "date": "2023-12-31",
+      "positions_held": 5,
+      "held_at_date_reported_total": "5970000",
+      "tracker_stated_total": "5970000",
+      "reconciliation_delta": "0",
+      "unsupported_subtotal": "4970000",
+      "unsupported_row_count": 4,
+      "packet_gap_row_count": 4,
+      "approved_fair_value_total": null,
+      "approved_blocked_by": "unsupported_rows",
+      "unapproved_marks": [
+        "banzai",
+        "capsule",
+        "jio",
+        "mom_project",
+        "roofstock"
+      ],
+      "labels": [
+        "contains_unsupported_inputs"
+      ]
+    },
+    {
+      "fund": "fund_i",
+      "date": "2024-12-31",
+      "positions_held": 5,
+      "held_at_date_reported_total": "5905000",
+      "tracker_stated_total": "5905000",
+      "reconciliation_delta": "0",
+      "unsupported_subtotal": "4905000",
+      "unsupported_row_count": 4,
+      "packet_gap_row_count": 4,
+      "approved_fair_value_total": null,
+      "approved_blocked_by": "unsupported_rows",
+      "unapproved_marks": [
+        "banzai",
+        "capsule",
+        "jio",
+        "mom_project",
+        "roofstock"
+      ],
+      "labels": [
+        "contains_unsupported_inputs"
+      ]
+    },
+    {
+      "fund": "fund_i",
+      "date": "2025-12-31",
+      "positions_held": 5,
+      "held_at_date_reported_total": "5881000",
+      "tracker_stated_total": "5881000",
+      "reconciliation_delta": "0",
+      "unsupported_subtotal": "4881000",
+      "unsupported_row_count": 4,
+      "packet_gap_row_count": 4,
+      "approved_fair_value_total": null,
+      "approved_blocked_by": "unsupported_rows",
+      "unapproved_marks": [
+        "banzai",
+        "capsule",
+        "jio",
+        "mom_project",
+        "roofstock"
+      ],
+      "labels": [
+        "contains_unsupported_inputs"
+      ]
+    }
+  ],
+  "r3_applicable": [
+    {
+      "holding": "because_market",
+      "date": "2024-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": null
+        }
+      ]
+    },
+    {
+      "holding": "sway",
+      "date": "2024-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": "2023-10-18"
+        }
+      ]
+    },
+    {
+      "holding": "because_market",
+      "date": "2025-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": null
+        }
+      ]
+    },
+    {
+      "holding": "moonfare",
+      "date": "2025-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "underlying_valuation",
+          "latest": "2023-03-17"
+        }
+      ]
+    },
+    {
+      "holding": "poolside",
+      "date": "2025-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": "2024-08-01"
+        }
+      ]
+    },
+    {
+      "holding": "roofstock",
+      "date": "2023-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": "2021-11-08"
+        }
+      ]
+    },
+    {
+      "holding": "capsule",
+      "date": "2024-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": "2022-12-31"
+        }
+      ]
+    },
+    {
+      "holding": "mom_project",
+      "date": "2024-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "equity_valuation",
+          "latest": "2021-09-15"
+        },
+        {
+          "component": "note_valuation",
+          "latest": null
+        }
+      ]
+    },
+    {
+      "holding": "roofstock",
+      "date": "2024-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": "2021-11-08"
+        }
+      ]
+    },
+    {
+      "holding": "capsule",
+      "date": "2025-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": "2022-12-31"
+        }
+      ]
+    },
+    {
+      "holding": "mom_project",
+      "date": "2025-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "equity_valuation",
+          "latest": "2021-09-15"
+        },
+        {
+          "component": "note_valuation",
+          "latest": null
+        }
+      ]
+    },
+    {
+      "holding": "roofstock",
+      "date": "2025-12-31",
+      "verdict": "missing",
+      "stale": [
+        {
+          "component": "valuation",
+          "latest": "2021-11-08"
+        }
+      ]
+    }
+  ]
+}

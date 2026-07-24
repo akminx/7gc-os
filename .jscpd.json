@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/kucherenko/jscpd/master/packages/jscpd/schemas/jscpd.json",
+  "pattern": "**/*.py",
+  "ignore": ["**/tests/**", "**/__pycache__/**", "scripts/**", "**/migrations/**"],
+  "minTokens": 60,
+  "threshold": 3,
+  "reporters": ["consoleFull"],
+  "gitignore": true,
+  "absolute": false
+}

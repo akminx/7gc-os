@@ -1,0 +1,121 @@
+# review-policy.yaml — path → risk → required reviewers
+#
+# DOMAIN-TUNED for 7GC_OS: fund valuation, portfolio marks, and audit
+# workpapers. The captain-workflow default globs are web-app shaped
+# (auth/billing/secrets) and would have fired on almost nothing here.
+#
+# Full policy: ~/.claude/skills/captain-workflow/REVIEW.md
+#
+# ⚠️ Written before any code exists, so these globs are guesses about a layout
+#    not yet decided. CONFIRM AND REWRITE THEM AT SPEC, once module structure
+#    is real. A path floor that matches nothing is worse than none — it reads
+#    as coverage.
+#
+# The governing idea for this domain: a wrong number here is PLAUSIBLE. It
+# renders, it reconciles to itself, it passes every type check. So the gate
+# proves very little on its own, and the path floor is what forces the
+# design-time and adversarial reviews onto the code that produces reported
+# figures.
+
+version: 1
+
+tiers:
+  routine:
+    required:
+      - gate
+      - semantic_pass
+    optional:
+      - bugbot
+  semantic:
+    required:
+      - gate
+      - bugbot
+      - semantic_pass
+      - impl_pass
+  trust-critical:
+    required:
+      - gate
+      - bugbot
+      - semantic_pass
+      - impl_pass
+      - human_judge
+      - codeowners
+    prefer_distinct_model_families: true
+
+# ── Trust-critical ───────────────────────────────────────────────────────
+# CONFIRMED AT SPEC against the real layout (SPEC §5.2). The r1 globs were
+# written before any code existed and matched almost nothing: `policy/` and
+# `packet/` had no glob at any depth, and the engine could not match a
+# top-level directory at all, so 12 of 19 sample paths resolved to `routine`.
+# ~30 dead globs (**/nav/**, **/waterfall*/**, **/carry/**, **/money*/**, …)
+# are deleted — a glob matching nothing reads as coverage and provides none.
+trust_critical_paths:
+  # Produces, adjusts or attests to a reported figure.
+  - "policy/**"                  # sufficiency matrix, validators, calibration
+  - "packet/**"                  # auditor export, manifest, lineage
+  - "ingest/trackers/**"         # canonical marks from both workbooks
+  - "evidence/**"                # retrieval + cited extraction
+  - "packages/contracts/**"      # frozen types every layer depends on
+  - "supabase/migrations/**"     # constraints ARE the provenance guarantee
+  # The oracle defines correctness. Weakening it weakens every gate at once,
+  # which makes it strictly more critical than the code it judges.
+  - "evals/oracle/**"
+
+# ── Semantic ─────────────────────────────────────────────────────────────
+semantic_paths:
+  - "ingest/documents/**"        # parsing, hashing, classification
+  - "api/**"                     # orchestration; owns no arithmetic
+  - "evals/**"                   # graders must not silently weaken
+  - "scripts/**"                 # the gate itself
+
+# ── Routine ──────────────────────────────────────────────────────────────
+# Explicit allowlist. Anything matching NO section defaults to `semantic`
+# (see minTier), so a new file in a new directory cannot land unfloored.
+routine_paths:
+  - "web/**"                     # presentation only; see SPEC §5.3
+  - "docs/**"
+  - "*.md"
+  - ".gitignore"
+  - ".github/**"
+  - ".cursor/**"
+  - ".captain/**"
+
+bugbot:
+  on_tiers: [semantic, trust-critical]
+  min_diff_lines: 50
+  never_counts_as: semantic_approval
+  # Timing is irrelevant (fires on PR open); VISIBILITY is the rule.
+  # Pass A / Pass B never see Bugbot's findings — merge at the fixer.
+  visible_to_semantic_passes: false
+  steers_triage: false
+
+fixer:
+  max_cycles: 2
+  require_finding_owner_verify: true
+  critical_findings_need_regression_test: true
+  model_follows_unit_tier: true
+  cross_family_fixer: false
+  diagnosis_review_after_failed_cycles: true
+
+oracle:
+  separate_author_required_for_tiers: [semantic, trust-critical]
+  amend_oracle_is_separate_change: true
+  adversary_review_tiers: [semantic, trust-critical]
+  # Domain note: for valuation logic the oracle should include worked
+  # examples from the case-study source documents with an independently
+  # derived expected figure — not a golden captured from our own output.
+  # A golden snapshotted from the implementation proves only self-consistency.
+
+spec_review:
+  semantic_pass_tiers: [routine, semantic, trust-critical]
+  adversary_pass_tiers: [semantic, trust-critical]
+  invariant_sweep_tiers: [semantic, trust-critical]
+
+gate_redteam:
+  on_setup: true
+  on_gate_change: true
+
+cross_family:
+  required_for_tiers: [trust-critical]
+  preferred_for_tiers: [semantic]
+  pass_b_sees_pass_a_findings: false

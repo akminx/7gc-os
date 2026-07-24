@@ -1,0 +1,163 @@
+# Oracle
+
+**Revision 4.** Restructured after the cross-family diagnosis review
+(`.captain/review/queue/diagnosis-review.findings.md`).
+
+## What changed and why
+
+r1–r3 were a single prose document holding roughly 200 hand-maintained derived
+cells — row verdicts, calibration applicability, subtotals, totals — alongside
+the predicates those cells were supposed to follow. Two fixer cycles failed. Both
+failures were the same shape: a fix corrected some derived cells and silently
+invalidated others.
+
+The evidence that settled it: **six of six unsupported subtotals in r3 were
+wrong**, and the adversary reviewing them hand-computed one wrong too. Hand-
+maintained derived cells are unreliable regardless of who maintains them.
+
+So the oracle is now split in three:
+
+| File | Contents | Maintained by |
+|---|---|---|
+| `evals/oracle/primitives.yaml` | share counts, prices, dates, document existence and gap kind, source class, applicability windows, mark observations, the policy matrix | **hand** — reviewed |
+| `evals/oracle/derive.py` | every derived value | code — imports nothing from production |
+| `evals/oracle/derived.json` · `derived.md` | the generated snapshot | **generated — never edited** |
+
+`evals/oracle/anchors.py` holds hand-worked boundary cases whose expected values
+are written literally, so it cannot agree with `derive.py` for the wrong reasons.
+
+**This document contains no derived values.** For any number, read
+`evals/oracle/derived.md`.
+
+```
+.venv/bin/python evals/oracle/derive.py     # regenerate the snapshot
+.venv/bin/python evals/oracle/anchors.py    # check it against hand-worked cases
+```
+
+## Where the predicates live
+
+Stated once, in `docs/SPEC.md` — §7.2 (calibration), §7.3 (sufficiency matrix),
+§6.3 (approval types) — and implemented once, in `derive.py`. They are
+deliberately **not** restated here. Three representations of one rule is what
+caused both failed cycles.
+
+## Corpus facts
+
+- 14 positions (9 Fund II, 5 Fund I), 17 lots, **20** documents. Because Market
+  has zero files — the planted gap, not a document.
+- Six packet dates: Fund II 12/31/2023, 12/31/2024, 12/31/2025; Fund I FY2023,
+  FY2024, FY2025. All other tracker columns are lineage-only.
+- `26Q1` equals `25Q4` for every active position — subsequent-events evidence
+  that the marks were carried forward again with no new support.
+
+## Findings
+
+Claims about the corpus. Quotations are primitive; figures live in the snapshot.
+
+**F1 — Moonfare FY2025 FX never re-measured.** The memo states the interest
+*"will be re-measured at the closing rate at each future measurement date."* The
+tracker carries the 12/31/2024 value forward. No 12/31/2025 rate exists in the
+corpus, so the mark is not derivable and must not be computed.
+
+**F2 — Anthropic 25Q4 rests on press alone.** No document states a price per
+share. The article self-disclaims: *"Terms have not been publicly disclosed,"*
+*"final allocations were still being settled,"* *"The Signal has not
+independently reviewed the transaction documents."*
+
+**F3 — Capsule marked on an expired memo for three years.** The memo *"may not be
+relied upon ... for any subsequent measurement date without a written update from
+CVA. No update has been commissioned."* Modelled as an applicability window
+closing at its own measurement date, so this falls out of the derivation rather
+than being asserted.
+
+**F4 — Fund II FY2023 total understates.** The tracker's `TOTAL (active)` omits
+Jackpocket, which was held at 12/31/2023 and realised five months later.
+
+**F5 — Fluidstack marked at cost in 25Q2/25Q3**, where own-round pricing after
+the A-2 close gives more. **Both audit dates are correct** — the variance is
+confined to non-audit quarters, and overstating it is itself an error.
+
+**F6 — Lucra lacks executed support at both ends.** The FY2025 mark rests on a
+CEO email; the cost basis rests on a term sheet marked *"Non-binding except as
+noted."*
+
+**F7 — Because Market has zero documents.**
+
+**F8 — Dream is arithmetically correct but pro forma.** Executed documents *"will
+follow from counsel this week"* as of 17 November 2025.
+
+**F9 — Jio is clean.** NAV matches at all three statement dates. Statements are
+*"unaudited"*; the FY2025 statement was delivered 30 January 2026, so it carries
+`subsequent_evidence`.
+
+**F10 — Banzai's FY2023 quote is dated 12/29/2023**, the last trading day. Each
+year's quote is modelled as its own observation so the measurement date and the
+quote date stay distinct.
+
+**F11 — Calibration required, and no management assessment exists anywhere in the
+corpus.** Which positions and dates: derived, see the snapshot.
+
+**F12 — Document gaps in three kinds** — `with_counsel`, `referenced_location_
+unspecified`, `not_located` — with the source wording recorded for each in
+`primitives.yaml`. Gap kind is an observation, not a permanent property: a
+counsel-held document can later be retrieved.
+
+**Owner determination — Jio R1.** No executed feeder subscription document
+exists. The administrator's capital account statement, stating capital
+commitment, contributed capital and NAV, **is accepted as equivalent evidence**
+for an indirect feeder interest. A stated decision, not a silent omission.
+
+**Derived disagreement worth surfacing — Anthropic's `pro_forma` label.** The
+tracker calls the 25Q4 mark *"PRO FORMA."* The derived label disagrees, because
+no pro forma *document* exists — there is no document at all. Management's label
+is a primitive observation; the derived flag is computed. The disagreement is a
+reconciliation finding, not a contradiction.
+
+## 7. Release gates
+
+**[r6] Restored.** r4 replaced these definitions with the sentence "G1–G10 as
+previously specified," leaving `SPEC.md` §11 pointing at a contract that did not
+exist. There was no locked, reviewable statement of what an implementation must
+pass. Caught in pre-build clearance.
+
+A production implementation must satisfy all ten. Each names the oracle cases
+that enforce it; a gate with no named case is not a gate.
+
+| Gate | Requirement | Enforced by |
+|---|---|---|
+| **G1** Cost completeness | all 14 share-bearing lots tie exactly; the 3 non-share components return `not_applicable`, never `pass` | `entry_costs` · anchors *Entry cost* |
+| **G2** Per-requirement exactness | for every `(holding, packet_date, requirement)`: verdict, reason codes, next actions, and the derived row verdict via §3's reducer — **both** | `rows[].requirements` · anchors *F1/F2/F3, gap kinds, INV-17, Q1-7* |
+| **G3** Typed totals | every total explicitly typed as `held_at_date_reported_total`, `tracker_reconciliation_total` or `approved_fair_value_total`, with label and unsupported subtotal; a realised-only gap must not taint a held aggregate | `totals` · anchors *Unsupported subtotals, F4, Q1-6* |
+| **G4** Findings bind to packet state | each of F1–F12 names the rows it must change and the state each must reach | anchors *F1/F2/F3/F4/F5/F10/F11* |
+| **G5** Cardinality before content | every holding, lot, applicable date, realisation and expected finding present **before** citation and label checks run | `_validate` · anchors *Q1-10* |
+| **G6** Citation semantics | source facts resolve verbatim; derived figures resolve through computation lineage; a real-but-irrelevant quote and a quote from an insufficient source class are both **rejected** | **staged — needs the citation model (Step 0 contract)** |
+| **G7** Verdicts are oracle-owned | gate against `derived.json`, never the implementation's own flags; the policy matrix domain is frozen in `primitives.yaml`, and an unenumerated tuple **raises** | anchors *fail-closed, duplicate cell, unknown verdict* |
+| **G8** Correctness under generated input | expectations for inputs absent from this corpus are computed **independently inside the test**; production helpers may not derive any expectation | `Oracle.from_dict` scenarios · anchors *Q1-8, Q2-2, Q1-5, Q1-7* |
+| **G9** Realisation | Jackpocket: 500,000 shares, $6.20, $3,100,000 gross, $0 holdback, $0 withholding, $3,100,000 net, effective 20 May 2024. Assessed at 12/31/2024 though not held; included at 12/31/2023 | `r4` · anchors *R4, Q1-5* |
+| **G10** Approval separation | sufficiency is a prerequisite, never equivalent to approval; every held mark needs its own valuation approval; transcription-only figures appear in gap sections but never in an approved total | `totals.approved_blocked_by` · anchors *Q2-2* |
+
+### Requirement-to-case map — V1–V14
+
+| Validator | Oracle case | Status |
+|---|---|---|
+| V1 entry cost | `entry_costs`, 17 lots | covered |
+| V2 mark = shares × PPS | `validated_amount` / `SHARES_X_PPS` | covered |
+| V3 fund total, `blocked_incomplete` | `totals`, approval branches | covered |
+| V4 post-money ÷ PPS = stated FD | — | **staged — needs extraction** |
+| V5 implied FD shares | — | **staged — needs extraction** |
+| V6 Schedule A row + totals | — | **staged — needs extraction** |
+| V7 FX rate present at D | Moonfare FY2025 `not_derivable` | covered |
+| V8 FX recomputation, variance not correction | `concluded_value_checks` | covered |
+| V9 realisation proceeds | `r4` per lot | partial — gross/net decomposition staged |
+| V10 quoted close | Banzai per-year quotes | covered |
+| V11 administrator NAV | Jio `ADMINISTRATOR_NAV` | covered |
+| V12 calibration | `r3` + approved-assessment gate | covered |
+| V13 recap ratio | `recap_checks` | covered |
+| V14 citations resolve | — | **staged — needs the citation model** |
+
+**Staged, not deferred.** V4, V5, V6, V14 and G6 depend on the extraction and
+citation contracts, which Step 0 designs. Their oracle cases are written **when
+that contract is designed and before it is implemented** — not after. Per the
+pre-build clearance: it is not acceptable to implement first and land cases
+later, and approval fingerprints and candidate→canonical promotion affect the
+frozen schema, so their minimum failing cases must exist before the freeze.

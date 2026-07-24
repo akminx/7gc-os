@@ -1,0 +1,40 @@
+# 7GC case-study source materials. Fictional and not confidential per the
+# brief, but they are 7GC's interview materials and are not republished here.
+# The oracle references them by name; the documents themselves stay local.
+7GC Audit Case Study/
+_case_study_extract/
+case_study.txt
+
+# Local agent/workflow tooling — not part of the deliverable
+.captain/
+.cursor/
+.claude/
+
+# Environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Coverage / tooling artefacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Node
+node_modules/
+dist/
+.vercel/
+
+# Secrets — never commit real credentials. .secrets.baseline IS committed:
+# it records what detect-secrets has already triaged.
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store

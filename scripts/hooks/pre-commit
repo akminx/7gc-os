@@ -1,0 +1,9 @@
+#!/bin/sh
+# agent-ready gate: no commit may fail check-all.
+# Emergency bypass only (declare it): git commit --no-verify
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+PY=python3
+if [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"; PATH="$ROOT/.venv/bin:$PATH"; export PATH; fi
+[ -f "$ROOT/scripts/check_all.py" ] && "$PY" "$ROOT/scripts/check_all.py"
+exit 0

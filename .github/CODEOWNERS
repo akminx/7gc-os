@@ -1,0 +1,22 @@
+# CODEOWNERS — human approval on trust-critical paths
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Replace @akminx with your GitHub username or team (captain-init tries to
+# fill this from `gh api user` when available). Customize path globs to match
+# review-policy.yaml trust_critical_paths for this repo.
+
+# Default owner for everything (optional — remove if you only want critical paths)
+# * @akminx
+
+# Trust-critical defaults — edit to match this repo
+**/auth/** @akminx
+**/authz/** @akminx
+**/grants/** @akminx
+**/policy/** @akminx
+**/permissions/** @akminx
+**/billing/** @akminx
+**/payment*/** @akminx
+**/redaction/** @akminx
+**/eventlog/** @akminx
+**/event-log/** @akminx
+**/protocol/** @akminx
