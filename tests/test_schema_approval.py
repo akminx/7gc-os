@@ -223,3 +223,95 @@ def test_cross_class_pricing_with_a_cited_policy_is_allowed(
     """The positive path. Without it the trigger could reject everything and the
     negative test above would still pass."""
     _price_series_c_off_series_b(conn, seed, with_policy=True)
+
+
+def test_a_claim_that_prices_without_stating_a_class_is_refused(
+    conn: Conn, seed: dict[str, str]
+) -> None:
+    """The INV-17 gate filtered `priced_class is not null`, so a cap-table
+    extract carrying a price with the class left implicit skipped it entirely.
+    Unstated is not "same class" — it is unknowable, and unknowable must refuse.
+    """
+    noclass = f"{seed['cl']}_n"
+    conn.execute(
+        "insert into claim (id, document_version_id, holding_id, claim_key, source_class,"
+        " execution_status, issued_date, applicable_from, price_per_share)"
+        " values (%s, %s, %s, 'k', 'company_cap_table', 'executed',"
+        " '2025-06-30', '2025-01-01', 9.0)",
+        (noclass, seed["dv"], seed["h"]),
+    )
+    mid = returned_id(
+        conn,
+        "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
+        " validated_amount, validated_currency, derivation_status, derivation_reason)"
+        " values (%s, %s, 9000, 'USD', 9000, 'USD', 'derivable', 'x') returning id",
+        (seed["h"], seed["p"]),
+    )
+    aid = make_assessment(conn, seed, mid, "R2")
+    conn.execute(
+        "insert into evidence_link (assessment_id, claim_id) values (%s, %s)", (aid, noclass)
+    )
+    did = returned_id(
+        conn,
+        "insert into review_decision (decision_type, status, subject_kind, subject_id,"
+        " mark_id, policy_version, actor_id)"
+        " values ('valuation', 'approved', 'mark', %s, %s, 'v1', 'a') returning id",
+        (str(mid), mid),
+    )
+    conn.execute(
+        "insert into decision_evidence (decision_id, assessment_id, mark_id) values (%s, %s, %s)",
+        (did, aid, mid),
+    )
+    with pytest.raises(psycopg.Error) as exc:
+        conn.execute("set constraints all immediate")
+    conn.rollback()
+    assert "states no priced_class" in str(exc.value)
+
+
+def test_evidence_cannot_be_attached_after_the_decision_is_sealed(
+    conn: Conn, seed: dict[str, str]
+) -> None:
+    """An approval that passed its gates could still grow evidence afterwards,
+    because both deferred triggers fire on the decision insert only. New
+    evidence is a new assertion about value and needs a new decision."""
+    mid = make_mark(conn, seed)
+    aid = make_assessment(conn, seed, mid)
+    did = returned_id(
+        conn,
+        "insert into review_decision (decision_type, status, subject_kind, subject_id,"
+        " mark_id, policy_version, actor_id)"
+        " values ('valuation', 'approved', 'mark', %s, %s, 'v1', 'a') returning id",
+        (str(mid), mid),
+    )
+    conn.execute(
+        "insert into decision_evidence (decision_id, assessment_id, mark_id) values (%s, %s, %s)",
+        (did, aid, mid),
+    )
+    conn.execute("set constraints all immediate")
+    conn.commit()  # the decision's own transaction ends here
+
+    later = make_assessment(conn, seed, mid, "R2")
+    assert "is sealed" in rejects(
+        conn,
+        "insert into decision_evidence (decision_id, assessment_id, mark_id) values (%s, %s, %s)",
+        (did, later, mid),
+    )
+
+
+def test_management_assessment_approval_must_name_its_evidence_set(
+    conn: Conn, seed: dict[str, str]
+) -> None:
+    """Only the valuation limb was tested, so dropping `management_assessment`
+    from the trigger's IN list would have left the suite green — a guard whose
+    test cannot fail."""
+    mid = make_mark(conn, seed)
+    conn.execute(
+        "insert into review_decision (decision_type, status, subject_kind, subject_id,"
+        " mark_id, policy_version, actor_id)"
+        " values ('management_assessment', 'approved', 'assessment', %s, %s, 'v1', 'a')",
+        (str(mid), mid),
+    )
+    with pytest.raises(psycopg.Error) as exc:
+        conn.execute("set constraints all immediate")
+    conn.rollback()
+    assert "names no evidence set" in str(exc.value)

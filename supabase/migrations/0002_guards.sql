@@ -98,14 +98,26 @@ begin
        and l.acquired_date <= measured
        and (l.realized_date is null or l.realized_date > measured);
 
+    -- Every claim that PRICES the mark, whether or not it states a class. The
+    -- first version filtered `priced_class is not null`, so a cap-table extract
+    -- carrying a price with the class left implicit skipped the gate entirely —
+    -- the normal shape of that document, not an exotic one.
     for priced in
         select distinct c.priced_class
           from decision_evidence de
           join evidence_link el on el.assessment_id = de.assessment_id
           join claim c          on c.id = el.claim_id
          where de.decision_id = new.id
-           and c.priced_class is not null
+           and c.price_per_share is not null
     loop
+        if priced is null then
+            -- Unstated is not "same class". Whether this is cross-class pricing
+            -- is unknowable from the evidence, and an unknowable answer must
+            -- refuse rather than assume the convenient one.
+            raise exception
+                'INV-17: mark % is priced by a claim that states no priced_class, '
+                'so cross-class pricing cannot be ruled out', m.id;
+        end if;
         if held is null or not (priced = any (held)) then
             if not exists (
                 select 1 from valuation_policy_decision p
@@ -128,6 +140,36 @@ create constraint trigger valuation_approval_needs_class_policy
     after insert on review_decision
     deferrable initially deferred
     for each row execute function require_cross_class_policy();
+
+-- INV-10: an approval's evidence set is SEALED at the decision.
+--
+-- Both deferred triggers fire `after insert on review_decision`, so evidence
+-- attached afterwards was never re-checked: an approval could pass the
+-- cross-class and evidence-set gates and then grow new evidence that would have
+-- failed them. `decision_evidence` was append-only against UPDATE and DELETE,
+-- which made that growth look principled.
+--
+-- Evidence may therefore only be attached in the same transaction that created
+-- the decision. Adding evidence later is a new assertion about value, and a new
+-- assertion needs a new decision — the same rule marks already follow.
+create or replace function seal_evidence_set() returns trigger
+language plpgsql as $$
+declare created_here boolean;
+begin
+    select r.xmin = pg_current_xact_id()::xid into created_here
+      from review_decision r where r.id = new.decision_id;
+    if created_here is distinct from true then
+        raise exception
+            'INV-10: decision % is sealed; attaching evidence requires a new decision',
+            new.decision_id;
+    end if;
+    return new;
+end;
+$$;
+
+create trigger decision_evidence_sealed
+    before insert on decision_evidence
+    for each row execute function seal_evidence_set();
 
 -- INV-16 / INV-3: a claim may only be linked where it is applicable, and
 -- is_subsequent must agree with the dates rather than being asserted.
