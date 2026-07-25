@@ -194,6 +194,19 @@ as-of totals. Property test adds a lot between T1 and T2 and partially realises
 another, computing the expected total **in the test**, not by calling the
 production predicate.
 
+**[r3] Named on all three sides, because each was wrong on its own.**
+`0005_mark_held_at_date.sql` refuses a mark for a period the ledger says the
+holding did not hold, over the reporting **interval** so the realisation row R4
+needs survives — and that interval opens at the previous **packet** date
+(`0007`), because a lineage-only period is not a reporting boundary and treating
+it as one refused the audited realisation. `ingest.trackers.read.position_held_at`
+answers the same question over the SOURCE rows rather than the lots that
+survived into the contract layer; reading it off the survivors was wrong in both
+directions, since a row of an unrecognised kind and a lot whose date names a
+month both fail to become a `Lot`. `Packet.totals()` sums only held rows and
+says so in its `TotalKind` — a held-at-date subtotal labelled as the tracker's
+own total is INV-19's laundering wearing INV-7's arithmetic.
+
 ---
 
 ## INV-8 · Source fact ≠ derived figure — **[r2] REWRITTEN, r1 was impossible**
@@ -415,6 +428,20 @@ is set, R2 cannot reach `sufficient` until a cited `valuation_policy_decision`
 exists. It is a documented prerequisite of `valuation_approval` (SPEC §6.3), so
 the four affected positions carry R2 `partial` until 7GC records the decision.
 A 1:1 conversion note evidences convertibility, not equal liquidation economics.
+
+**[r4] The test is set EQUALITY, over the fair-value evidence, under the
+approval's own policy.** `0006` made held-classes and priced-classes an equality
+in both directions, because each one-way test cleared a real case: asking only
+"is the priced class held" passes a Series B/C holding priced off C, and asking
+only "is every held class covered" passes Lucra, which holds A-1 and is marked
+at the A-2 price. `0007` then scoped the priced set to **R2**: an executed
+transaction document supporting R1 states the acquisition price per share, and
+counting that as pricing the mark let it supply a class the fair-value evidence
+never covered. The same file binds the carve-out to `policy_version`, since a
+cross-class decision is a judgement made under a particular policy and a later
+policy has not made it. The oracle enforces the identical equality
+(`evals/oracle/policy.py`, anchored in `cases_corpus.cross_class_is_symmetric`);
+the two sides previously contradicted each other on the same facts.
 
 ---
 

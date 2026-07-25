@@ -66,11 +66,14 @@ def _assessment(code: RequirementCode, verdict: RequirementVerdict) -> Requireme
     )
 
 
-def _row(assessments: list[RequirementAssessment], amount: str = "1000") -> HoldingRow:
+def _row(
+    assessments: list[RequirementAssessment], amount: str = "1000", held: bool = True
+) -> HoldingRow:
     return HoldingRow(
         holding_id="h",
         company_name="Test Co",
         position_type=PositionType.DIRECT_EQUITY,
+        held_at_date=held,
         mark=_mark(amount),
         assessments=assessments,
     )
@@ -211,11 +214,30 @@ def test_totals_are_typed_and_carry_their_unsupported_subtotal() -> None:
     )
     under_assessed = _row([_assessment(RequirementCode.R1, RequirementVerdict.SUFFICIENT)], "400")
     totals = _packet([supported, under_assessed]).totals()
-    assert totals.kind is TotalKind.TRACKER_REPORTED
+    assert totals.kind is TotalKind.HELD_AT_DATE_REPORTED
     assert totals.amount == _usd("1000")
     assert totals.unsupported_amount == _usd("400")
     assert totals.unsupported_positions == 1
     assert totals.contains_unsupported_inputs is True
+
+
+def test_an_unheld_row_is_a_packet_gap_and_not_an_input_to_the_total() -> None:
+    """INV-7 / INV-19 · the two counts answer different questions.
+
+    A position realised before the measurement date belongs in the packet — its
+    evidence can still be incomplete — but it is not an input to a held-at-date
+    total, so counting it among the unsupported INPUTS overstates how much of
+    the figure is unsupported. `packet_gap_positions` is the superset that keeps
+    it visible; `unsupported_positions` counts only what the number beside it is
+    actually made of. A reader who adds the two double counts every held gap.
+    """
+    held_gap = _row([], "400")
+    realised_gap = _row([], "999", held=False)
+    totals = _packet([held_gap, realised_gap]).totals()
+    assert totals.amount == _usd("400")
+    assert totals.unsupported_amount == _usd("400")
+    assert totals.unsupported_positions == 1
+    assert totals.packet_gap_positions == 2
 
 
 def test_an_approved_fair_value_total_cannot_contain_unsupported_inputs() -> None:

@@ -428,6 +428,11 @@ class PacketTotals(Contract):
     amount: Money
     unsupported_amount: Money
     unsupported_positions: int
+    #: INV-7 / INV-19 · EVERY unsupported row, held at the measurement date or
+    #: not. A superset of `unsupported_positions`, which counts only the held
+    #: ones because only those are inputs to the total beside it. The unheld
+    #: gaps are the DIFFERENCE of the two; adding them double counts.
+    packet_gap_positions: int = 0
 
     @property
     def contains_unsupported_inputs(self) -> bool:
@@ -455,6 +460,12 @@ class HoldingRow(Contract):
     holding_id: str
     company_name: str
     position_type: PositionType
+    #: INV-7 · held-at-date ≠ active-today, computed upstream from immutable lots
+    #: (`Lot.held_at`) and never a mutable flag on the holding. The oracle has
+    #: carried this since it was written; the contract did not, so `totals()`
+    #: summed realisation-only rows into a held-at-date figure. An invariant
+    #: enforced on one side only is not enforced.
+    held_at_date: bool = True
     mark: Mark
     assessments: list[RequirementAssessment] = Field(default_factory=list)
     gaps: list[GapObservation] = Field(default_factory=list)
@@ -546,6 +557,22 @@ class Packet(Contract):
         of which nothing supports. The kind and the unsupported subtotal travel
         with the number so that stripping the qualification takes deliberate
         effort rather than being the default.
+
+        INV-7 · only rows held at the measurement date are inputs. A position
+        realised before the date belongs in the packet — it is a gap if its
+        evidence is incomplete — but adding it to the total answers a question
+        nobody asked, and the oracle has always excluded it. This summed every
+        row, so the two sides disagreed about the same fund on the same facts.
+
+        Which is why the kind is `held_at_date_reported`, not `tracker_reported`.
+        The filter above is applied unconditionally, so the number this returns
+        is *never* the tracker's total: at a date where anything was realised the
+        two differ, and calling a held-at-date subtotal "Tracker-reported total"
+        states something false about what the figure IS — the exact laundering
+        INV-19 exists to stop. The oracle has always called the same quantity
+        `held_at_date_reported_total` and carries the tracker's own figure
+        separately as `tracker_stated_total`; this contract used one name for
+        both and left `HELD_AT_DATE_REPORTED` unreachable.
         """
         if not self.rows:
             raise ValueError("a packet with no rows has no meaningful total")
@@ -553,15 +580,18 @@ class Packet(Contract):
         total = Money(amount=Decimal(0), currency=currency)
         unsupported = Money(amount=Decimal(0), currency=currency)
         for row in self.rows:
+            if not row.held_at_date:
+                continue
             total = total + row.mark.reported  # raises on a currency mismatch
             if not row.supported:
                 unsupported = unsupported + row.mark.reported
         return PacketTotals(
-            kind=TotalKind.TRACKER_REPORTED,
-            label="Tracker-reported total, unaudited",
+            kind=TotalKind.HELD_AT_DATE_REPORTED,
+            label="Tracker-reported amounts for positions held at this date, unaudited",
             amount=total,
             unsupported_amount=unsupported,
-            unsupported_positions=sum(1 for r in self.rows if not r.supported),
+            unsupported_positions=sum(1 for r in self.rows if r.held_at_date and not r.supported),
+            packet_gap_positions=sum(1 for r in self.rows if not r.supported),
         )
 
 

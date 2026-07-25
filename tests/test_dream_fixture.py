@@ -86,7 +86,7 @@ def test_the_packet_total_is_entirely_unsupported() -> None:
     """INV-19 · $5,000,000 reported, $5,000,000 of it unsupported. A total that
     printed only the first number would be the laundering this forbids."""
     totals = dream_packet().totals()
-    assert totals.kind is TotalKind.TRACKER_REPORTED
+    assert totals.kind is TotalKind.HELD_AT_DATE_REPORTED
     assert totals.amount.amount == Decimal("5000000")
     assert totals.unsupported_amount.amount == Decimal("5000000")
     assert totals.unsupported_positions == 1
