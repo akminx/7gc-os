@@ -8,6 +8,8 @@ cycles; two is the minimum that lets the spec be read by a human.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date
 from decimal import Decimal
 
@@ -202,17 +204,28 @@ class PolicyMixin:
 
         # Cross-class pricing (INV-17), derived from held class vs priced class —
         # independent of any label, so omitting a label cannot bypass it.
+        #
+        # The set of classes HELD must equal the set of classes PRICED by the
+        # evidence relied upon. Either difference is cross-class propagation, and
+        # both one-way tests were wrong in the corpus:
+        #
+        #   priced - held   Lucra holds Series A-1 and the mark uses the A-2
+        #                   price from a CEO email. Asking only "is every held
+        #                   class covered" says yes — A-1 has its own term sheet
+        #                   — while the figure that reaches the packet comes from
+        #                   a class the fund does not hold.
+        #   held - priced   With Series B and C held and a single claim pricing
+        #                   C, asking only "is the priced class held" says yes,
+        #                   while the B shares are marked at the C price. This is
+        #                   the exact case INV-17 was written for.
+        #
+        # Equality catches both, and a position whose every class carries its own
+        # claim still passes — which the previous rule denied, because each claim
+        # "differs from" some other held class.
         held_classes = {self.class_at(lt, on) for lt in self.held_lots(holding, on)}
-        cross = False
-        for _, doc in relied:
-            pc = doc.get("priced_class")
-            if pc and any(c != pc for c in held_classes):
-                cross = True
-        scoped = [
-            x
-            for x in self.policy_decisions
-            if x.get("holding") == holding and x.get("date") == on.isoformat()
-        ]
+        priced_classes = {doc.get("priced_class") for _, doc in relied if doc.get("priced_class")}
+        cross = bool(priced_classes) and held_classes != priced_classes
+        scoped = self.scoped_decisions(holding, on)
         if cross and not scoped:
             if VERDICT_ORDER.index(verdict) > VERDICT_ORDER.index("partial"):
                 verdict = "partial"
@@ -349,6 +362,19 @@ class PolicyMixin:
 
     # ---------- helpers ----------
 
+    def scoped_decisions(self, holding: str, on: date) -> list[dict]:
+        """Valuation policy decisions bound to exactly this holding and date.
+
+        One definition, three readers (r2, the fingerprint, and the row
+        assembly). Three copies of the scoping predicate is how a decision
+        recorded for one position starts clearing another (INV-17).
+        """
+        return [
+            x
+            for x in self.policy_decisions
+            if x.get("holding") == holding and x.get("date") == on.isoformat()
+        ]
+
     def validated_amount(self, holding: str, on: date, relied, authorized: bool = False):
         """INV-13. Derived PER LOT from the claim pricing that lot's own class.
 
@@ -402,13 +428,47 @@ class PolicyMixin:
             )
         return total, "derivable", "PER_CLASS_SHARES_X_PPS", lineage
 
+    @staticmethod
+    def _digest(payload) -> str:
+        """A stable content digest. Sorted keys so field order cannot move it."""
+        blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
     def current_fingerprint(self, holding: str, on: date) -> dict:
-        """The identity an approval must match to still be current."""
+        """The identity an approval must match to still be current (INV-10).
+
+        Every component hashes CONTENT, not names. The previous version returned
+        `holding@date` and a pipe-joined list of document ids, so editing a
+        document's price per share in place — the one thing an approval most
+        needs to be invalidated by — left the fingerprint identical and a stale
+        approval kept passing. Names are retained as a readable prefix so a
+        mismatch can still be located; the digest is what decides.
+        """
         r2 = self.r2(holding, on)
+        names = sorted(r2.get("relied_on", []))
+        relied = [(n, self.docs[n]) for n in names]
+        val, dstatus, dreason, _ = self.validated_amount(
+            holding, on, relied, bool(self.scoped_decisions(holding, on))
+        )
+        mark = {
+            "reported": self.obs.get(holding, {}).get(
+                self._period_id(self.holdings[holding]["fund"], on)
+            ),
+            "validated": fmt(val) if val is not None else None,
+            "derivation_status": dstatus,
+            "derivation_reason": dreason,
+            "verdict": r2["verdict"],
+        }
+        policy = {
+            "version": self.p.get("policy_version", "v1"),
+            "matrix": self.matrix,
+            "gap_verdicts": self.gap_verdicts,
+            "decisions": self.scoped_decisions(holding, on),
+        }
         return {
-            "mark_revision": f"{holding}@{on.isoformat()}",
-            "evidence_set_hash": "|".join(sorted(r2.get("relied_on", []))) or "none",
-            "policy_version": self.p.get("policy_version", "v1"),
+            "mark_revision": f"{holding}@{on.isoformat()}#{self._digest(mark)}",
+            "evidence_set_hash": f"{'|'.join(names) or 'none'}#{self._digest(relied)}",
+            "policy_version": f"{policy['version']}#{self._digest(policy)}",
         }
 
     def fingerprint_ok(self, record: dict, holding: str, on: date) -> bool:

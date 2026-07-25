@@ -440,6 +440,104 @@ def run(snap: dict, o: Oracle) -> None:
         "no_valuation_approval",
     )
 
+    print("\n── INV-13: a validated/reported disagreement blocks the approved total ──")
+    # The reported mark is 9,999 while 100 shares at $10.00 derive 1,000. R1-R5
+    # are all satisfied, so nothing about the EVIDENCE is missing — the figure
+    # itself is wrong. Before this guard the row was approved and the approved
+    # total carried the 9,999.
+    _obs, _trk = {"h": {"p1": "9999"}}, {"f": {"p1": "9999"}}
+    fp_mm = synth(mark_observations=_obs, tracker_totals=_trk).current_fingerprint(
+        "h", date(2025, 12, 31)
+    )
+    mm = synth(
+        mark_observations=_obs,
+        tracker_totals=_trk,
+        valuation_approvals=[{"holding": "h", "date": "2025-12-31", **fp_mm}],
+    ).run()
+    check("the evidence is still sufficient", mm["rows"][0]["row_verdict"], "sufficient")
+    check("reported and validated disagree", mm["rows"][0]["validated_matches_reported"], False)
+    check(
+        "the disagreement itself blocks approval",
+        mm["totals"][0]["approved_blocked_by"],
+        "validated_reported_mismatch",
+    )
+    check("no approved total is stated", mm["totals"][0]["approved_fair_value_total"], None)
+    check("and the mark is named", mm["totals"][0]["mismatched_marks"], ["h"])
+    # The corpus carries exactly one such row. It is blocked first for an
+    # unrelated reason (`row_verdict` is partial), which is what made this
+    # latent — so the packet total must still NAME it, or the only real instance
+    # stays invisible and the guard has nothing to fail against.
+    f2_25 = next(t for t in snap["totals"] if t["fund"] == "fund_ii" and t["date"] == "2025-12-31")
+    check("the corpus mismatch reaches its packet total", f2_25["mismatched_marks"], ["lucra"])
+    # An approved total is summed from VALIDATED amounts, so a held mark with no
+    # validated amount cannot be approved either — there is nothing to sum, and
+    # falling back to the reported figure is exactly the substitution above.
+    _nopx = {k: v for k, v in SYNTH_BASE["documents"]["d1"].items() if k != "pps"}
+    fp_nd = synth(documents={"d1": _nopx}).current_fingerprint("h", date(2025, 12, 31))
+    nd = synth(
+        documents={"d1": _nopx},
+        valuation_approvals=[{"holding": "h", "date": "2025-12-31", **fp_nd}],
+    ).run()
+    check(
+        "evidence sufficient, price absent",
+        nd["rows"][0]["derivation_reason"],
+        "NO_PRICE_IN_EVIDENCE",
+    )
+    check(
+        "a reported figure with no validated amount is not approvable",
+        nd["totals"][0]["approved_blocked_by"],
+        "validated_amount_not_derivable",
+    )
+    check(
+        "so the reported figure is not blessed", nd["totals"][0]["approved_fair_value_total"], None
+    )
+
+    print("\n── INV-10: an approval is bound to CONTENT, not to names ──")
+    # The fingerprint used to be `holding@date` plus a pipe-joined list of
+    # document ids. Editing a document's price in place left all three
+    # components identical, so a stale approval kept passing.
+    fp0 = synth().current_fingerprint("h", date(2025, 12, 31))
+    repriced = copy.deepcopy(SYNTH_BASE["documents"])
+    repriced["d1"]["pps"] = "12.00"
+    tampered = synth(
+        documents=repriced,
+        mark_observations={"h": {"p1": "1200"}},
+        tracker_totals={"f": {"p1": "1200"}},
+        valuation_approvals=[{"holding": "h", "date": "2025-12-31", **fp0}],
+    )
+    check(
+        "the evidence set is the same document",
+        tampered.r2("h", date(2025, 12, 31))["relied_on"],
+        ["d1"],
+    )
+    check(
+        "but its content moved the hash",
+        tampered.current_fingerprint("h", date(2025, 12, 31))["evidence_set_hash"]
+        != fp0["evidence_set_hash"],
+        True,
+    )
+    check(
+        "so the approval taken before the edit no longer holds",
+        tampered.run()["totals"][0]["approved_blocked_by"],
+        "no_valuation_approval",
+    )
+    moved = synth(mark_observations={"h": {"p1": "1001"}}, tracker_totals={"f": {"p1": "1001"}})
+    check(
+        "a changed mark figure alone moves the mark revision",
+        moved.current_fingerprint("h", date(2025, 12, 31))["mark_revision"] != fp0["mark_revision"],
+        True,
+    )
+    relaxed = copy.deepcopy(SYNTH_BASE["policy_matrix"])
+    for cell in relaxed:
+        if cell["req"] == "R2":
+            cell["verdict"] = "partial"
+    check(
+        "a changed policy input moves the policy component",
+        synth(policy_matrix=relaxed).current_fingerprint("h", date(2025, 12, 31))["policy_version"]
+        != fp0["policy_version"],
+        True,
+    )
+
     print("\n── Q1-3: V9 realisation arithmetic ──")
     rc = snap["realization_checks"][0]
     check("500,000 x $6.20 = 3,100,000", rc["gross"], "3100000")

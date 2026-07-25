@@ -18,13 +18,24 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, cwd=ROOT, capture_output=True, text=True)
 
 
+SNAPSHOTS = ("evals/oracle/derived.json", "evals/oracle/derived.md")
+
+
 def test_oracle_derivation_regenerates_cleanly() -> None:
-    """The committed snapshot must match what derive.py produces."""
-    before = (ROOT / "evals/oracle/derived.json").read_text()
+    """Every committed snapshot must match what derive.py produces.
+
+    This compared the JSON alone. `derive.py` also writes `derived.md`, and
+    `docs/ORACLE.md` sends readers to the Markdown for the figures — so a
+    falsified Markdown committed green: the pre-commit hook regenerates the file
+    on disk, but git commits the STAGED content, which nothing had read.
+    """
+    before = {p: (ROOT / p).read_text() for p in SNAPSHOTS}
     r = _run(sys.executable, "evals/oracle/derive.py")
     assert r.returncode == 0, r.stdout + r.stderr
-    after = (ROOT / "evals/oracle/derived.json").read_text()
-    assert before == after, "derived.json is stale — re-run evals/oracle/derive.py and commit"
+    for p in SNAPSHOTS:
+        assert before[p] == (ROOT / p).read_text(), (
+            f"{p} is stale or hand-edited — re-run evals/oracle/derive.py and commit"
+        )
 
 
 def test_oracle_anchors_pass() -> None:

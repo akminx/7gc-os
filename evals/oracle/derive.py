@@ -47,13 +47,7 @@ class Oracle(ChecksMixin, PolicyMixin, OracleBase):
         row_verdict = self.reduce_row(applicable)
         pid = self._period_id(fund, on)
         amount = self.obs.get(holding, {}).get(pid)
-        authorized = bool(
-            [
-                x
-                for x in self.policy_decisions
-                if x.get("holding") == holding and x.get("date") == on.isoformat()
-            ]
-        )
+        authorized = bool(self.scoped_decisions(holding, on))
         val, dstatus, dreason, dlineage = self.validated_amount(
             holding, on, [(n, self.docs[n]) for n in r2.get("relied_on", [])], authorized
         )
@@ -126,6 +120,32 @@ class Oracle(ChecksMixin, PolicyMixin, OracleBase):
                     and self.fingerprint_ok(a, a.get("holding"), pd_)
                 }
                 unapproved = [r["holding"] for r in held_rows if r["holding"] not in approvals]
+                # INV-13. `validated_matches_reported` was computed and never
+                # read: a row whose validated amount disagreed with the reported
+                # one could be approved, and the approved total then carried the
+                # REPORTED figure — the wrong number, blessed. An approved total
+                # is now summed from validated amounts, which is only meaningful
+                # once every held member has one and none of them disagree.
+                mismatched = [
+                    r["holding"] for r in held_rows if r["validated_matches_reported"] is False
+                ]
+                underived = [r["holding"] for r in held_rows if r["validated_amount"] is None]
+                validated_total = sum(
+                    ((money(r["validated_amount"]) or Decimal(0)) for r in held_rows), Decimal(0)
+                )
+                blocked_by = next(
+                    (
+                        name
+                        for name, rows_ in (
+                            ("unsupported_rows", unsupported_rows),
+                            ("validated_amount_not_derivable", underived),
+                            ("validated_reported_mismatch", mismatched),
+                            ("no_valuation_approval", unapproved),
+                        )
+                        if rows_
+                    ),
+                    None,
+                )
                 tracker_pid = self._period_id(fund, pd_)
                 tracker = self.p["tracker_totals"][fund].get(tracker_pid)
                 totals.append(
@@ -139,15 +159,13 @@ class Oracle(ChecksMixin, PolicyMixin, OracleBase):
                         "unsupported_subtotal": fmt(unsupported),
                         "unsupported_row_count": len(unsupported_rows),
                         "packet_gap_row_count": len(packet_gap_rows),
-                        "approved_fair_value_total": fmt(reported)
-                        if (not unsupported_rows and not unapproved)
-                        else None,
-                        "approved_blocked_by": (
-                            "unsupported_rows"
-                            if unsupported_rows
-                            else ("no_valuation_approval" if unapproved else None)
+                        "approved_fair_value_total": (
+                            fmt(validated_total) if blocked_by is None else None
                         ),
+                        "approved_blocked_by": blocked_by,
                         "unapproved_marks": sorted(unapproved),
+                        "mismatched_marks": sorted(mismatched),
+                        "underived_marks": sorted(underived),
                         "labels": ["contains_unsupported_inputs"] if unsupported_rows else [],
                     }
                 )

@@ -12,6 +12,7 @@ HERE = Path(__file__).parent
 
 
 def run(snap: dict, o: Oracle) -> None:
+    cross_class_is_symmetric()
     print("\n── Entry cost: every share-bearing lot ties exactly ──")
     check("all 17 lots checked", len(snap["entry_costs"]), 17)
     check("zero arithmetic failures", [e for e in snap["entry_costs"] if e["check"] == "FAIL"], [])
@@ -375,3 +376,25 @@ def run(snap: dict, o: Oracle) -> None:
             check(label, False, True)
         except OracleError:
             check(label, True, True)
+
+
+def cross_class_is_symmetric() -> None:
+    """INV-17 · held classes must equal priced classes.
+
+    Both one-way tests of this were wrong on the corpus, in opposite directions,
+    and the database and the oracle disagreed with each other on the same facts.
+    """
+    o17 = Oracle(HERE / "primitives.yaml")
+    # INV-17 is PROPAGATION, and both one-way tests were wrong here. The rule
+    # is equality of held and priced class sets. Lucra pins priced-minus-held
+    # (holds A-1, marked at the A-2 price, so "is every held class covered" says
+    # yes); Mom pins held-minus-priced (three classes, priced off Series C, so
+    # "is the priced class held" says yes and clears the case INV-17 exists for).
+    on = date(2025, 12, 31)
+    for who, n_classes in (("lucra", 1), ("mom_project", 3)):
+        held = {o17.class_at(lt, on) for lt in o17.held_lots(who, on)}
+        check(
+            f"{who} holds {n_classes} class(es) and is cross-class",
+            (len(held), "CROSS_CLASS_POLICY_DECISION_REQUIRED" in o17.r2(who, on)["reasons"]),
+            (n_classes, True),
+        )
