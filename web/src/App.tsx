@@ -21,7 +21,7 @@ export function App() {
   useEffect(() => {
     if (!API) return;
     let live = true;
-    fetch(`${API}/health`)
+    fetch(`${API}/funds/fund_ii/periods/f2_25q4/packet`)
       .then(async (r) => {
         const body: unknown = await r.json();
         if (live) setState({ kind: "ok", body });
@@ -47,9 +47,11 @@ export function App() {
       <h1 style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>
         7GC OS — Valuation Evidence Ledger
       </h1>
-      <p style={{ opacity: 0.65, marginTop: 0 }}>Step 0 — deploy path verification</p>
+      <p style={{ opacity: 0.65, marginTop: 0 }}>
+        Step 0 — one packet, served through the frozen contract
+      </p>
 
-      <h2 style={{ fontSize: "0.9rem", marginTop: "2rem" }}>API health</h2>
+      <h2 style={{ fontSize: "0.9rem", marginTop: "2rem" }}>Fund II · FY2025 Q4</h2>
       {state.kind === "unconfigured" && (
         <p>
           <code>VITE_API_BASE_URL</code> is not set, so this page has no service to call.
@@ -57,8 +59,8 @@ export function App() {
       )}
       {state.kind === "loading" && (
         <p>
-          Calling <code>{API}/health</code>… a free Render instance sleeps after 15 minutes idle and
-          takes about 50 seconds to wake.
+          Loading the packet… a free Render instance sleeps after 15 minutes idle and takes about 50
+          seconds to wake.
         </p>
       )}
       {state.kind === "error" && <p>Request failed: {state.detail}</p>}

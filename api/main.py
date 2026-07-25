@@ -13,10 +13,11 @@ import os
 from typing import Any
 
 import psycopg
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import dsn
+from api.routes import router
 
 SERVICE = "7gc-os-api"
 VERSION = "0.1.0"
@@ -33,6 +34,8 @@ app = FastAPI(title="7GC OS — Valuation Evidence Ledger", version=VERSION)
 # prefix match also allowed `7gc-osattacker.vercel.app`, so anyone could claim a
 # sibling project name and call this API from a visitor's browser.
 PREVIEW_ORIGIN = r"https://7gc-os(-[a-z0-9-]+)?\.vercel\.app"
+
+app.include_router(router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -78,3 +81,31 @@ def health() -> dict[str, Any]:
             "database": "unreachable",
             "detail": type(exc).__name__,
         }
+
+
+# ── SPEC §3.2 · liveness and readiness are different questions ───────────
+# A single /health conflated them and could report 200 while the database was
+# down. /health above stays as the DEPLOYMENT probe: it returns 200 even when
+# degraded, so a database blip does not make Render tear the service down.
+# /ready is the honest answer for a caller deciding whether to trust the data,
+# and it never converts a failure into a 200.
+
+
+@app.get("/live")
+def live() -> dict[str, str]:
+    """The process is up. Says nothing about its dependencies, on purpose."""
+    return {"status": "live", "service": SERVICE}
+
+
+@app.get("/ready")
+def ready(response: Response) -> dict[str, Any]:
+    """Reaches the database. 503 on failure — never a 200 with bad news inside."""
+    url = dsn()
+    if not url:
+        response.status_code = 503
+        return {"status": "not_ready", "database": "unconfigured"}
+    try:
+        return {"status": "ready", **_probe(url)}
+    except psycopg.Error as exc:
+        response.status_code = 503
+        return {"status": "not_ready", "database": "unreachable", "detail": type(exc).__name__}
