@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -47,6 +48,20 @@ class Contract(BaseModel):
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    def model_copy(self, *, update: dict[str, object] | None = None, deep: bool = False) -> Any:
+        """Re-validate when fields are replaced.
+
+        Pydantic's `model_copy(update=...)` writes straight past every validator,
+        so a guard that only runs at construction is not a guard at all: a float
+        could be posted into `Money.amount`, and an `approved_fair_value` total
+        could acquire unsupported positions, both bypassing the exact rules those
+        models exist to enforce.
+        """
+        if not update:
+            return super().model_copy(deep=deep)
+        merged = {**{f: getattr(self, f) for f in type(self).model_fields}, **update}
+        return type(self)(**merged)
 
 
 class Money(Contract):
@@ -270,6 +285,11 @@ class RequirementAssessment(Contract):
             raise ValueError(
                 f"an inapplicable requirement must be verdict not_applicable; got {self.verdict}"
             )
+        if not self.applicable and self.requirement in ALWAYS_APPLICABLE:
+            raise ValueError(
+                f"{self.requirement} is always applicable (SPEC 7.1) and cannot be marked "
+                "inapplicable; doing so would exclude it from the support test"
+            )
         return self
 
 
@@ -414,9 +434,14 @@ class HoldingRow(Contract):
         A missing always-applicable assessment therefore means unsupported, not
         "nothing to object to".
         """
-        present = {a.requirement for a in self.assessments}
-        if not present >= ALWAYS_APPLICABLE:
-            return False
+        by_code = {a.requirement: a for a in self.assessments}
+        for code in ALWAYS_APPLICABLE:
+            got = by_code.get(code)
+            # Present-but-inapplicable was the second version's hole: the code
+            # appeared, so a presence check passed, while the applicable filter
+            # skipped it and nothing ever tested its verdict.
+            if got is None or not got.applicable:
+                return False
         applicable = [a for a in self.assessments if a.applicable]
         return bool(applicable) and all(
             a.verdict is RequirementVerdict.SUFFICIENT for a in applicable
@@ -424,8 +449,13 @@ class HoldingRow(Contract):
 
     @property
     def unassessed_requirements(self) -> set[RequirementCode]:
-        """Named so a caller can say *why* a row is unsupported."""
-        return ALWAYS_APPLICABLE - {a.requirement for a in self.assessments}
+        """Named so a caller can say *why* a row is unsupported.
+
+        Counts a requirement as unassessed when it is absent OR present but not
+        actually applied, so this can never disagree with `supported`.
+        """
+        assessed = {a.requirement for a in self.assessments if a.applicable}
+        return set(ALWAYS_APPLICABLE) - assessed
 
     @property
     def approved(self) -> bool:

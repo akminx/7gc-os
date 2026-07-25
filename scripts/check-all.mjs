@@ -9,8 +9,16 @@
 //   node scripts/check-all.mjs --init-budgets  # baseline the ratchets
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
-import { join, relative, extname } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { extname, join, relative } from "node:path";
 
 const ROOT = (() => {
   try {
@@ -44,8 +52,16 @@ SRC_EXT.add(".mjs");
 function nodeProjects() {
   const found = new Set();
   const skipDir = new Set([
-    "node_modules", ".git", ".venv", ".claude", ".worktrees", "worktrees",
-    "coverage", "dist", "build", ".build",
+    "node_modules",
+    ".git",
+    ".venv",
+    ".claude",
+    ".worktrees",
+    "worktrees",
+    "coverage",
+    "dist",
+    "build",
+    ".build",
   ]);
   const walk = (dir) => {
     let entries;
@@ -96,9 +112,21 @@ function checkLint(projects) {
     }
     const r = sh(bin, ["check", "--error-on-warnings", "."], { cwd: p });
     if (r.status) fails.push(r.stdout + r.stderr);
+
+    // `biome check .` never walks outside its own root, so listing
+    // `../scripts/*.mjs` in web/biome.json was inert — the claim that the
+    // review runner was linted was false. Lint that directory by explicit path.
+    const scripts = join(ROOT, "scripts");
+    if (existsSync(scripts)) {
+      // Run from ROOT so biome picks up scripts/biome.json rather than web's,
+      // whose `includes` filter matches nothing outside web/.
+      const s = sh(bin, ["check", "--error-on-warnings", "scripts"], { cwd: ROOT });
+      if (s.status) fails.push(s.stdout + s.stderr);
+    }
   }
   if (fails.length) return ["FAIL", fails.join("\n")];
-  if (missing.length === projects.length) return ["FAIL", "biome not installed — required check cannot SKIP"];
+  if (missing.length === projects.length)
+    return ["FAIL", "biome not installed — required check cannot SKIP"];
   if (missing.length) return ["FAIL", `biome not found for: ${missing.join(", ")}`];
   return ["OK", `${projects.length} project(s) clean`];
 }
@@ -120,7 +148,8 @@ function checkTypecheck(projects) {
     if (r.status) fails.push(r.stdout + r.stderr);
   }
   if (fails.length) return ["FAIL", fails.join("\n")];
-  if (missing.length === projects.length) return ["FAIL", "typescript/tsconfig missing — required check cannot SKIP"];
+  if (missing.length === projects.length)
+    return ["FAIL", "typescript/tsconfig missing — required check cannot SKIP"];
   if (missing.length) return ["FAIL", `typecheck skipped for: ${missing.join(", ")}`];
   return ["OK", "types clean"];
 }
@@ -153,8 +182,10 @@ function checkTests(projects, fix, ratchet) {
     const note = missing.length ? `\n(no vitest found for: ${missing.join(", ")})` : "";
     return ["FAIL", "tests failed\n" + fails.join("\n") + note];
   }
-  if (total === null) return ["FAIL", "tests pass but coverage report missing — install @vitest/coverage-v8"];
-  if (!fix && floor <= 0) return ["FAIL", `coverage floor is ${floor}% (unbaselined). Run --init-budgets`];
+  if (total === null)
+    return ["FAIL", "tests pass but coverage report missing — install @vitest/coverage-v8"];
+  if (!fix && floor <= 0)
+    return ["FAIL", `coverage floor is ${floor}% (unbaselined). Run --init-budgets`];
   if (fix) {
     budget.floor = Math.floor(total * 100) / 100;
     save("coverage.json", budget);
@@ -165,16 +196,20 @@ function checkTests(projects, fix, ratchet) {
     save("coverage.json", budget);
     return ["OK", `tests pass · coverage floor ratcheted ${floor}% → ${total.toFixed(2)}%`];
   }
-  if (total + 1e-9 < floor) return ["FAIL", `tests pass but coverage ${total.toFixed(2)}% < floor ${floor}%`];
+  if (total + 1e-9 < floor)
+    return ["FAIL", `tests pass but coverage ${total.toFixed(2)}% < floor ${floor}%`];
   const nudge = total - floor > 1 ? `  (ratchet floor up toward ${total.toFixed(1)}%)` : "";
   return ["OK", `tests pass · coverage ${total.toFixed(2)}% >= floor ${floor}%${nudge}`];
 }
 
 function checkDups() {
   const jscpdConfig = join(ROOT, ".jscpd.node.json");
-  if (!existsSync(jscpdConfig)) return ["FAIL", "no .jscpd.node.json — duplicate-code check is required"];
+  if (!existsSync(jscpdConfig))
+    return ["FAIL", "no .jscpd.node.json — duplicate-code check is required"];
   const r = sh("npx", ["--yes", "jscpd", "--config", jscpdConfig], { cwd: ROOT });
-  return r.status === 0 ? ["OK", "no clones above threshold"] : ["FAIL", (r.stdout + r.stderr).slice(-1800)];
+  return r.status === 0
+    ? ["OK", "no clones above threshold"]
+    : ["FAIL", (r.stdout + r.stderr).slice(-1800)];
 }
 
 function checkFileSizes(fix) {
@@ -195,7 +230,11 @@ function checkFileSizes(fix) {
     save("file-sizes.json", budget);
     return ["OK", `baselined ${over.length} file(s) over ${mx} lines`];
   }
-  if (over.length) return ["FAIL", "split these files:\n" + over.map(([rel, n]) => `${rel} = ${n} lines (max ${mx})`).join("\n")];
+  if (over.length)
+    return [
+      "FAIL",
+      "split these files:\n" + over.map(([rel, n]) => `${rel} = ${n} lines (max ${mx})`).join("\n"),
+    ];
   return ["OK", `all source files <= ${mx} lines`];
 }
 
@@ -221,7 +260,11 @@ function checkDebt(fix, ratchet) {
     save("debt-allowlist.json", budget);
     return ["OK", `debt ceiling ratcheted ${cap} → ${hits.length}`];
   }
-  if (hits.length > cap) return ["FAIL", `${hits.length} debt markers > ceiling ${cap}\n` + hits.slice(0, 20).join("\n")];
+  if (hits.length > cap)
+    return [
+      "FAIL",
+      `${hits.length} debt markers > ceiling ${cap}\n` + hits.slice(0, 20).join("\n"),
+    ];
   return ["OK", `${hits.length} debt markers <= ceiling ${cap}`];
 }
 
@@ -270,7 +313,8 @@ function checkDeps(projects) {
   const vulns = [];
   for (const p of projects) {
     if (!existsSync(join(p, "package.json"))) continue;
-    if (!existsSync(join(p, "package-lock.json")) && !existsSync(join(p, "npm-shrinkwrap.json"))) continue;
+    if (!existsSync(join(p, "package-lock.json")) && !existsSync(join(p, "npm-shrinkwrap.json")))
+      continue;
     const r = sh("npm", ["audit", "--audit-level=high", "--json"], { cwd: p });
     const blob = (r.stdout + r.stderr).toLowerCase();
     if (r.status && /(enotfound|etimedout|network|econnrefused|offline|getaddrinfo)/.test(blob)) {
@@ -282,11 +326,15 @@ function checkDeps(projects) {
       const bad = (meta.high || 0) + (meta.critical || 0);
       if (bad) vulns.push(`${relative(ROOT, p) || "."}: ${bad} high/critical`);
     } catch {
-      if (r.status) vulns.push(`${relative(ROOT, p) || "."}: audit failed\n${(r.stdout + r.stderr).slice(-600)}`);
+      if (r.status)
+        vulns.push(
+          `${relative(ROOT, p) || "."}: audit failed\n${(r.stdout + r.stderr).slice(-600)}`,
+        );
     }
   }
   if (!ran) return ["SKIP", "no lockfile to audit (run npm install first)"];
-  if (vulns.length) return ["FAIL", "vulnerable dependencies (high/critical):\n" + vulns.join("\n")];
+  if (vulns.length)
+    return ["FAIL", "vulnerable dependencies (high/critical):\n" + vulns.join("\n")];
   return ["OK", "no high/critical dependency CVEs"];
 }
 

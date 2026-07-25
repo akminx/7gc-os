@@ -14,7 +14,7 @@
 //   4. If none and min is routine → OK; if min is higher → FAIL (must declare)
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = (() => {
@@ -93,10 +93,7 @@ function matchAny(path, globs) {
 
 function changedFiles(ci) {
   if (ci) {
-    const base =
-      process.env.GITHUB_BASE_REF ||
-      process.env.GILLY_TIER_BASE ||
-      "origin/main";
+    const base = process.env.GITHUB_BASE_REF || process.env.GILLY_TIER_BASE || "origin/main";
     // Prefer merge-base range when available
     const range = process.env.GILLY_TIER_RANGE;
     if (range) return sh(["diff", "--name-only", range]);
@@ -170,7 +167,7 @@ function parseDeclared(argv, ci) {
     // Highest declared among checked
     return checked.sort((a, b) => RANK[b] - RANK[a])[0];
   }
-  const m = body.match(/risk\s*tier\s*[:\-]\s*`?(routine|semantic|trust-critical)`?/i);
+  const m = body.match(/risk\s*tier\s*[:-]\s*`?(routine|semantic|trust-critical)`?/i);
   return m ? m[1].toLowerCase() : null;
 }
 
@@ -196,7 +193,9 @@ function main() {
     console.log(`  trust-critical hits:\n    - ${hits.trust.slice(0, 12).join("\n    - ")}`);
   }
   if (hits.unmatched.length) {
-    console.log(`  unmatched (defaulted to semantic):\n    - ${hits.unmatched.slice(0, 12).join("\n    - ")}`);
+    console.log(
+      `  unmatched (defaulted to semantic):\n    - ${hits.unmatched.slice(0, 12).join("\n    - ")}`,
+    );
   }
   if (hits.semantic.length) {
     console.log(`  semantic hits:\n    - ${hits.semantic.slice(0, 12).join("\n    - ")}`);
@@ -212,8 +211,7 @@ function main() {
     // Previously it returned 0 unconditionally, so the strongest floor in the
     // policy was one environment variable away from nothing.
     const queueDir = join(ROOT, ".captain", "review", "queue");
-    const hasPacket =
-      existsSync(queueDir) && readdirSync(queueDir).some((f) => f.endsWith(".md"));
+    const hasPacket = existsSync(queueDir) && readdirSync(queueDir).some((f) => f.endsWith(".md"));
     if (!ci && min === "trust-critical" && process.env.GILLY_ACK_TRUST === "1" && !hasPacket) {
       console.error(
         "check-tier FAIL: GILLY_ACK_TRUST=1 but .captain/review/queue/ has no review packet.\n" +
@@ -254,7 +252,7 @@ function main() {
     return 1;
   }
 
-  if (!RANK.hasOwnProperty(declared)) {
+  if (!Object.hasOwn(RANK, declared)) {
     console.error(`check-tier FAIL: unknown declared tier '${declared}'`);
     return 1;
   }

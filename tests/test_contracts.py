@@ -249,3 +249,81 @@ def test_a_lineage_only_period_cannot_be_packeted() -> None:
             policy_version="v1",
             generated_at=datetime.now(UTC),
         )
+
+
+# ── the second round's own defects ───────────────────────────────────────
+def test_an_always_applicable_requirement_cannot_be_marked_inapplicable() -> None:
+    """The previous fix created this hole. Making `applicable=False` legal gave
+    a route to mark R1 not-applicable, which the presence check accepted and the
+    applicable filter then skipped — so nothing ever tested its verdict."""
+    with pytest.raises(ValidationError, match="always applicable"):
+        RequirementAssessment(
+            requirement=RequirementCode.R1,
+            applicable=False,
+            verdict=RequirementVerdict.NOT_APPLICABLE,
+            policy_version="v1",
+        )
+
+
+def test_supported_requires_applicability_not_mere_presence() -> None:
+    """Two layers, both checked.
+
+    A `RequirementAssessment` marking R1 inapplicable cannot even enter a
+    `HoldingRow` — pydantic re-validates on nesting. And the `supported`
+    predicate is independently correct: bypassing both validators with
+    `model_construct` still yields `False`, so the guard is not merely
+    unreachable.
+    """
+    r1_na = RequirementAssessment.model_construct(
+        requirement=RequirementCode.R1,
+        applicable=False,
+        verdict=RequirementVerdict.NOT_APPLICABLE,
+        reason_codes=[],
+        next_actions=[],
+        evidence=[],
+        pro_forma=False,
+        tracker_label=None,
+        policy_version="v1",
+    )
+    r2 = _assessment(RequirementCode.R2, RequirementVerdict.SUFFICIENT)
+
+    with pytest.raises(ValidationError, match="always applicable"):
+        _row([r1_na, r2])
+
+    row = HoldingRow.model_construct(
+        holding_id="h",
+        company_name="Test Co",
+        position_type=PositionType.DIRECT_EQUITY,
+        mark=_mark(),
+        assessments=[r1_na, r2],
+        gaps=[],
+        approval=None,
+    )
+    assert row.supported is False
+    assert RequirementCode.R1 in row.unassessed_requirements
+
+
+def test_model_copy_cannot_smuggle_a_float_into_money() -> None:
+    """`model_copy(update=...)` writes straight past every validator, so a guard
+    that only runs at construction is not a guard."""
+    with pytest.raises(ValidationError, match="must not be constructed from a float"):
+        _usd("1").model_copy(update={"amount": 0.1 + 0.2})
+
+
+def test_model_copy_cannot_make_an_approved_total_contain_unsupported_inputs() -> None:
+    totals = PacketTotals(
+        kind=TotalKind.TRACKER_REPORTED,
+        label="Tracker-reported total, unaudited",
+        amount=_usd("1000"),
+        unsupported_amount=_usd("400"),
+        unsupported_positions=1,
+    )
+    with pytest.raises(ValidationError, match="cannot include unsupported positions"):
+        totals.model_copy(update={"kind": TotalKind.APPROVED_FAIR_VALUE})
+
+
+def test_model_copy_without_updates_still_works() -> None:
+    """The re-validation must not break the ordinary copy path."""
+    m = _usd("1000")
+    assert m.model_copy() == m
+    assert m.model_copy(update={"amount": Decimal("2000")}).amount == Decimal("2000")

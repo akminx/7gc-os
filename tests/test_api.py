@@ -82,3 +82,10 @@ def test_health_reports_ok_with_the_observed_schema_size(
     body = client.get("/health").json()
     assert body["status"] == "ok"
     assert body["public_tables"] == 23
+
+
+def test_a_sibling_named_vercel_project_is_not_allowed() -> None:
+    """The first CORS narrowing matched by prefix, so `7gc-osattacker.vercel.app`
+    — a project name anyone can claim — was accepted."""
+    assert _preflight("https://7gc-osattacker.vercel.app") is None
+    assert _preflight("https://7gc-os-evil.vercel.app") is not None  # a real preview shape

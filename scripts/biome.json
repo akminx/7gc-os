@@ -1,7 +1,9 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
   "files": {
-    "includes": ["src/**/*.ts", "src/**/*.tsx", "*.ts", "*.json"]
+    "includes": [
+      "*.mjs"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -12,13 +14,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended",
-      "suspicious": {
-        "noExplicitAny": "error"
-      },
-      "style": {
-        "useConst": "error"
-      }
+      "preset": "recommended"
     }
   },
   "javascript": {
@@ -26,5 +22,6 @@
       "quoteStyle": "double",
       "semicolons": "always"
     }
-  }
+  },
+  "root": false
 }

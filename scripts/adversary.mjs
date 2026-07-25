@@ -45,7 +45,15 @@ const ALIAS = /^(auto|default|composer[\w.-]*)$/i;
 
 // A family we can positively identify. An id matching none of these is unknown,
 // and unknown must refuse rather than be assumed foreign.
-const KNOWN_FOREIGN = /gpt|grok|gemini|sol|terra|codex|llama|mistral|qwen|deepseek/i;
+//
+// Token-anchored, not substring: a bare /sol/ also matches "absolute",
+// "resolution" and "console", so a made-up id like `console-ai` would have been
+// certified as proven foreign. The o-series is listed explicitly because
+// `o3`/`o4-mini` are genuinely foreign and matched nothing before — a false red
+// is less dangerous than a false green, but it still breaks the tool.
+const FAMILY_TOKENS =
+  "gpt|grok|gemini|sol|terra|codex|llama|mistral|qwen|deepseek|kimi|glm|o[1345]";
+const KNOWN_FOREIGN = new RegExp(`(^|[-_/. ])(${FAMILY_TOKENS})([-_/. \\d]|$)`, "i");
 
 function die(msg) {
   console.error(`\n✗ ${msg}\n`);
@@ -109,24 +117,31 @@ function textIn(node, parts = []) {
 }
 
 const unit = process.argv[2];
-if (!unit || unit.startsWith("--")) die("usage: adversary.mjs <unit>-<pass> --prompt <f> --model <m>");
+if (!unit || unit.startsWith("--"))
+  die("usage: adversary.mjs <unit>-<pass> --prompt <f> --model <m>");
 
 const model = arg("--model");
 if (!model) die("--model is required; a default would hide which family actually ran");
 if (ANTHROPIC.test(model)) {
-  die(`refusing to run: "${model}" is the author's own family.\n` +
+  die(
+    `refusing to run: "${model}" is the author's own family.\n` +
       `  Pass B exists to produce an uncorrelated sample. Running it on the\n` +
-      `  author's family turns two independent reviews into one and reports green.`);
+      `  author's family turns two independent reviews into one and reports green.`,
+  );
 }
 if (ALIAS.test(model)) {
-  die(`refusing to run: "${model}" is a server-resolved alias, not a model.\n` +
+  die(
+    `refusing to run: "${model}" is a server-resolved alias, not a model.\n` +
       `  It can resolve to a Claude model while the recorded provenance still\n` +
-      `  reads "${model}". Name the concrete model id instead.`);
+      `  reads "${model}". Name the concrete model id instead.`,
+  );
 }
 if (!KNOWN_FOREIGN.test(model)) {
-  die(`refusing to run: "${model}" is not a recognised non-Anthropic model.\n` +
+  die(
+    `refusing to run: "${model}" is not a recognised non-Anthropic model.\n` +
       `  An unrecognised id cannot be shown to be a different family, and an\n` +
-      `  unverifiable pass looks identical to a verified one.`);
+      `  unverifiable pass looks identical to a verified one.`,
+  );
 }
 
 const promptFile = join(PROMPTS, arg("--prompt", "semantic-adversary.md"));
@@ -195,8 +210,10 @@ for (const line of (r.stdout || "").split("\n")) {
   }
 }
 if (!events.length) {
-  die(`cursor-agent produced no parseable events. Raw output kept at ${rawPath}\n` +
-      `  Provenance cannot be established, so no findings were written.`);
+  die(
+    `cursor-agent produced no parseable events. Raw output kept at ${rawPath}\n` +
+      `  Provenance cannot be established, so no findings were written.`,
+  );
 }
 
 const sessionId = events.find((e) => e.session_id)?.session_id ?? null;
@@ -205,10 +222,12 @@ const storeModels = modelsFromSessionStore(sessionId);
 const models = [...new Set([...streamModels, ...storeModels])];
 
 if (models.length === 0) {
-  die(`neither the event stream nor the session store names a model.\n` +
+  die(
+    `neither the event stream nor the session store names a model.\n` +
       `  Raw output kept at ${rawPath}\n` +
       `  Refusing to write findings: an unverifiable pass is worse than no pass,\n` +
-      `  because it looks identical to a verified one.`);
+      `  because it looks identical to a verified one.`,
+  );
 }
 
 // Provenance must positively identify a foreign family, not merely fail to
@@ -216,15 +235,19 @@ if (models.length === 0) {
 // nothing about what actually ran.
 const aliasOnly = models.every((m) => ALIAS.test(m) || !KNOWN_FOREIGN.test(m));
 if (aliasOnly) {
-  die(`the run reports only unresolved model identifiers: ${models.join(", ")}\n` +
+  die(
+    `the run reports only unresolved model identifiers: ${models.join(", ")}\n` +
       `  Raw output kept at ${rawPath}\n` +
-      `  Refusing to write findings: this cannot be shown to be a cross-family pass.`);
+      `  Refusing to write findings: this cannot be shown to be a cross-family pass.`,
+  );
 }
 
 const anthropic = models.filter((m) => ANTHROPIC.test(m));
 if (anthropic.length) {
-  die(`MIS-ROUTED PASS — the CLI reports it ran on: ${anthropic.join(", ")}\n` +
-      `  Requested "${model}". No findings written. Re-run on a non-Anthropic model.`);
+  die(
+    `MIS-ROUTED PASS — the CLI reports it ran on: ${anthropic.join(", ")}\n` +
+      `  Requested "${model}". No findings written. Re-run on a non-Anthropic model.`,
+  );
 }
 
 // In --plan mode the deliverable is routed into a PLAN artifact, not the
@@ -265,7 +288,9 @@ writeFileSync(
       packet,
       started,
       finished: new Date().toISOString(),
-      cursor_agent_version: spawnSync("cursor-agent", ["--version"], { encoding: "utf8" }).stdout.trim(),
+      cursor_agent_version: spawnSync("cursor-agent", ["--version"], {
+        encoding: "utf8",
+      }).stdout.trim(),
     },
     null,
     2,
