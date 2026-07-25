@@ -15,126 +15,32 @@ Skipped when MIGRATION_DATABASE_URL is unset, so the suite still runs offline.
 
 from __future__ import annotations
 
-import uuid
-from collections.abc import Iterator
-
 import psycopg
 import pytest
 
-from api.config import dsn
+from tests.schema_helpers import DSN, Conn, make_mark, rejects, returned_id
 
-DSN = dsn("MIGRATION_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
-
-Conn = psycopg.Connection[tuple[object, ...]]
-
-
-@pytest.fixture
-def conn() -> Iterator[Conn]:
-    """Each test runs in a transaction that is always rolled back."""
-    assert DSN is not None  # guarded by the module-level skipif
-    with psycopg.connect(DSN, connect_timeout=30) as c:
-        yield c
-        c.rollback()
-
-
-@pytest.fixture
-def seed(conn: Conn) -> dict[str, str]:
-    """A complete, valid graph — so every rejection below is caused by the
-    constraint under test rather than by a dangling reference."""
-    u = uuid.uuid4().hex[:8]
-    i = {k: f"{k}_{u}" for k in ("fund", "co", "h", "sf", "dv", "cl", "p", "lp", "lot")}
-    stmts: list[tuple[str, tuple[object, ...]]] = [
-        ("insert into fund values (%s, 'Test Fund')", (i["fund"],)),
-        ("insert into company values (%s, 'Test Co')", (i["co"],)),
-        (
-            "insert into holding (id, fund_id, company_id, position_type, currency)"
-            " values (%s, %s, %s, 'direct_equity', 'USD')",
-            (i["h"], i["fund"], i["co"]),
-        ),
-        (
-            "insert into source_file (id, filename, content_hash, byte_size, bytes)"
-            " values (%s, 'f.pdf', %s, 1, '\\x00')",
-            (i["sf"], f"hash_{u}"),
-        ),
-        (
-            "insert into document_version"
-            " (id, source_file_id, canonical_text, extractor, text_hash, page_count)"
-            " values (%s, %s, 'text', 'pdftotext@1', %s, 1)",
-            (i["dv"], i["sf"], f"th_{u}"),
-        ),
-        (
-            "insert into claim (id, document_version_id, holding_id, claim_key,"
-            " source_class, execution_status, issued_date, applicable_from, applicable_to)"
-            " values (%s, %s, %s, 'k', 'company_communication', 'executed',"
-            " '2025-06-30', '2025-01-01', '2026-12-31')",
-            (i["cl"], i["dv"], i["h"]),
-        ),
-        (
-            "insert into reporting_period values (%s, %s, '2025-12-31', 'packet', 'FY2025')",
-            (i["p"], i["fund"]),
-        ),
-        (
-            "insert into reporting_period values (%s, %s, '2025-06-30', 'lineage_only', 'H1')",
-            (i["lp"], i["fund"]),
-        ),
-        (
-            "insert into lot (id, holding_id, security_class, shares, entry_pps,"
-            " cost_amount, cost_currency, acquired_date)"
-            " values (%s, %s, 'series_a', 1000, 2.00, 2000, 'USD', '2024-01-01')",
-            (i["lot"], i["h"]),
-        ),
-    ]
-    for sql, params in stmts:
-        conn.execute(sql, params)
-    return i
-
-
-def _rejects(conn: Conn, sql: str, params: tuple[object, ...] = ()) -> str:
-    """Assert the statement is refused; return the error text."""
-    with pytest.raises(psycopg.Error) as exc:
-        conn.execute(sql, params)
-    conn.rollback()
-    return str(exc.value)
-
-
-def _returned_id(conn: Conn, sql: str, params: tuple[object, ...] = ()) -> int:
-    """Run an INSERT ... RETURNING id and hand back the id, typed."""
-    row = conn.execute(sql, params).fetchone()
-    assert row is not None
-    new_id = row[0]
-    assert isinstance(new_id, int)
-    return new_id
-
-
-def _mark(conn: Conn, seed: dict[str, str], cross_class: bool = False) -> int:
-    return _returned_id(
-        conn,
-        "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
-        " derivation_status, derivation_reason, cross_class)"
-        " values (%s, %s, 1000000, 'USD', 'not_derivable', 'x', %s) returning id",
-        (seed["h"], seed["p"], cross_class),
-    )
 
 
 # ── INV-7 · lots are immutable ───────────────────────────────────────────
 def test_lot_cannot_be_updated(conn: Conn, seed: dict[str, str]) -> None:
     """Rewriting an acquisition date would silently move a position across a
     measurement-date boundary under an already-approved mark."""
-    assert "append-only" in _rejects(
-        conn, "update lot set shares = 5 where id = %s", (seed["lot"],)
-    )
+    assert "append-only" in rejects(conn, "update lot set shares = 5 where id = %s", (seed["lot"],))
 
 
 def test_lot_cannot_be_deleted(conn: Conn, seed: dict[str, str]) -> None:
-    assert "append-only" in _rejects(conn, "delete from lot where id = %s", (seed["lot"],))
+    assert "append-only" in rejects(conn, "delete from lot where id = %s", (seed["lot"],))
 
 
 # ── INV-10 · an approval binds immutable rows, not strings ───────────────
-def test_valuation_approval_must_reference_a_real_mark(conn: Conn, seed: dict[str, str]) -> None:
+def test_valuation_approval_must_reference_a_realmake_mark(
+    conn: Conn, seed: dict[str, str]
+) -> None:
     """The first schema accepted three arbitrary strings as a "fingerprint", so
     an approval bound nothing at all."""
-    assert "valuation_approval_binds_mark" in _rejects(
+    assert "valuation_approval_binds_mark" in rejects(
         conn,
         "insert into review_decision (decision_type, status, subject_kind, subject_id,"
         " policy_version, actor_id) values ('valuation', 'approved', 'mark', 'x', 'v1', 'a')",
@@ -146,15 +52,15 @@ def test_approved_mark_cannot_be_rewritten_underneath_its_approval(
 ) -> None:
     """The defect that made the fingerprint decorative: approve, then edit the
     number. The approval row still read `approved`."""
-    mid = _mark(conn, seed)
-    assert "append-only" in _rejects(
+    mid = make_mark(conn, seed)
+    assert "append-only" in rejects(
         conn, "update mark set reported_amount = 9999999999 where id = %s", (mid,)
     )
 
 
 def test_valuation_approval_must_name_its_evidence_set(conn: Conn, seed: dict[str, str]) -> None:
     """An approval that names no evidence approves nothing in particular."""
-    mid = _mark(conn, seed)
+    mid = make_mark(conn, seed)
     conn.execute(
         "insert into review_decision (decision_type, status, subject_kind, subject_id,"
         " mark_id, policy_version, actor_id)"
@@ -167,9 +73,11 @@ def test_valuation_approval_must_name_its_evidence_set(conn: Conn, seed: dict[st
     assert "names no evidence set" in str(exc.value)
 
 
-def test_management_assessment_approval_must_bind_a_mark(conn: Conn, seed: dict[str, str]) -> None:
+def test_management_assessment_approval_must_bind_amake_mark(
+    conn: Conn, seed: dict[str, str]
+) -> None:
     """SPEC V12: R3 closes only on an assessment bound to the mark revision."""
-    assert "management_assessment_binds_mark" in _rejects(
+    assert "management_assessment_binds_mark" in rejects(
         conn,
         "insert into review_decision (decision_type, status, subject_kind, subject_id,"
         " actor_id) values ('management_assessment', 'approved', 'assessment', 'x', 'a')",
@@ -181,13 +89,13 @@ def test_review_decision_cannot_be_updated(conn: Conn, seed: dict[str, str]) -> 
         "insert into review_decision (decision_type, status, subject_kind, subject_id,"
         " actor_id) values ('transcription', 'approved', 'fact', 'x', 'a')"
     )
-    assert "append-only" in _rejects(conn, "update review_decision set status = 'rejected'")
+    assert "append-only" in rejects(conn, "update review_decision set status = 'rejected'")
 
 
 # ── INV-11 · money carries a currency; shares are integers ───────────────
 def test_validated_amount_requires_currency(conn: Conn, seed: dict[str, str]) -> None:
     """An exact Decimal in an unstated currency is exactly wrong."""
-    assert "validated_currency_together" in _rejects(
+    assert "validated_currency_together" in rejects(
         conn,
         "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
         " validated_amount, derivation_status, derivation_reason)"
@@ -197,7 +105,7 @@ def test_validated_amount_requires_currency(conn: Conn, seed: dict[str, str]) ->
 
 
 def test_derivable_mark_must_carry_the_derived_amount(conn: Conn, seed: dict[str, str]) -> None:
-    assert "derivable_has_amount" in _rejects(
+    assert "derivable_has_amount" in rejects(
         conn,
         "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
         " derivation_status, derivation_reason) values (%s, %s, 100, 'USD', 'derivable', 'x')",
@@ -212,7 +120,7 @@ def test_fractional_shares_are_rejected_not_rounded(conn: Conn, seed: dict[str, 
     Postgres silently rounded 100.5 to 101 — a plausible number nobody asked
     for, which is the precise failure mode the invariant exists to prevent.
     """
-    assert "shares_whole" in _rejects(
+    assert "shares_whole" in rejects(
         conn,
         "insert into lot (id, holding_id, security_class, shares, entry_pps,"
         " cost_amount, cost_currency, acquired_date)"
@@ -234,7 +142,7 @@ def test_whole_share_counts_are_accepted(conn: Conn, seed: dict[str, str]) -> No
 def test_fractional_recap_result_is_rejected(conn: Conn, seed: dict[str, str]) -> None:
     """Sway: 800,000 x 1.09375 = 875,000 exactly. A ratio producing a fraction
     must fail rather than round into a plausible post-recap share count."""
-    assert "shares_whole" in _rejects(
+    assert "shares_whole" in rejects(
         conn,
         "insert into lot_conversion values (%s, '2025-09-30', 'series_a3', 875000.5, 1.09375)",
         (seed["lot"],),
@@ -260,8 +168,8 @@ def test_non_derivable_mark_keeps_its_reported_amount(conn: Conn, seed: dict[str
 
 # ── INV-5 · one mark per holding per period per revision ─────────────────
 def test_mark_is_unique_per_holding_period_revision(conn: Conn, seed: dict[str, str]) -> None:
-    _mark(conn, seed)
-    err = _rejects(
+    make_mark(conn, seed)
+    err = rejects(
         conn,
         "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
         " derivation_status, derivation_reason) values (%s, %s, 100, 'USD', 'not_derivable', 'x')",
@@ -275,14 +183,14 @@ def test_assessment_cannot_bind_a_mark_from_another_period(
 ) -> None:
     """A 2025 requirement attached to a 2024 mark: both FKs valid on their own,
     the pair incoherent. Enforced by composite FK rather than convention."""
-    mid = _mark(conn, seed)
+    mid = make_mark(conn, seed)
     row = conn.execute(
         "insert into pbc_requirement (holding_id, period_id, requirement, applicable)"
         " values (%s, %s, 'R1', true) returning id",
         (seed["h"], seed["p"]),
     ).fetchone()
     assert row is not None
-    assert "evidence_assessment" in _rejects(
+    assert "evidence_assessment" in rejects(
         conn,
         "insert into evidence_assessment (requirement_id, mark_id, holding_id, period_id,"
         " verdict, policy_version) values (%s, %s, %s, 'ghost_period', 'sufficient', 'v1')",
@@ -296,7 +204,7 @@ def test_derived_figure_input_needs_exactly_one_source(conn: Conn) -> None:
         "insert into derived_figure (id, label, operator, amount, currency, unit)"
         " values (9001, 'total', 'sum', 10, 'USD', 'money')"
     )
-    assert "exactly_one_source" in _rejects(
+    assert "exactly_one_source" in rejects(
         conn, "insert into derived_figure_input (figure_id, ordinal) values (9001, 1)"
     )
 
@@ -317,7 +225,7 @@ def test_derived_figure_cannot_rest_on_an_unpromoted_candidate(
         "insert into derived_figure (id, label, operator, amount, currency, unit)"
         " values (9002, 'total', 'sum', 10, 'USD', 'money')"
     )
-    assert "input_fact_is_promoted" in _rejects(
+    assert "input_fact_is_promoted" in rejects(
         conn,
         "insert into derived_figure_input (figure_id, fact_id, fact_state, ordinal)"
         " values (9002, %s, 'candidate', 1)",
@@ -331,7 +239,7 @@ def test_canonical_fact_requires_a_promoting_decision(conn: Conn, seed: dict[str
     what rejects this. The earlier version referenced a non-existent claim and
     accepted a foreign-key error, and so would have passed with the constraint
     deleted."""
-    assert "fact_promoted_requires_decision" in _rejects(
+    assert "fact_promoted_requires_decision" in rejects(
         conn,
         "insert into extracted_fact (claim_id, state, field_name, value_text,"
         " citation_quote, span_start, span_end) values (%s, 'canonical', 'pps', '8.00', 'q', 0, 1)",
@@ -349,7 +257,7 @@ def test_promotion_requires_a_transcription_not_just_any_decision(
         " actor_id) values ('packet', 'rejected', 'fact', 'x', 'a') returning id"
     ).fetchone()
     assert row is not None
-    assert "fact_promoter_is_approved_transcription" in _rejects(
+    assert "fact_promoter_is_approved_transcription" in rejects(
         conn,
         "insert into extracted_fact (claim_id, state, field_name, value_text, citation_quote,"
         " span_start, span_end, promoted_by, promoted_by_type, promoted_by_status)"
@@ -377,7 +285,7 @@ def test_an_approved_transcription_does_promote(conn: Conn, seed: dict[str, str]
 
 # ── INV-20 · lineage-only never becomes packet-shaped ────────────────────
 def test_lineage_only_period_cannot_carry_a_requirement(conn: Conn, seed: dict[str, str]) -> None:
-    assert "pbc_requirement_period" in _rejects(
+    assert "pbc_requirement_period" in rejects(
         conn,
         "insert into pbc_requirement (holding_id, period_id, requirement, applicable)"
         " values (%s, %s, 'R1', true)",
@@ -386,7 +294,7 @@ def test_lineage_only_period_cannot_carry_a_requirement(conn: Conn, seed: dict[s
 
 
 def test_lineage_only_period_cannot_be_packeted(conn: Conn, seed: dict[str, str]) -> None:
-    assert "packet_version_period" in _rejects(
+    assert "packet_version_period" in rejects(
         conn,
         "insert into packet_version (id, fund_id, period_id, state, schema_version,"
         " policy_version, generator_ref) values ('pk', %s, %s, 'draft', '1', 'v1', 'g')",
@@ -404,6 +312,27 @@ def test_gap_observation_cannot_be_overwritten(conn: Conn, seed: dict[str, str])
         (seed["h"],),
     ).fetchone()
     assert row is not None
-    assert "append-only" in _rejects(
+    assert "append-only" in rejects(
         conn, "update document_gap set kind = 'not_located' where id = %s", (row[0],)
+    )
+
+
+def test_gap_remediation_is_append_only_history(conn: Conn, seed: dict[str, str]) -> None:
+    """Once the observation was frozen, editing the remediation row became the
+    new cheapest collapse — the gap reads `received` with no record of the
+    request that preceded it."""
+    gap = returned_id(
+        conn,
+        "insert into document_gap (holding_id, requirement, missing_document, kind,"
+        " source_quote) values (%s, 'R1', 'doc', 'with_counsel', 'q') returning id",
+        (seed["h"],),
+    )
+    rem = returned_id(
+        conn,
+        "insert into document_gap_remediation (gap_id, state) values (%s, 'requested')"
+        " returning id",
+        (gap,),
+    )
+    assert "append-only" in rejects(
+        conn, "update document_gap_remediation set state = 'received' where id = %s", (rem,)
     )

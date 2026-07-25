@@ -262,7 +262,9 @@ r1's lint. And two exact Decimals in different currencies could still be added:
 an exact number in the wrong currency is exactly wrong.
 
 **Guard:** `Money(amount, currency)` as a type; DB currency check constraints;
-cross-currency addition rejected at the type level. Share quantities are `BIGINT`.
+cross-currency addition rejected at the type level. Share quantities are
+`NUMERIC` with a whole-number CHECK — **not** `BIGINT`, which rounds `100.5` to
+`101` instead of refusing it. A type that coerces cannot enforce a rejection.
 Arch-lint forbids `float` in any money or share path. One declared rounding point
 at presentation, tested at midpoint boundaries and beyond binary-float exactness.
 

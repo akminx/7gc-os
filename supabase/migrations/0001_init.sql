@@ -220,9 +220,6 @@ create table mark (
     derivation_status   derivation_status not null,
     derivation_reason   text not null,
     basis               valuation_basis,
-    -- INV-17: set when this mark prices one security class off another's
-    -- evidence, which requires a cited policy decision before approval.
-    cross_class         boolean not null default false,
     created_at          timestamptz not null default now(),
     unique (holding_id, period_id, revision),
     -- Lets assessments bind holding and period by FK rather than by convention.
@@ -304,13 +301,20 @@ create table extracted_fact (
     citation_quote     text not null,
     span_start         int not null,
     span_end           int not null,
-    promoted_by        bigint,              -- composite FK added below
+    promoted_by        bigint,              -- composite FK added below (MATCH FULL)
     promoted_by_type   decision_type,
     promoted_by_status decision_status,
     unique (id, state),
     constraint fact_span_ordered check (span_end > span_start),
     constraint fact_promoted_requires_decision
         check (state = 'candidate' or promoted_by is not null),
+    -- A composite FK is MATCH SIMPLE by default: leave ANY column NULL and the
+    -- whole reference goes unchecked. The discriminators must therefore be
+    -- all-present or all-absent, or `promoted_by = <garbage>, type = NULL`
+    -- promotes a fact past both the FK and the check below (which evaluates to
+    -- NULL, and NULL is not FALSE, so the check passes).
+    constraint fact_promoter_all_or_nothing
+        check (num_nulls(promoted_by, promoted_by_type, promoted_by_status) in (0, 3)),
     constraint fact_promoter_is_approved_transcription
         check (promoted_by is null
                or (promoted_by_type = 'transcription' and promoted_by_status = 'approved'))
@@ -337,9 +341,13 @@ create table derived_figure_input (
     primary key (figure_id, ordinal),
     constraint input_exactly_one_source
         check ((fact_id is null) <> (child_id is null)),
+    -- Same MATCH SIMPLE defeat as extracted_fact: a NULL fact_state skipped both
+    -- the FK and the check, letting a candidate fact feed a validated figure.
+    constraint input_fact_state_present
+        check ((fact_id is null) = (fact_state is null)),
     constraint input_fact_is_promoted
         check (fact_id is null or fact_state <> 'candidate'),
-    foreign key (fact_id, fact_state) references extracted_fact (id, state)
+    foreign key (fact_id, fact_state) references extracted_fact (id, state) match full
 );
 
 -- ── Policy decisions ─────────────────────────────────────────────────────
@@ -377,6 +385,8 @@ create table review_decision (
     decided_at        timestamptz not null default now(),
     notes             text,
     unique (id, decision_type, status),
+    -- Lets the evidence set bind to the SAME mark this decision approves.
+    unique (id, mark_id),
     -- SPEC §6.3: a valuation approval binds mark revision, evidence set and
     -- policy version. The evidence set is enforced by trigger below because it
     -- is a set, not a column.
@@ -394,16 +404,24 @@ create table review_decision (
 );
 
 -- The evidence set an approval covers, by FK to immutable assessment rows.
+-- mark_id is carried so both sides bind the SAME mark: requiring merely that
+-- *some* evidence row exists would let an approval of mark M1 cite assessments
+-- belonging to M2 and still commit.
 create table decision_evidence (
-    decision_id   bigint not null references review_decision (id),
-    assessment_id bigint not null references evidence_assessment (id),
-    primary key (decision_id, assessment_id)
+    decision_id   bigint not null,
+    assessment_id bigint not null,
+    mark_id       bigint not null,
+    primary key (decision_id, assessment_id),
+    foreign key (decision_id, mark_id)
+        references review_decision (id, mark_id) match full,
+    foreign key (assessment_id, mark_id)
+        references evidence_assessment (id, mark_id) match full
 );
 
 alter table extracted_fact
     add constraint fact_promoted_by_fk
     foreign key (promoted_by, promoted_by_type, promoted_by_status)
-    references review_decision (id, decision_type, status);
+    references review_decision (id, decision_type, status) match full;
 
 -- ── Packets ──────────────────────────────────────────────────────────────
 -- INV-20: a lineage-only period never enters packet completeness.
@@ -451,124 +469,4 @@ create table workflow_event (
     occurred_at     timestamptz not null default now(),
     unique (run_id, idempotency_key)
 );
-
--- ── Append-only enforcement ──────────────────────────────────────────────
--- INV-10 and INV-14 are only real if the database refuses the mutation.
--- Revoking privileges alone is insufficient: the owner role bypasses grants,
--- so these are triggers.
---
--- Every constituent of an approval fingerprint appears here. If any one of them
--- stayed mutable, the approval would still name a row whose contents had since
--- changed — which is the failure this whole section exists to prevent.
-
-create or replace function reject_mutation() returns trigger
-language plpgsql as $$
-begin
-    raise exception
-        'INV-10/INV-14: % is append-only; create a new revision instead of %ing it',
-        tg_table_name, lower(tg_op);
-end;
-$$;
-
-do $$
-declare t text;
-begin
-    foreach t in array array[
-        'lot', 'lot_conversion', 'source_file', 'document_version', 'claim',
-        'document_gap', 'mark', 'evidence_assessment', 'evidence_link',
-        'extracted_fact', 'derived_figure', 'derived_figure_input',
-        'valuation_policy_decision', 'review_decision', 'decision_evidence',
-        'packet_manifest_entry', 'workflow_event'
-    ] loop
-        execute format(
-            'create trigger %I_append_only before update or delete on %I'
-            ' for each row execute function reject_mutation()', t, t);
-    end loop;
-end;
-$$;
-
--- ── Cross-row invariants that a CHECK cannot express ─────────────────────
-
--- INV-10: an approved valuation must name the evidence set it approved.
--- Deferred, because the bridge rows are written after the decision row.
-create or replace function require_evidence_set() returns trigger
-language plpgsql as $$
-begin
-    if new.decision_type = 'valuation' and new.status = 'approved'
-       and not exists (select 1 from decision_evidence d where d.decision_id = new.id)
-    then
-        raise exception
-            'INV-10: valuation approval % names no evidence set', new.id;
-    end if;
-    return null;
-end;
-$$;
-
-create constraint trigger valuation_approval_names_evidence
-    after insert on review_decision
-    deferrable initially deferred
-    for each row execute function require_evidence_set();
-
--- INV-17: a cross-class mark cannot be approved without a cited policy decision.
-create or replace function require_cross_class_policy() returns trigger
-language plpgsql as $$
-declare m mark%rowtype;
-begin
-    if new.decision_type <> 'valuation' or new.status <> 'approved' then
-        return null;
-    end if;
-    select * into m from mark where id = new.mark_id;
-    if m.cross_class and not exists (
-        select 1 from valuation_policy_decision p
-         where p.holding_id = m.holding_id and p.period_id = m.period_id)
-    then
-        raise exception
-            'INV-17: mark % prices across security classes with no cited policy decision',
-            m.id;
-    end if;
-    return null;
-end;
-$$;
-
-create constraint trigger valuation_approval_needs_class_policy
-    after insert on review_decision
-    deferrable initially deferred
-    for each row execute function require_cross_class_policy();
-
--- INV-16 / INV-3: a claim may only be linked where it is applicable, and
--- is_subsequent must agree with the dates rather than being asserted.
-create or replace function check_link_applicability() returns trigger
-language plpgsql as $$
-declare
-    measured date;
-    c        claim%rowtype;
-begin
-    select rp.period_date into measured
-      from evidence_assessment ea
-      join mark m           on m.id  = ea.mark_id
-      join reporting_period rp on rp.id = m.period_id
-     where ea.id = new.assessment_id;
-
-    select * into c from claim where id = new.claim_id;
-
-    if measured < c.applicable_from
-       or (c.applicable_to is not null and measured > c.applicable_to) then
-        raise exception
-            'INV-16: claim % is not applicable at % (window % .. %)',
-            c.id, measured, c.applicable_from, coalesce(c.applicable_to::text, 'open');
-    end if;
-
-    if new.is_subsequent <> (c.issued_date > measured) then
-        raise exception
-            'INV-3: is_subsequent must equal (issued_date > measurement date) for claim % at %',
-            c.id, measured;
-    end if;
-    return new;
-end;
-$$;
-
-create trigger evidence_link_applicability
-    before insert on evidence_link
-    for each row execute function check_link_applicability();
-
 commit;
