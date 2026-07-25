@@ -264,6 +264,11 @@ DB_GUARD_TARGETS = (
 # pytest's own tally line — "40 passed, 1 skipped in 0.31s". Read rather than
 # trusted: a line this cannot parse is a FAIL, because an unreadable summary must
 # never resolve to "nothing was skipped".
+#: The one skip a database guard is allowed to have in CI. The case-study
+#: workbooks are gitignored private fund material and are never present there,
+#: so this condition is permanent and correct rather than a missing guard.
+WORKBOOK_SKIP = "case-study workbooks are not in the repository"
+
 DB_GUARD_TALLY = re.compile(r"(\d+) (passed|failed|error|errors|skipped|xfailed|xpassed)\b")
 
 
@@ -297,11 +302,26 @@ def check_db_guards() -> tuple[str, str]:
     problems = []
     if skipped:
         reasons = [ln for ln in lines if ln.startswith("SKIPPED")]
-        problems.append(
-            f"{skipped} of {ran} database guard test(s) SKIPPED — a skipped guard is not a "
-            "passing guard. Point MIGRATION_DATABASE_URL at a database with "
-            "supabase/migrations applied.\n" + "\n".join(reasons[:10])
-        )
+        # Two ways a guard vanishes, and only one of them is a defect.
+        #
+        # No database is a defect: the guard exists to run against a live schema
+        # and silence there is exactly what finding #9 was about.
+        #
+        # No workbooks is not. The case-study material is the fund's private
+        # data, gitignored, and will never be present in CI — so failing on it
+        # makes the gate permanently red for a condition that is correct. This
+        # check shipped treating both alike and turned CI red on the first push.
+        #
+        # Matched on the reason pytest prints, not on the file, so a suite that
+        # skips for a NEW reason still fails rather than being waved through.
+        unexpected = [ln for ln in reasons if WORKBOOK_SKIP not in ln]
+        if unexpected:
+            problems.append(
+                f"{len(unexpected)} of {ran} database guard test(s) SKIPPED for a reason "
+                "other than the absent case-study workbooks — a skipped guard is not a "
+                "passing guard. Point MIGRATION_DATABASE_URL at a database with "
+                "supabase/migrations applied.\n" + "\n".join(unexpected[:10])
+            )
     if r.returncode:
         problems.append("pytest exited non-zero\n" + out)
     if problems:
