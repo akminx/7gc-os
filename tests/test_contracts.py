@@ -18,21 +18,23 @@ import psycopg
 import pytest
 from pydantic import ValidationError
 
-from packages.contracts.enums import PG_ENUMS
-from packages.contracts.models import (
-    ALWAYS_APPLICABLE,
+from packages.contracts.enums import (
+    PG_ENUMS,
     AuditScope,
     DerivationStatus,
+    PositionType,
+    RequirementCode,
+    RequirementVerdict,
+)
+from packages.contracts.models import (
+    ALWAYS_APPLICABLE,
     HoldingRow,
     Lot,
     Money,
     Packet,
     PacketTotals,
     Period,
-    PositionType,
     RequirementAssessment,
-    RequirementCode,
-    RequirementVerdict,
     TotalKind,
 )
 from packages.contracts.models import Mark as MarkModel
@@ -103,9 +105,9 @@ def test_python_enums_match_the_postgres_types_in_both_directions() -> None:
 # ── INV-11 · money and shares ────────────────────────────────────────────
 def test_money_refuses_a_float() -> None:
     """0.1 + 0.2 is already 0.30000000000000004 before it reaches the model."""
-    bad: dict[str, object] = {"amount": 0.1 + 0.2, "currency": "USD"}
+    bad = {"amount": 0.1 + 0.2, "currency": "USD"}
     with pytest.raises(ValidationError, match="must not be constructed from a float"):
-        Money(**bad)
+        Money.model_validate(bad)
 
 
 def test_money_refuses_cross_currency_addition() -> None:

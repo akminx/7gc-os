@@ -16,6 +16,7 @@ structural here rather than conventional:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -49,7 +50,7 @@ class Contract(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    def model_copy(self, *, update: dict[str, object] | None = None, deep: bool = False) -> Any:
+    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Any:
         """Re-validate when fields are replaced.
 
         Pydantic's `model_copy(update=...)` writes straight past every validator,
