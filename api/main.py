@@ -28,7 +28,11 @@ app = FastAPI(title="7GC OS — Valuation Evidence Ledger", version=VERSION)
 # so previews need a pattern — but it is anchored to this project's own prefix.
 # A bare `.*\.vercel\.app` would let anyone's Vercel app call this API from a
 # visitor's browser, which is a wide door to leave open for a convenience.
-PREVIEW_ORIGIN = r"https://7gc-os[a-z0-9-]*\.vercel\.app"
+# The production host, or a preview host — which Vercel always builds as
+# `<project>-<branch-or-hash>-<scope>`. The separator is load-bearing: a bare
+# prefix match also allowed `7gc-osattacker.vercel.app`, so anyone could claim a
+# sibling project name and call this API from a visitor's browser.
+PREVIEW_ORIGIN = r"https://7gc-os(-[a-z0-9-]+)?\.vercel\.app"
 
 app.add_middleware(
     CORSMiddleware,

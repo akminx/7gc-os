@@ -18,8 +18,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.contracts.enums import (
     AuditScope,
@@ -56,6 +57,23 @@ class Money(Contract):
 
     amount: Decimal
     currency: str = Field(min_length=3, max_length=3)
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _refuse_float(cls, v: object) -> object:
+        """A float has already lost precision by the time it reaches here.
+
+        `Money(amount=0.1 + 0.2)` coerces to Decimal('0.30000000000000004') and
+        then freezes that binary residue as if it were exact money. Accepting
+        the input silently is what makes INV-11's guard decorative — the type
+        must refuse the one value that breaks it.
+        """
+        if isinstance(v, float):
+            raise ValueError(
+                f"money must not be constructed from a float ({v!r}); "
+                "pass a Decimal or a string — the precision is already gone by here"
+            )
+        return v
 
     def __add__(self, other: Money) -> Money:
         if self.currency != other.currency:
@@ -179,6 +197,18 @@ class Lot(Contract):
     acquired_date: date
     realized_date: date | None = None
 
+    @model_validator(mode="after")
+    def _shares_are_whole(self) -> Lot:
+        """INV-11 · mirrors the DB `lot_shares_whole` CHECK.
+
+        Without this the database refuses 100.5 and the wire model happily
+        carries it, so the browser and any API DTO can hold a share count the
+        ledger considers impossible.
+        """
+        if self.shares is not None and self.shares != self.shares.to_integral_value():
+            raise ValueError(f"share counts are whole numbers; got {self.shares}")
+        return self
+
     def held_at(self, on: date) -> bool:
         return self.acquired_date <= on and (self.realized_date is None or self.realized_date > on)
 
@@ -227,6 +257,19 @@ class RequirementAssessment(Contract):
         }
         if self.verdict in adverse and not self.reason_codes:
             raise ValueError(f"verdict {self.verdict} must carry at least one reason code")
+        return self
+
+    @model_validator(mode="after")
+    def _applicability_and_verdict_agree(self) -> RequirementAssessment:
+        """SPEC §6.2.1 · applicability and verdict are distinct facts, but not
+        every pairing is coherent. A reducer trusting either field alone
+        mis-classifies support when they disagree."""
+        if self.applicable and self.verdict is RequirementVerdict.NOT_APPLICABLE:
+            raise ValueError("an applicable requirement cannot be verdict not_applicable")
+        if not self.applicable and self.verdict is not RequirementVerdict.NOT_APPLICABLE:
+            raise ValueError(
+                f"an inapplicable requirement must be verdict not_applicable; got {self.verdict}"
+            )
         return self
 
 
@@ -293,6 +336,55 @@ class Mark(Contract):
         return self
 
 
+#: SPEC §7.1 · R1 (existence and cost) and R2 (fair-value support) are
+#: applicable to every holding at every measurement date. R3–R5 are conditional.
+#: A row missing either of these has not been assessed, which is not the same
+#: fact as having been assessed and found clean.
+ALWAYS_APPLICABLE: frozenset[RequirementCode] = frozenset({RequirementCode.R1, RequirementCode.R2})
+
+
+class TotalKind(StrEnum):
+    """INV-19 · a total must say what it is a total OF.
+
+    An unqualified fund number is how unsupported value gets laundered into a
+    headline figure: the caller prints "$25,648,515" and the caveat stays behind
+    in a field nobody rendered.
+    """
+
+    TRACKER_REPORTED = "tracker_reported"
+    HELD_AT_DATE_REPORTED = "held_at_date_reported"
+    APPROVED_FAIR_VALUE = "approved_fair_value"
+
+
+class PacketTotals(Contract):
+    """A sum that carries its own qualification.
+
+    `contains_unsupported_inputs` is derived rather than stored so it cannot
+    disagree with the subtotal beside it.
+    """
+
+    kind: TotalKind
+    label: str
+    amount: Money
+    unsupported_amount: Money
+    unsupported_positions: int
+
+    @property
+    def contains_unsupported_inputs(self) -> bool:
+        return self.unsupported_amount.amount != 0 or self.unsupported_positions > 0
+
+    @model_validator(mode="after")
+    def _approved_totals_carry_nothing_unsupported(self) -> PacketTotals:
+        """An approved fair-value total containing unsupported inputs is a
+        contradiction — that is the number the packet exists to refuse."""
+        if self.kind is TotalKind.APPROVED_FAIR_VALUE and self.contains_unsupported_inputs:
+            raise ValueError(
+                "an approved_fair_value total cannot include unsupported positions; "
+                f"{self.unsupported_positions} position(s) are unsupported"
+            )
+        return self
+
+
 class HoldingRow(Contract):
     """One row of the auditor packet: the mark, its evidence, and its gaps.
 
@@ -310,15 +402,30 @@ class HoldingRow(Contract):
 
     @property
     def supported(self) -> bool:
-        """Every applicable requirement is sufficient — and there is at least one.
+        """SPEC §7.1–7.2 · every applicable requirement is `sufficient`.
 
-        A holding with no applicable requirements is not "supported"; it has not
-        been assessed. Returning True there would let an empty packet read clean.
+        The subtlety that made the first version wrong: "every requirement in
+        the list" is not "every applicable requirement". R1 and R2 are ALWAYS
+        applicable, so a row carrying only a sufficient R1 — with R2 simply
+        absent — read as supported and dropped out of `unsupported_total`. An
+        under-assessed mark presenting as clean is the same auditor-facing lie
+        as an over-stated verdict, arriving by omission instead.
+
+        A missing always-applicable assessment therefore means unsupported, not
+        "nothing to object to".
         """
+        present = {a.requirement for a in self.assessments}
+        if not present >= ALWAYS_APPLICABLE:
+            return False
         applicable = [a for a in self.assessments if a.applicable]
         return bool(applicable) and all(
             a.verdict is RequirementVerdict.SUFFICIENT for a in applicable
         )
+
+    @property
+    def unassessed_requirements(self) -> set[RequirementCode]:
+        """Named so a caller can say *why* a row is unsupported."""
+        return ALWAYS_APPLICABLE - {a.requirement for a in self.assessments}
 
     @property
     def approved(self) -> bool:
@@ -363,8 +470,15 @@ class Packet(Contract):
             )
         return self
 
-    def totals(self) -> dict[str, Money | int]:
-        """Reported total, plus the part of it nothing supports."""
+    def totals(self) -> PacketTotals:
+        """A total that states what kind of total it is. INV-19.
+
+        Returning a bare `reported_total` invites a caller to print it as "the
+        fund's value". It is not: it is the sum of tracker-reported amounts, part
+        of which nothing supports. The kind and the unsupported subtotal travel
+        with the number so that stripping the qualification takes deliberate
+        effort rather than being the default.
+        """
         if not self.rows:
             raise ValueError("a packet with no rows has no meaningful total")
         currency = self.rows[0].mark.reported.currency
@@ -374,11 +488,13 @@ class Packet(Contract):
             total = total + row.mark.reported  # raises on a currency mismatch
             if not row.supported:
                 unsupported = unsupported + row.mark.reported
-        return {
-            "reported_total": total,
-            "unsupported_total": unsupported,
-            "unsupported_positions": sum(1 for r in self.rows if not r.supported),
-        }
+        return PacketTotals(
+            kind=TotalKind.TRACKER_REPORTED,
+            label="Tracker-reported total, unaudited",
+            amount=total,
+            unsupported_amount=unsupported,
+            unsupported_positions=sum(1 for r in self.rows if not r.supported),
+        )
 
 
 DerivedFigureInput.model_rebuild()

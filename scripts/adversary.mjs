@@ -35,6 +35,18 @@ const LOG = join(ROOT, ".captain", "review", "loop-log.md");
 // model identifier the CLI reports, not against anything the model says.
 const ANTHROPIC = /claude|anthropic|opus|sonnet|haiku/i;
 
+// Family-neutral aliases resolve server-side to whatever the account defaults
+// to — possibly a Claude model. They are not Anthropic *strings*, so the filter
+// above passes them, and if the session store is unavailable the recorded
+// provenance is just the alias. A Pass B that actually ran on Claude would then
+// look provenance-clean, which is the precise false green this script exists to
+// prevent. Only concrete model ids count.
+const ALIAS = /^(auto|default|composer[\w.-]*)$/i;
+
+// A family we can positively identify. An id matching none of these is unknown,
+// and unknown must refuse rather than be assumed foreign.
+const KNOWN_FOREIGN = /gpt|grok|gemini|sol|terra|codex|llama|mistral|qwen|deepseek/i;
+
 function die(msg) {
   console.error(`\n✗ ${msg}\n`);
   process.exit(1);
@@ -106,6 +118,16 @@ if (ANTHROPIC.test(model)) {
       `  Pass B exists to produce an uncorrelated sample. Running it on the\n` +
       `  author's family turns two independent reviews into one and reports green.`);
 }
+if (ALIAS.test(model)) {
+  die(`refusing to run: "${model}" is a server-resolved alias, not a model.\n` +
+      `  It can resolve to a Claude model while the recorded provenance still\n` +
+      `  reads "${model}". Name the concrete model id instead.`);
+}
+if (!KNOWN_FOREIGN.test(model)) {
+  die(`refusing to run: "${model}" is not a recognised non-Anthropic model.\n` +
+      `  An unrecognised id cannot be shown to be a different family, and an\n` +
+      `  unverifiable pass looks identical to a verified one.`);
+}
 
 const promptFile = join(PROMPTS, arg("--prompt", "semantic-adversary.md"));
 const packet = join(QUEUE, `${unit}.md`);
@@ -132,15 +154,29 @@ console.log(`\nrunning — this reads the repo and can take several minutes…\n
 const started = new Date().toISOString();
 const r = spawnSync(
   "cursor-agent",
-  // --trust only skips the workspace-trust prompt so the run is non-interactive.
-  // --plan keeps the reviewer read-only: it can read the repo but cannot edit
-  // what it is reviewing. Deliberately not --force/--yolo, which would also let
-  // it run shell commands.
   // stream-json, not json: only the streaming format emits the `system`/`init`
   // event carrying the model the CLI actually resolved. Plain `json` returns
   // the result text and token usage with no model field at all, which would
   // leave the self-report as the only signal — the exact thing this avoids.
-  ["--print", "--output-format", "stream-json", "--plan", "--trust", "--model", model, instruction],
+  //
+  // --trust skips the workspace-trust prompt so the run is non-interactive.
+  //
+  // --plan blocks Shell outright, so a reviewer in plan mode can only reason
+  // from source: it cannot run the tests or probe the database. That produced a
+  // verdict explicitly caveated as "not independently re-run", which is weaker
+  // than the review was asked for. --shell trades containment for evidence.
+  // Check `git status` after using it — --plan did not reliably prevent writes
+  // either, since a prior run left a probe script behind through a subagent.
+  [
+    "--print",
+    "--output-format",
+    "stream-json",
+    process.argv.includes("--shell") ? "--force" : "--plan",
+    "--trust",
+    "--model",
+    model,
+    instruction,
+  ],
   { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
 );
 
@@ -175,14 +211,37 @@ if (models.length === 0) {
       `  because it looks identical to a verified one.`);
 }
 
+// Provenance must positively identify a foreign family, not merely fail to
+// contain an Anthropic substring. An alias echoed back by the stream proves
+// nothing about what actually ran.
+const aliasOnly = models.every((m) => ALIAS.test(m) || !KNOWN_FOREIGN.test(m));
+if (aliasOnly) {
+  die(`the run reports only unresolved model identifiers: ${models.join(", ")}\n` +
+      `  Raw output kept at ${rawPath}\n` +
+      `  Refusing to write findings: this cannot be shown to be a cross-family pass.`);
+}
+
 const anthropic = models.filter((m) => ANTHROPIC.test(m));
 if (anthropic.length) {
   die(`MIS-ROUTED PASS — the CLI reports it ran on: ${anthropic.join(", ")}\n` +
       `  Requested "${model}". No findings written. Re-run on a non-Anthropic model.`);
 }
 
+// In --plan mode the deliverable is routed into a PLAN artifact, not the
+// assistant message, and `result.result` holds only the narration. Reading just
+// the result made a complete verdict look like a review that had failed to run.
+// The plan wins when present, because that is where the reviewer put its work.
+const plan = events
+  .filter((e) => e.type === "interaction_query" && e.subtype === "request")
+  .map((e) => e.query?.createPlanRequestQuery?.args?.plan)
+  .filter(Boolean)
+  .pop();
 const result = events.find((e) => e.type === "result");
-const body = (result?.result ?? textIn(events.filter((e) => e.type === "assistant")).join("\n\n")).trim();
+const body = (
+  plan ??
+  result?.result ??
+  textIn(events.filter((e) => e.type === "assistant")).join("\n\n")
+).trim();
 if (!body) die(`no assistant text in the response. Raw output kept at ${rawPath}`);
 
 // The model's own claim, kept for comparison — never used as the check.

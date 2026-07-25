@@ -34,6 +34,13 @@ function tracked() {
   return out.map((f) => join(ROOT, f));
 }
 
+// scripts/*.mjs is not inside any Node project (web/ is the only one) and .mjs
+// was in neither gate's source set, so the review runner — the code that
+// decides whether a Pass B counts at all — could not fail lint, file-size or
+// debt checks. Process-critical code sitting outside the mechanical net is
+// exactly the shape this gate exists to catch.
+SRC_EXT.add(".mjs");
+
 function nodeProjects() {
   const found = new Set();
   const skipDir = new Set([
