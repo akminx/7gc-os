@@ -256,6 +256,13 @@ create table pbc_requirement (
     unique (holding_id, period_id, requirement),
     unique (id, holding_id, period_id),
     constraint requirement_is_packet_scope check (audit_scope = 'packet'),
+    -- SPEC 7.1 · R1 and R2 apply to every holding at every date. The wire
+    -- contract makes this unrepresentable; without the same rule here the
+    -- database can still store it, and an assembler reading `applicable` would
+    -- skip R1 entirely — a holding with no existence-and-cost evidence reading
+    -- as fully supported. An invariant enforced on one side only is not enforced.
+    constraint always_applicable_requirements_are_applicable
+        check (requirement not in ('R1', 'R2') or applicable),
     foreign key (period_id, audit_scope)
         references reporting_period (id, audit_scope)
 );

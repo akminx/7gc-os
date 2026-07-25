@@ -378,3 +378,46 @@ def test_over_precise_price_per_share_is_rejected(conn: Conn, seed: dict[str, st
         " '2025-06-30', '2025-01-01', 3.3333333)",
         (seed["dv"], seed["h"]),
     )
+
+
+def test_always_applicable_requirement_cannot_be_stored_as_inapplicable(
+    conn: Conn, seed: dict[str, str]
+) -> None:
+    """The contract layer made this unrepresentable; the database still stored
+    it. An assembler reading `applicable` would then skip R1 entirely, and a
+    holding with no existence-and-cost evidence would read as fully supported."""
+    assert "always_applicable_requirements_are_applicable" in rejects(
+        conn,
+        "insert into pbc_requirement (holding_id, period_id, requirement, applicable)"
+        " values (%s, %s, 'R1', false)",
+        (seed["h"], seed["p"]),
+    )
+
+
+def test_conditional_requirement_may_be_stored_as_inapplicable(
+    conn: Conn, seed: dict[str, str]
+) -> None:
+    conn.execute(
+        "insert into pbc_requirement (holding_id, period_id, requirement, applicable)"
+        " values (%s, %s, 'R4', false)",
+        (seed["h"], seed["p"]),
+    )
+    conn.rollback()
+
+
+def test_always_applicable_requirement_cannot_be_assessed_not_applicable(
+    conn: Conn, seed: dict[str, str]
+) -> None:
+    mid = make_mark(conn, seed)
+    req = returned_id(
+        conn,
+        "insert into pbc_requirement (holding_id, period_id, requirement, applicable)"
+        " values (%s, %s, 'R2', true) returning id",
+        (seed["h"], seed["p"]),
+    )
+    assert "always applicable" in rejects(
+        conn,
+        "insert into evidence_assessment (requirement_id, mark_id, holding_id, period_id,"
+        " verdict, policy_version) values (%s, %s, %s, %s, 'not_applicable', 'v1')",
+        (req, mid, seed["h"], seed["p"]),
+    )

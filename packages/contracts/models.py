@@ -65,6 +65,12 @@ class Contract(BaseModel):
         return type(self)(**merged)
 
 
+#: Declared money scale, matching the `trunc(x, 4)` checks in the migration.
+MONEY_SCALE = 4
+#: Price per share is quoted to six places.
+PPS_SCALE = 6
+
+
 class Money(Contract):
     """An amount that knows its currency. INV-11.
 
@@ -90,6 +96,24 @@ class Money(Contract):
                 "pass a Decimal or a string — the precision is already gone by here"
             )
         return v
+
+    @model_validator(mode="after")
+    def _amount_fits_its_declared_scale(self) -> Money:
+        """Mirrors the database scale checks. INV-11.
+
+        The database was taught to reject `1109.999889`; this model still built
+        it happily, and `Packet.totals()` would have carried the residue into an
+        auditor-facing figure without ever touching a column. An invariant
+        enforced on one side only is not enforced — `Lot.shares` already mirrors
+        its DB check, and money did not.
+        """
+        exponent = self.amount.as_tuple().exponent
+        if isinstance(exponent, int) and -exponent > MONEY_SCALE:
+            raise ValueError(
+                f"money carries more than {MONEY_SCALE} decimal places ({self.amount}); "
+                "quantise deliberately before constructing it"
+            )
+        return self
 
     def __add__(self, other: Money) -> Money:
         if self.currency != other.currency:
@@ -185,6 +209,17 @@ class Claim(Contract):
     price_per_share: Decimal | None = None
     stated: Money | None = None
     supersedes_claim_id: str | None = None
+
+    @model_validator(mode="after")
+    def _price_fits_its_declared_scale(self) -> Claim:
+        if self.price_per_share is not None:
+            exponent = self.price_per_share.as_tuple().exponent
+            if isinstance(exponent, int) and -exponent > PPS_SCALE:
+                raise ValueError(
+                    f"price per share carries more than {PPS_SCALE} decimal places "
+                    f"({self.price_per_share})"
+                )
+        return self
 
     def applies_at(self, on: date) -> bool:
         """INV-16 · the source states its own reliance window.

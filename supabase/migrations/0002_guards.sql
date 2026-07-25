@@ -171,6 +171,26 @@ create trigger decision_evidence_sealed
     before insert on decision_evidence
     for each row execute function seal_evidence_set();
 
+-- SPEC 7.1 · the same rule for the assessment's verdict. `not_applicable` on an
+-- always-applicable requirement is the database form of the contradiction the
+-- contract layer now cannot express.
+create or replace function reject_na_on_always_applicable() returns trigger
+language plpgsql as $$
+declare code requirement_code;
+begin
+    select requirement into code from pbc_requirement where id = new.requirement_id;
+    if code in ('R1', 'R2') and new.verdict = 'not_applicable' then
+        raise exception
+            'SPEC 7.1: % is always applicable and cannot be assessed not_applicable', code;
+    end if;
+    return new;
+end;
+$$;
+
+create trigger assessment_always_applicable
+    before insert on evidence_assessment
+    for each row execute function reject_na_on_always_applicable();
+
 -- INV-16 / INV-3: a claim may only be linked where it is applicable, and
 -- is_subsequent must agree with the dates rather than being asserted.
 create or replace function check_link_applicability() returns trigger

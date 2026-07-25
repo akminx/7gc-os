@@ -438,9 +438,15 @@ yields the requirement verdict:
 from this vocabulary; it is now declared.
 
 **[r3] Decimal policy — was deferred in r2, now specified.** Canonical amounts
-are stored unrounded at declared field scale: money `NUMERIC(20,4)`, PPS
-`NUMERIC(20,6)`, FX rates `NUMERIC(20,8)`, shares `NUMERIC(24,6)` constrained to
-whole numbers — **[r5]**, see §6. Python `Decimal`
+are stored unrounded at declared field scale: money `NUMERIC(26,12)` with `check (x = trunc(x, 4))`, PPS
+`NUMERIC(26,12)` with `check (x = trunc(x, 6))`, FX rates `NUMERIC(26,14)`
+checked at 8, shares `NUMERIC(24,6)` constrained to whole numbers — **[r6]
+corrected, was `NUMERIC(20,4)`/`(20,6)`**. Columns are declared **wider** than
+the canonical scale on purpose: Postgres coerces a value to the column scale
+*before* CHECK constraints run, so a narrow column silently stored `1109.999889`
+as `1109.9999` and the constraint meant to catch it could never fire. The width
+lets an over-precise figure survive to be rejected — the same reason shares are
+`NUMERIC` rather than `BIGINT`. Do not narrow these back. Python `Decimal`
 context: precision 34, trap on `Inexact` disabled, **`ROUND_HALF_EVEN`**.
 Operation order for `shares × PPS` is a single multiply with no intermediate
 rounding. Quantisation to currency minor units happens at exactly one point —
@@ -642,7 +648,10 @@ their generated oracle · every one of F1–F12 · all ten release gates.
 
 ### Still open — genuinely non-blocking
 
-- **Decimal storage vs display.** §8 fixes the context and rounding mode.
-  `NUMERIC(20,4)` quantises on write, so a canonical unrounded value would need
-  its own column. This corpus is whole dollars throughout, so the question has no
-  effect on any expected value; resolve it at the migration.
+- ~~**Decimal storage vs display.**~~ **[r6] resolved at the migration, as this
+  item anticipated.** `NUMERIC(20,4)` did quantise on write — it stored
+  `1109.999889` as `1109.9999` with nothing objecting. The answer was not a
+  second column but a wider one: storage is declared past the canonical scale so
+  an over-precise figure survives to be *rejected* by a CHECK, rather than being
+  silently rounded before any constraint can see it. Computation stays exact,
+  storage refuses, and only the serialiser rounds.

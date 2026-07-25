@@ -375,3 +375,30 @@ def test_an_adverse_conditional_requirement_also_makes_a_row_unsupported() -> No
     )
     assert row.supported is False
     assert row.unsupported_reasons == {RequirementCode.R5: "insufficient"}
+
+
+def test_not_assessed_blocks_support_and_is_not_read_as_inapplicable() -> None:
+    """`not_assessed` sits outside the severity order (SPEC 6.2.1). Now that
+    applicability is derived from the verdict, it must still count as applicable
+    — otherwise an unassessed requirement would silently drop out of the support
+    test, which is the failure the `applicable` field caused before it was
+    removed."""
+    a = RequirementAssessment(
+        requirement=RequirementCode.R1,
+        verdict=RequirementVerdict.NOT_ASSESSED,
+        reason_codes=[],
+        policy_version="v1",
+    )
+    assert a.applicable is True
+    row = _row([a, _assessment(RequirementCode.R2, RequirementVerdict.SUFFICIENT)])
+    assert row.supported is False
+    assert row.unsupported_reasons[RequirementCode.R1] == "not_assessed"
+
+
+def test_wire_money_refuses_what_the_database_refuses() -> None:
+    """The database rejected 1109.999889 while this model still built it, so the
+    residue could reach a packet total without touching a column. An invariant
+    enforced on one side only is not enforced."""
+    with pytest.raises(ValidationError, match="more than 4 decimal places"):
+        Money(amount=Decimal("1109.999889"), currency="USD")
+    assert Money(amount=Decimal("1109.9999"), currency="USD").amount == Decimal("1109.9999")
