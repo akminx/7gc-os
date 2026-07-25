@@ -35,6 +35,8 @@ class FindingKind(StrEnum):
     NO_STATED_TOTAL_TO_CHECK = "no_stated_total_to_check"
     MARK_DIVERGES_FROM_LATER_ROUND = "mark_diverges_from_later_round"
     LATEST_ROUND_IS_AMBIGUOUS = "latest_round_is_ambiguous"
+    MARK_BASIS_NOT_IN_WORKBOOKS = "mark_basis_not_in_workbooks"
+    UNRECOGNISED_PERIOD_LABEL = "unrecognised_period_label"
     MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS = "mark_held_at_cost_while_later_round_exists"
 
 
@@ -124,6 +126,11 @@ def check_tranche_arithmetic(tranches: list[Tranche]) -> list[Finding]:
     """Does each tranche's own price x count reproduce its stated investment?"""
     out: list[Finding] = []
     for t in tranches:
+        # An exit's "Investment ($)" column holds PROCEEDS, and its price and
+        # count describe the shares sold. Checking price x count against it asks
+        # a question with no meaning and reports the answer as a discrepancy.
+        if not t.is_investment:
+            continue
         implied = t.implied_cost
         if implied is None or implied == t.investment:
             continue
@@ -173,17 +180,21 @@ def check_cost_basis_across_workbooks(
     the other — a disagreement is a question for the fund, not something to
     resolve by preferring a file.
     """
-    by_company: dict[str, Decimal] = {}
+    # Keyed by (fund, company): the same company can appear in both funds, and
+    # merging them reports two correct fund-level costs as a disagreement.
+    by_company: dict[tuple[str | None, str], Decimal] = {}
     for t in tranches:
         # Exits carry proceeds in the same column as purchases carry cost.
         if not t.is_investment:
             continue
-        by_company[t.company] = by_company.get(t.company, Decimal(0)) + t.investment
+        key = (_fund_of(t.fund), t.company)
+        by_company[key] = by_company.get(key, Decimal(0)) + t.investment
 
     out: list[Finding] = []
     for sheet in sheets:
+        fund = _fund_of(sheet.fund_label)
         for company, stated in sheet.cost_basis.items():
-            computed = by_company.get(company)
+            computed = by_company.get((fund, company))
             if computed is None:
                 # Silence is not agreement. A tab named "Fluid Stack" while the
                 # tracker says "Fluidstack" makes the join produce nothing, and
@@ -216,13 +227,13 @@ def check_cost_basis_across_workbooks(
                 )
             )
 
-    tracked = {c for sheet in sheets for c in sheet.cost_basis}
-    for company, computed in sorted(by_company.items()):
-        if company not in tracked:
+    tracked = {(_fund_of(s.fund_label), c) for s in sheets for c in s.cost_basis}
+    for (fund, company), computed in sorted(by_company.items(), key=lambda kv: str(kv[0])):
+        if (fund, company) not in tracked:
             out.append(
                 Finding(
                     kind=FindingKind.COST_BASIS_NEVER_COMPARED,
-                    subject=company,
+                    subject=f"{fund} · {company}" if fund else company,
                     detail=(
                         f"the master breakdown states {computed:,} of investment but this "
                         "company has no cost-basis row in the valuation tracker"
@@ -231,6 +242,17 @@ def check_cost_basis_across_workbooks(
                 )
             )
     return out
+
+
+def _fund_of(label: str | None) -> str | None:
+    """Normalise `Fund II Holdings by Quarter` and `Fund II` to one key."""
+    if not label:
+        return None
+    text = label.strip()
+    for name in ("Fund II", "Fund I"):
+        if text.startswith(name):
+            return name
+    return text
 
 
 def _period_end(label: str) -> date | None:
@@ -315,6 +337,7 @@ def check_marks_held_at_cost(sheets: list[TrackerSheet], tranches: list[Tranche]
         if at_latest_round == cost:
             continue
 
+        unreadable: set[str] = set()
         for sheet in sheets:
             for period in sheet.period_labels:
                 amount = sheet.amount(company, period)
@@ -325,7 +348,16 @@ def check_marks_held_at_cost(sheets: list[TrackerSheet], tranches: list[Tranche]
                 # May-2025 tranche and reported as diverging from a price that
                 # did not yet exist.
                 measured = _period_end(period)
-                if measured is not None and low > measured:
+                if measured is None:
+                    # Failing open here silently re-enabled the anachronism this
+                    # guard exists to prevent: an unreadable label meant "no date
+                    # constraint" rather than "cannot check".
+                    unreadable.add(period)
+                    continue
+                # 3 · use the three-state answer the range was built for. `low >
+                # measured` treated a tranche whose range merely STARTS before
+                # the measurement date as definitely acquired by then.
+                if latest.held_by(measured) is not True:
                     continue
                 # Exact equality with cost was a brittle proxy. A mark one dollar
                 # off, or stale, escaped entirely — so the check silently stopped
@@ -335,26 +367,52 @@ def check_marks_held_at_cost(sheets: list[TrackerSheet], tranches: list[Tranche]
                 gap = at_latest_round - amount
                 if gap == 0 or abs(gap) < at_latest_round * _MATERIALITY:
                     continue
+                # A PURCHASE price is not a ROUND price. The Mom Project is
+                # marked at 2,750,000 on a Series C basis named only in a
+                # documentation line this reader does not parse; comparing
+                # against the last purchase ($5.00) produced three confident
+                # false discrepancies. So a mark that matches neither cost nor
+                # the last purchase is reported as a basis we cannot verify —
+                # which is true — rather than as a disagreement, which is not.
                 at_cost = amount == cost
                 out.append(
                     Finding(
                         kind=(
                             FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS
                             if at_cost
-                            else FindingKind.MARK_DIVERGES_FROM_LATER_ROUND
+                            else FindingKind.MARK_BASIS_NOT_IN_WORKBOOKS
                         ),
                         subject=f"{company} · {period}",
                         detail=(
                             f"carried at {amount:,}"
-                            + (", which equals total cost" if at_cost else "")
-                            + f"; the fund's own {latest.acquired_text} tranche prices the "
-                            f"security at {latest.share_price}, implying {at_latest_round:,} "
-                            f"across {shares:,} shares"
+                            + (
+                                ", which equals total cost, while the fund's own "
+                                if at_cost
+                                else ", which matches neither cost nor the fund's own "
+                            )
+                            + f"{latest.acquired_text} purchase at {latest.share_price} "
+                            f"({at_latest_round:,} across {shares:,} shares); "
+                            + (
+                                "the later purchase implies a higher value"
+                                if at_cost
+                                else "the basis is not stated in these workbooks"
+                            )
                         ),
                         stated=amount,
                         computed=at_latest_round,
                     )
                 )
+        if unreadable:
+            out.append(
+                Finding(
+                    kind=FindingKind.UNRECOGNISED_PERIOD_LABEL,
+                    subject=company,
+                    detail=(
+                        f"period label(s) {', '.join(sorted(unreadable))} could not be dated, "
+                        "so no mark for them was checked against later rounds"
+                    ),
+                )
+            )
     return out
 
 

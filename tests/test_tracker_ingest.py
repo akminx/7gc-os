@@ -37,6 +37,7 @@ needs_workbooks = pytest.mark.skipif(
 def _tranche(kind: str, investment: str = "1000", text: str | None = None) -> Tranche:
     return Tranche(
         company="X",
+        fund="Fund II",
         kind=kind,
         investment=Decimal(investment),
         entry_valuation=None,
@@ -51,6 +52,7 @@ def _tranche(kind: str, investment: str = "1000", text: str | None = None) -> Tr
 def _priced(company: str, inv: str, price: str, count: str, text: str) -> Tranche:
     return Tranche(
         company=company,
+        fund="Fund II",
         kind="Fund",
         investment=Decimal(inv),
         entry_valuation=None,
@@ -194,7 +196,7 @@ def test_a_company_on_only_one_side_is_reported_not_skipped() -> None:
     says `Fluidstack` made the join produce nothing, and the report read clean
     because the two cost statements were never compared at all."""
     sheet = TrackerSheet(
-        fund_label="F",
+        fund_label="Fund II",
         period_labels=[],
         companies=["Fluidstack"],
         cost_basis={"Fluidstack": Decimal("2500000")},
@@ -208,7 +210,7 @@ def test_a_sheet_with_no_stated_total_says_nothing_was_checked() -> None:
     """A footer renamed to `Sum (active)` left stated_totals empty, so every
     period was skipped and the run reported clean."""
     sheet = TrackerSheet(
-        fund_label="F",
+        fund_label="Fund II",
         period_labels=["23Q4"],
         companies=["X"],
         cost_basis={},
@@ -241,7 +243,7 @@ def test_a_mark_is_never_compared_to_a_round_that_had_not_happened() -> None:
     """Fluidstack's Dec-2024 mark was reported as diverging from a May-2025
     tranche — a price that did not yet exist when the mark was struck."""
     sheet = TrackerSheet(
-        fund_label="F",
+        fund_label="Fund II",
         period_labels=["24Q4"],
         companies=["Fluidstack"],
         cost_basis={},
@@ -253,3 +255,115 @@ def test_a_mark_is_never_compared_to_a_round_that_had_not_happened() -> None:
     kinds = [f.kind for f in reconcile([sheet], [early, late])]
     assert FindingKind.MARK_DIVERGES_FROM_LATER_ROUND not in kinds
     assert FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS not in kinds
+
+
+# ── the second reviewer's findings, from a different model family ────────
+def test_a_purchase_price_is_not_reported_as_a_round_price() -> None:
+    """The Mom Project is marked on a Series C basis named only in a
+    documentation line this reader does not parse. Comparing against the last
+    PURCHASE produced three confident false discrepancies. A mark matching
+    neither cost nor the last purchase is now reported as a basis we cannot
+    verify — which is true — rather than as a disagreement, which is not."""
+    sheet = TrackerSheet(
+        fund_label="Fund I",
+        period_labels=["FY2023"],
+        companies=["The Mom Project"],
+        cost_basis={},
+        marks=[TrackerMark("The Mom Project", "FY2023", Decimal("2750000"))],
+        stated_totals={"FY2023": Decimal("2750000")},
+    )
+    tranches = [
+        _priced("The Mom Project", "1000000", "2.5", "400000", "4/23/2020"),
+        _priced("The Mom Project", "500000", "5", "100000", "9/15/2021"),
+    ]
+    kinds = [f.kind for f in reconcile([sheet], tranches)]
+    assert FindingKind.MARK_BASIS_NOT_IN_WORKBOOKS in kinds
+    assert FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS not in kinds
+
+
+def test_an_undateable_period_stops_the_check_rather_than_the_guard() -> None:
+    """A label like `Q4 2024` returned None from _period_end, and skipping the
+    guard rather than the comparison silently re-enabled the anachronism it
+    exists to prevent."""
+    sheet = TrackerSheet(
+        fund_label="Fund II",
+        period_labels=["Q4 2024"],
+        companies=["Fluidstack"],
+        cost_basis={},
+        marks=[TrackerMark("Fluidstack", "Q4 2024", Decimal("1000000"))],
+        stated_totals={"Q4 2024": Decimal("1000000")},
+    )
+    tranches = [
+        _priced("Fluidstack", "1000000", "10", "100000", "10/10/2024"),
+        _priced("Fluidstack", "1500000", "15", "100000", "5/30/2025"),
+    ]
+    kinds = [f.kind for f in reconcile([sheet], tranches)]
+    assert FindingKind.UNRECOGNISED_PERIOD_LABEL in kinds
+    assert FindingKind.MARK_BASIS_NOT_IN_WORKBOOKS not in kinds
+
+
+def test_an_imprecise_tranche_date_is_not_treated_as_definitely_earlier() -> None:
+    """`low > measured` accepted a tranche whose range merely STARTS before the
+    measurement date. held_by() answers the three-state question the range was
+    built for."""
+    sheet = TrackerSheet(
+        fund_label="Fund II Holdings by Quarter",
+        period_labels=["FY2021"],
+        companies=["X"],
+        cost_basis={"X": Decimal("1400000")},
+        marks=[TrackerMark("X", "FY2021", Decimal("1000000"))],
+        stated_totals={"FY2021": Decimal("1000000")},
+    )
+    tranches = [
+        _priced("X", "500000", "1", "500000", "1/1/2019"),
+        _priced("X", "900000", "9", "100000", "2020 / 2021 / 2023"),
+    ]
+    assert reconcile([sheet], tranches) == []
+
+
+def test_the_same_company_in_two_funds_is_not_merged() -> None:
+    """Fund identity was discarded, so both correct fund-level costs would be
+    reported as disagreeing with a merged global total."""
+    fund_ii = TrackerSheet(
+        fund_label="Fund II Holdings by Quarter",
+        period_labels=[],
+        companies=["X"],
+        cost_basis={"X": Decimal("2000000")},
+        marks=[],
+    )
+    fund_i = TrackerSheet(
+        fund_label="Fund I Holdings by Year",
+        period_labels=[],
+        companies=["X"],
+        cost_basis={"X": Decimal("1000000")},
+        marks=[],
+    )
+    a = _tranche("Fund", "2000000")
+    b = Tranche(
+        company="X",
+        fund="Fund I",
+        kind="Fund",
+        investment=Decimal("1000000"),
+        entry_valuation=None,
+        share_price=None,
+        share_count=None,
+        acquired=None,
+    )
+    assert reconcile([fund_ii, fund_i], [a, b]) == []
+
+
+def test_exit_proceeds_are_not_checked_as_purchase_arithmetic() -> None:
+    """An exit's price and count describe shares SOLD; checking them against
+    proceeds asks a question with no meaning and reports it as a discrepancy."""
+    exit_row = Tranche(
+        company="Jackpocket",
+        fund="Fund II",
+        kind="Exit",
+        investment=Decimal("3100000"),
+        entry_valuation="Acquisition",
+        share_price=Decimal("4"),
+        share_count=Decimal("500000"),
+        acquired=None,
+    )
+    kinds = [f.kind for f in reconcile([], [exit_row])]
+    assert FindingKind.TRANCHE_ARITHMETIC_DISAGREES not in kinds

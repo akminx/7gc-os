@@ -164,6 +164,10 @@ class Tranche:
     """
 
     company: str
+    #: Which fund holds it. The master workbook groups sheets under `Fund I >>`
+    #: / `Fund II >>` dividers; discarding that merged a company held by both
+    #: funds into one global total and reported both correct costs as wrong.
+    fund: str | None
     kind: str
     investment: Decimal
     entry_valuation: str | None
@@ -296,7 +300,12 @@ def read_master_breakdown(path: Path) -> list[Tranche]:
     """
     wb = openpyxl.load_workbook(path, data_only=True)
     tranches: list[Tranche] = []
+    fund: str | None = None
     for ws in wb.worksheets:
+        divider = ws.title.strip()
+        if divider.endswith(">>"):
+            fund = divider.removesuffix(">>").strip()
+            continue
         rows = [list(r) for r in ws.iter_rows(values_only=True)]
         header_at = next((i for i, r in enumerate(rows) if r and r[0] == "Type"), None)
         if header_at is None:
@@ -312,6 +321,7 @@ def read_master_breakdown(path: Path) -> list[Tranche]:
             tranches.append(
                 Tranche(
                     company=company,
+                    fund=fund,
                     kind=kind,
                     investment=investment,
                     entry_valuation=str(row[2]) if row[2] is not None else None,
