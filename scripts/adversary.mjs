@@ -24,7 +24,7 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 const ROOT = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
 const QUEUE = join(ROOT, ".captain", "review", "queue");
@@ -144,9 +144,37 @@ if (!KNOWN_FOREIGN.test(model)) {
   );
 }
 
-const promptFile = join(PROMPTS, arg("--prompt", "semantic-adversary.md"));
+// Resolve first, then confine. `join(PROMPTS, "../queue/prior-findings.md")`
+// lands in the queue, so a prompt argument could hand the Adversary a previous
+// pass's findings and delete the pane blindness this whole script exists to
+// protect. The check is on the RESOLVED path because that is what gets read.
+const promptFile = resolve(PROMPTS, arg("--prompt", "semantic-adversary.md"));
+if (!promptFile.startsWith(PROMPTS + sep))
+  die(
+    `refusing to run: --prompt resolves to ${promptFile}, outside the prompt directory.\n` +
+      `  A prompt outside .captain/review/prompts/ can point the Adversary at prior\n` +
+      `  findings, which is the one thing the second pane must never see.`,
+  );
 const packet = join(QUEUE, `${unit}.md`);
 for (const f of [promptFile, packet]) if (!existsSync(f)) die(`missing input: ${f}`);
+
+// A reviewer that cannot execute can only reason from source. Every pass this
+// project has run said "shell blocked", and roughly a third of the findings
+// that came back were wrong in one direction or the other — including claims a
+// single pytest run would have settled. `--plan` is safe and blind; bare
+// `--force` was the only alternative and it hung once and left a stray probe
+// script behind. Neither is the trade the review needs.
+//
+// So: --force for the ability to run, --sandbox to contain what it runs, a
+// timeout so a hang fails instead of waiting forever, and a working-tree
+// fingerprint either side of the run so a write is DETECTED rather than hoped
+// against. Containment by environment, not by taking the tools away.
+const withShell = process.argv.includes("--shell");
+const timeoutMs = Number(arg("--timeout-min", "25")) * 60_000;
+
+const treeState = () =>
+  spawnSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" }).stdout || "";
+const treeBefore = withShell ? treeState() : "";
 
 const findingsPath = join(QUEUE, `${unit}.findings.md`);
 const provPath = join(QUEUE, `${unit}.provenance.json`);
@@ -176,26 +204,47 @@ const r = spawnSync(
   //
   // --trust skips the workspace-trust prompt so the run is non-interactive.
   //
-  // --plan blocks Shell outright, so a reviewer in plan mode can only reason
-  // from source: it cannot run the tests or probe the database. That produced a
-  // verdict explicitly caveated as "not independently re-run", which is weaker
-  // than the review was asked for. --shell trades containment for evidence.
-  // Check `git status` after using it — --plan did not reliably prevent writes
-  // either, since a prior run left a probe script behind through a subagent.
+  // --plan blocks Shell outright: the reviewer can only reason from source, and
+  // cannot run the tests or probe the database. --shell swaps that for
+  // --force + --sandbox, which is the combination that gives evidence without
+  // giving up containment. See the comment above `withShell`.
   [
     "--print",
     "--output-format",
     "stream-json",
-    process.argv.includes("--shell") ? "--force" : "--plan",
+    ...(withShell ? ["--force", "--sandbox", "enabled"] : ["--plan"]),
     "--trust",
     "--model",
     model,
     instruction,
   ],
-  { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs },
 );
 
-if (r.error) die(`cursor-agent failed to start: ${r.error.message}`);
+if (r.error) {
+  if (r.error.code === "ETIMEDOUT" || r.signal)
+    die(
+      `cursor-agent exceeded ${timeoutMs / 60_000} minutes and was killed.\n` +
+        `  A hung reviewer used to wait forever. Raise it with --timeout-min <n>.`,
+    );
+  die(`cursor-agent failed to start: ${r.error.message}`);
+}
+
+if (withShell) {
+  const changed = treeState();
+  if (changed !== treeBefore) {
+    const before = new Set(treeBefore.split("\n"));
+    const added = changed
+      .split("\n")
+      .filter((l) => l.trim() && !before.has(l))
+      .map((l) => `      ${l}`)
+      .join("\n");
+    console.error(
+      `\n!  THE REVIEWER WROTE TO THE WORKING TREE. --sandbox did not hold.\n` +
+        `   Inspect and revert before trusting anything below:\n${added}\n`,
+    );
+  }
+}
 writeFileSync(rawPath, r.stdout || "");
 if (r.status !== 0) die(`cursor-agent exited ${r.status}\n${(r.stderr || "").slice(-2000)}`);
 

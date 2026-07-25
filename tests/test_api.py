@@ -8,6 +8,9 @@ chain would have looked different.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import psycopg
@@ -16,6 +19,8 @@ from fastapi.testclient import TestClient
 
 from api import main
 from api.main import app
+
+ROOT = Path(__file__).resolve().parents[1]
 
 client = TestClient(app)
 
@@ -117,8 +122,8 @@ def test_the_total_cannot_be_read_without_its_qualification() -> None:
     """INV-19 · a caller wanting "the fund's value" must read past the caveat to
     reach it, rather than getting a bare number with the caveat elsewhere."""
     body = client.get("/funds/fund_ii/periods/f2_25q4/totals").json()
-    assert body["kind"] == "tracker_reported"
-    assert body["label"] == "Tracker-reported total, unaudited"
+    assert body["kind"] == "held_at_date_reported"
+    assert body["label"] == ("Tracker-reported amounts for positions held at this date, unaudited")
     assert body["unsupported_amount"]["amount"] == body["amount"]["amount"]
     assert body["unsupported_positions"] == 1
 
@@ -150,9 +155,62 @@ def test_ready_returns_503_rather_than_a_200_carrying_bad_news(
     assert r.status_code == 503
     assert r.json()["database"] == "unconfigured"
 
-    def boom(url: str) -> dict[str, Any]:
+    def boom(url: str) -> None:
         raise psycopg.OperationalError("refused")
 
     monkeypatch.setattr(main, "dsn", lambda: "postgresql://nowhere/db")
-    monkeypatch.setattr(main, "_probe", boom)
+    monkeypatch.setattr(main, "_ready_probe", boom)
     assert client.get("/ready").status_code == 503
+
+
+def _capture_ready_probe(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Drive the real `_ready_probe` and record what it asks the database."""
+    seen: dict[str, Any] = {}
+
+    class FakeConn:
+        def __enter__(self) -> FakeConn:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def execute(self, sql: str) -> SimpleNamespace:
+            seen["sql"] = sql
+            return SimpleNamespace(fetchone=lambda: (1,))
+
+    def fake_connect(url: str, **kwargs: Any) -> FakeConn:
+        seen["kwargs"] = kwargs
+        return FakeConn()
+
+    monkeypatch.setattr(psycopg, "connect", fake_connect)
+    monkeypatch.setattr(main, "dsn", lambda: "postgresql://somewhere/db")
+    return seen
+
+
+def test_ready_executes_the_locked_probe_and_nothing_else(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SPEC §3.2 locks /ready to `SELECT 1` with a 2 second timeout.
+
+    It ran `select count(*) from information_schema.tables` on a 10 second
+    connect timeout instead — a query a reachable but empty or wrong database
+    answers successfully, so the route reported ready when it was not.
+    """
+    seen = _capture_ready_probe(monkeypatch)
+    r = client.get("/ready")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ready", "database": "up"}
+    assert seen["sql"].strip().lower() == "select 1"
+    assert "information_schema" not in seen["sql"]
+    assert seen["kwargs"]["connect_timeout"] == 2
+    assert "statement_timeout=2000" in seen["kwargs"]["options"]
+
+
+def test_render_monitors_readiness_not_the_diagnostic_health_route() -> None:
+    """A platform health check pointed at /health is monitoring a route that
+    returns 200 while reporting `degraded`, so the database being gone would
+    never have been noticed."""
+    declared = re.findall(
+        r"^\s*healthCheckPath:\s*(\S+)", (ROOT / "render.yaml").read_text(), re.MULTILINE
+    )
+    assert declared == ["/ready"]

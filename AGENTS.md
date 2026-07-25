@@ -63,6 +63,30 @@ outside a declared emergency. Ratchets only tighten.
   change.
 - Commit messages and PR text carry no AI attribution.
 
+## Knowing when a step is finished
+
+Step 1 took six review rounds. Rounds 5 and 6 were finding defects in rounds 3
+and 4's fixes, and the layer being polished — a reconciler comparing two
+spreadsheets to each other — is not what the audit letter asks for. That is the
+most expensive mistake this project has made, and it was invisible from inside
+the loop.
+
+Three rules, each with a trigger you can actually observe:
+
+1. **A step is done when its acceptance criteria are met, not when the code is
+   good.** Write them before building, as `.captain/ACCEPTANCE.md` does — a
+   checklist that can fail.
+2. **Two review rounds per step.** A third is a decision to make deliberately,
+   with a reason recorded. Six is a symptom.
+3. **Stop when a round's findings are mostly about the previous round's fixes.**
+   That is the signal that reviewing has stopped finding defects in the product
+   and started finding them in the reviewing.
+
+And the check that would have caught it earliest: **measure a step against the
+audit letter, not against itself.** Before another round, ask which of Harwell &
+Kent's four requests the work advances. If the answer is none, the step is done
+and the next one is overdue.
+
 ## Review roles
 
 `review-policy.yaml` derives a tier from changed paths: `routine`, `semantic`,
@@ -73,6 +97,22 @@ Two panes, two model families. Claude Code authors; the Cursor pane owns every
 cross-family pass — spec Pass B, oracle adversary, invariant sweep,
 implementation Pass B, gate red-team. A pass run in the wrong family is not a
 pass.
+
+### A reviewer's claim is executed, not adopted
+
+Reviews ran blind for four rounds — `--plan` blocks the shell — and roughly a
+third of what came back was wrong in one direction or the other. Two findings
+were rejected outright; one would have deleted a true finding to satisfy a false
+one. Meanwhile a real crash sat unreported until a reviewer that could run
+things found it.
+
+So: **reviewers generate hypotheses; execution decides them.** Reproduce a
+finding before fixing it, and record the verdict in
+`.captain/review/triage/`. Run passes with `--shell`, which gives the Adversary
+`--force --sandbox enabled` under a timeout, with the working tree fingerprinted
+either side so a stray write is detected rather than assumed away.
+
+Triage files live in `triage/`, never in `queue/` — see below.
 
 ### Pane blindness
 

@@ -85,10 +85,30 @@ def health() -> dict[str, Any]:
 
 # ── SPEC §3.2 · liveness and readiness are different questions ───────────
 # A single /health conflated them and could report 200 while the database was
-# down. /health above stays as the DEPLOYMENT probe: it returns 200 even when
-# degraded, so a database blip does not make Render tear the service down.
-# /ready is the honest answer for a caller deciding whether to trust the data,
-# and it never converts a failure into a 200.
+# down. /health above stays the DIAGNOSTIC probe: it returns 200 even when
+# degraded, so a human can ask "what is actually there" without the answer being
+# an outage. /ready is the honest answer for a caller deciding whether to trust
+# the data, it is what Render monitors, and it never converts a failure to 200.
+
+READY_TIMEOUT_SECONDS = 2
+
+
+def _ready_probe(url: str) -> None:
+    """SPEC §3.2 verbatim: `SELECT 1`, 2 second timeout, nothing else.
+
+    /ready previously reused `_probe`, which counts `information_schema.tables`
+    with a 10 second connect timeout. That answers a different question: a
+    reachable but empty or wrong database returns a count of zero, which is a
+    successful query, so the route reported 200. Both halves of the locked
+    contract are bounded here — the connection AND the statement — because a
+    connect timeout alone leaves a hung query unbounded.
+    """
+    with psycopg.connect(
+        url,
+        connect_timeout=READY_TIMEOUT_SECONDS,
+        options=f"-c statement_timeout={READY_TIMEOUT_SECONDS * 1000}",
+    ) as conn:
+        conn.execute("select 1").fetchone()
 
 
 @app.get("/live")
@@ -98,14 +118,15 @@ def live() -> dict[str, str]:
 
 
 @app.get("/ready")
-def ready(response: Response) -> dict[str, Any]:
+def ready(response: Response) -> dict[str, str]:
     """Reaches the database. 503 on failure — never a 200 with bad news inside."""
     url = dsn()
     if not url:
         response.status_code = 503
         return {"status": "not_ready", "database": "unconfigured"}
     try:
-        return {"status": "ready", **_probe(url)}
+        _ready_probe(url)
     except psycopg.Error as exc:
         response.status_code = 503
         return {"status": "not_ready", "database": "unreachable", "detail": type(exc).__name__}
+    return {"status": "ready", "database": "up"}

@@ -3,6 +3,29 @@ on: [push, pull_request]
 jobs:
   check-all-python:
     runs-on: ubuntu-latest
+    # The schema suites are skipif'd on MIGRATION_DATABASE_URL. With no service
+    # here they used to skip in silence while the gate printed green, so the
+    # "invariants enforced as database constraints" claim was never exercised.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres # pragma: allowlist secret — throwaway CI service
+          POSTGRES_DB: sevengc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sevengc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/sevengc # pragma: allowlist secret
+      # Turns a skipped database guard into a red gate — see check_db_guards
+      # in scripts/check_all.py. Unset locally, where a developer may have no
+      # database and the guards legitimately do not run.
+      REQUIRE_DB_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,6 +46,19 @@ jobs:
           if deps:
               subprocess.check_call([sys.executable, "-m", "pip", "install", *deps])
           PY
+      - name: Apply supabase/migrations in order
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(supabase/migrations/*.sql)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no migrations found — the database guards would run against an empty schema"
+            exit 1
+          fi
+          for f in $(printf '%s\n' "${files[@]}" | sort); do
+            echo "applying $f"
+            psql -v ON_ERROR_STOP=1 -q "$MIGRATION_DATABASE_URL" -f "$f"
+          done
       - run: python3 scripts/check_all.py
 
   check-all-node:
@@ -36,3 +72,32 @@ jobs:
         run: npm ci
         working-directory: web
       - run: node scripts/check-all.mjs
+
+  # Path-derived risk tier (review-policy.yaml). Pull requests only: the
+  # declared tier lives in the PR body, so on a bare push there is no channel
+  # to declare one and the check could only pass vacuously or fail everything.
+  # Direct pushes to a protected branch are therefore NOT covered here — that
+  # is what .github/branch-protection.md is for.
+  review-tier:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Risk tier is evaluated for this diff
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          # check-tier.mjs treats an unresolvable range as "no files changed",
+          # which reads as `routine` and passes. Resolve the base explicitly so
+          # a missing ref is a red job rather than a vacuous green one.
+          git rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1 || {
+            echo "cannot resolve $BASE — the tier check would pass on an empty diff"
+            exit 1
+          }
+          GILLY_TIER_RANGE="$BASE...HEAD" node scripts/check-tier.mjs --ci

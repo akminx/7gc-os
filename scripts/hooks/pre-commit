@@ -9,4 +9,11 @@ if [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"; PATH="$ROO
 # The Node half owns .ts/.tsx, which check_all.py deliberately does not read.
 # Without this line the frontend is ungated and the gate means less than it looks.
 [ -f "$ROOT/scripts/check-all.mjs" ] && node "$ROOT/scripts/check-all.mjs"
+# Path-derived risk tier (review-policy.yaml). It was invoked by neither gate,
+# so the strongest floor in the policy was evaluated by nothing. Non-interactive
+# ways to satisfy it — no prompt, no flag on `git commit`:
+#   GILLY_DECLARE_TIER=semantic git commit ...
+#   GILLY_ACK_TRUST=1 git commit ...   (trust-critical; needs a queue packet)
+# An empty diff resolves to `routine` and passes.
+[ -f "$ROOT/scripts/check-tier.mjs" ] && node "$ROOT/scripts/check-tier.mjs"
 exit 0

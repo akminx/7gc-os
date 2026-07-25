@@ -16,7 +16,10 @@ services:
     branch: main
     buildCommand: pip install -e .
     startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
+    # SPEC §3.2 — Render monitors READINESS, not the diagnostic /health. /health
+    # returns 200 even when it reports `degraded`, so pointing the platform at
+    # it meant a service whose database was gone still counted as healthy.
+    healthCheckPath: /ready
     envVars:
       - key: PYTHON_VERSION
         value: "3.13.0"

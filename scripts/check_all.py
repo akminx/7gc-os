@@ -2,7 +2,8 @@
 """Agent-ready verification harness — one deterministic gate the agent cannot bypass.
 
 Detects Python sub-projects (dirs containing pyproject.toml) and enforces:
-lint, format, types (mypy), tests + coverage floor, duplicate code, file-size
+lint, format, types (mypy), tests + coverage floor, database guards actually
+running rather than skipping (REQUIRE_DB_TESTS=1), duplicate code, file-size
 limits, debt markers, architecture invariants (INVARIANTS.md, via arch_checks),
 suppression budget, secrets (detect-secrets), security SAST (bandit), dependency
 CVEs (pip-audit), CLAUDE.md path alignment, and CI parity. Budgets live in
@@ -238,6 +239,76 @@ def check_tests(projects, fix=False, ratchet=False):
     return ("OK", f"tests pass · coverage {total:.2f}% ≥ floor {floor}%{nudge}")
 
 
+# Every test in these targets is skipif'd on MIGRATION_DATABASE_URL. Without a
+# DSN they do not fail — they vanish, and "tests + coverage" above still prints
+# OK. That is the whole defect: a skipped guard reads exactly like a passing
+# one, so the claim "invariants enforced as database constraints" was unexercised
+# in CI while both gates reported green.
+DB_GUARD_TARGETS = (
+    "tests/test_schema_invariants.py",
+    "tests/test_schema_approval.py",
+    # Added late, and its absence here was finding #9 recurring on a new file:
+    # the whole packet-sealing suite could skip in CI and the gate would report
+    # green. A new schema suite that is not listed here is not guarded.
+    "tests/test_schema_packet.py",
+    "tests/test_schema_held_at_date.py",
+    # Split out of test_schema_approval.py at the file-size budget. A split is
+    # exactly when this list goes stale: the tests still run locally, and the
+    # half that moved stops being guarded in CI without anything going red.
+    "tests/test_schema_cross_class.py",
+    # The real corpus against the live schema. Skips without a DSN *or* without
+    # the workbooks — two ways to vanish, and CI has both.
+    "tests/test_real_data_ledger.py",
+    "tests/test_contracts.py::test_python_enums_match_the_postgres_types_in_both_directions",
+)
+# pytest's own tally line — "40 passed, 1 skipped in 0.31s". Read rather than
+# trusted: a line this cannot parse is a FAIL, because an unreadable summary must
+# never resolve to "nothing was skipped".
+DB_GUARD_TALLY = re.compile(r"(\d+) (passed|failed|error|errors|skipped|xfailed|xpassed)\b")
+
+
+def check_db_guards() -> tuple[str, str]:
+    """Fail when a database guard skips. Gated on REQUIRE_DB_TESTS=1, which CI
+    sets alongside a Postgres service; locally, without a database, this reports
+    SKIP with its reason rather than blocking a commit.
+
+    Runs on this interpreter — the one already executing the gate, which the hook
+    and CI both point at the environment holding pytest. A bare interpreter
+    without pytest yields no tally, and no tally is a FAIL, so the wrong
+    interpreter cannot come out green.
+    """
+    if os.environ.get("REQUIRE_DB_TESTS") != "1":
+        return ("SKIP", "REQUIRE_DB_TESTS is not 1 — guards optional here; CI sets it")
+    absent = [t for t in DB_GUARD_TARGETS if not (ROOT / t.split("::")[0]).exists()]
+    if absent:
+        return ("FAIL", "database guard suite(s) missing: " + ", ".join(absent))
+    r = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider", *DB_GUARD_TARGETS],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    out = (r.stdout + r.stderr)[-1500:]
+    lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
+    tally = {kind: int(n) for n, kind in DB_GUARD_TALLY.findall(lines[-1] if lines else "")}
+    if not tally:
+        return ("FAIL", "pytest printed no tally — refusing to assume nothing skipped\n" + out)
+    ran, skipped = sum(tally.values()), tally.get("skipped", 0)
+    problems = []
+    if skipped:
+        reasons = [ln for ln in lines if ln.startswith("SKIPPED")]
+        problems.append(
+            f"{skipped} of {ran} database guard test(s) SKIPPED — a skipped guard is not a "
+            "passing guard. Point MIGRATION_DATABASE_URL at a database with "
+            "supabase/migrations applied.\n" + "\n".join(reasons[:10])
+        )
+    if r.returncode:
+        problems.append("pytest exited non-zero\n" + out)
+    if problems:
+        return ("FAIL", "\n".join(problems))
+    return ("OK", f"{ran} database guard test(s) ran, none skipped")
+
+
 def check_dups():
     if not (ROOT / ".jscpd.json").exists():
         return ("SKIP", "no .jscpd.json")
@@ -460,6 +531,7 @@ def main():
         ("format", lambda: check_format(projects)),
         ("types", lambda: check_types(projects, fix, ratchet)),
         ("tests + coverage", lambda: check_tests(projects, fix, ratchet)),
+        ("database guards", check_db_guards),
         ("duplicate code", check_dups),
         ("file sizes", lambda: check_file_sizes(fix)),
         ("debt markers", lambda: check_debt(fix, ratchet)),
