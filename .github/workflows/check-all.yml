@@ -24,3 +24,15 @@ jobs:
               subprocess.check_call([sys.executable, "-m", "pip", "install", *deps])
           PY
       - run: python3 scripts/check_all.py
+
+  check-all-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web deps (CI parity with local node_modules)
+        run: npm ci
+        working-directory: web
+      - run: node scripts/check-all.mjs

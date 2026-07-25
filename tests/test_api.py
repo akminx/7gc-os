@@ -51,6 +51,29 @@ def test_health_reports_degraded_when_the_database_is_unreachable(
     assert body["detail"] == "OperationalError"
 
 
+def _preflight(origin: str) -> str | None:
+    r = client.options(
+        "/health",
+        headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
+    )
+    allowed: str | None = r.headers.get("access-control-allow-origin")
+    return allowed
+
+
+def test_this_projects_vercel_deployments_are_allowed() -> None:
+    """Production plus per-branch and per-commit preview hostnames."""
+    assert _preflight("https://7gc-os.vercel.app") == "https://7gc-os.vercel.app"
+    assert _preflight("https://7gc-os-git-main-akminx.vercel.app") is not None
+
+
+def test_a_foreign_vercel_app_is_not_allowed_to_call_this_api() -> None:
+    """The first version of this middleware allowed `https://.*\\.vercel\\.app`,
+    which let any app on the platform read this API from a visitor's browser.
+    """
+    assert _preflight("https://attacker.vercel.app") is None
+    assert _preflight("https://evil.example.com") is None
+
+
 def test_health_reports_ok_with_the_observed_schema_size(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

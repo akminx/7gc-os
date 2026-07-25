@@ -6,4 +6,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 PY=python3
 if [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"; PATH="$ROOT/.venv/bin:$PATH"; export PATH; fi
 [ -f "$ROOT/scripts/check_all.py" ] && "$PY" "$ROOT/scripts/check_all.py"
+# The Node half owns .ts/.tsx, which check_all.py deliberately does not read.
+# Without this line the frontend is ungated and the gate means less than it looks.
+[ -f "$ROOT/scripts/check-all.mjs" ] && node "$ROOT/scripts/check-all.mjs"
 exit 0

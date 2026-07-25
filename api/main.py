@@ -24,12 +24,17 @@ VERSION = "0.1.0"
 app = FastAPI(title="7GC OS — Valuation Evidence Ledger", version=VERSION)
 
 # The browser calls this service directly, so the allowed origins are the
-# frontend deployments. Vercel preview URLs are per-branch, hence the regex.
+# frontend deployments. Vercel mints a fresh hostname per branch and per commit,
+# so previews need a pattern — but it is anchored to this project's own prefix.
+# A bare `.*\.vercel\.app` would let anyone's Vercel app call this API from a
+# visitor's browser, which is a wide door to leave open for a convenience.
+PREVIEW_ORIGIN = r"https://7gc-os[a-z0-9-]*\.vercel\.app"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o]
     or ["http://localhost:5173"],
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=PREVIEW_ORIGIN,
     allow_methods=["GET"],
     allow_headers=["*"],
 )
