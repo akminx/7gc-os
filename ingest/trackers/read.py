@@ -92,6 +92,23 @@ def _as_range(value: object) -> tuple[date, date] | None:
     return None
 
 
+def company_key(label: str) -> str:
+    """The company a workbook label names, without its status annotation.
+
+    The two workbooks annotate the same position differently. The master
+    breakdown carries the status in the tab name — `Jackpocket (Realized)`,
+    `Jio (Indirect)` — and the valuation tracker carries it in the row label,
+    `Jio (Indirect)` against a master sheet named `Jio`. Joining the raw strings
+    therefore misses, and the miss is silent: the position keeps its marks and
+    loses every lot behind it.
+
+    This is a JOIN key, not a rename. The annotation is the only signal in either
+    workbook that Jio is a feeder rather than a direct holding, so callers keep
+    the label the source wrote and use this to find the other side of the join.
+    """
+    return label.split(" (")[0].strip()
+
+
 def _as_date(value: object) -> date | None:
     """The tracker writes dates as TEXT — "10/10/2024", not a date cell.
 
@@ -178,6 +195,14 @@ class Tranche:
     acquired_text: str | None = None
     #: Earliest and latest day the cell could mean. Equal when it names one day.
     acquired_range: tuple[date, date] | None = None
+    #: The workbook tab this row came from, verbatim. `company` is already
+    #: reduced by `company_key`, so two tabs whose names differ only inside the
+    #: parentheses — `Acme (US)` and `Acme (UK)` — become indistinguishable the
+    #: moment they are read, and a join then attributes both companies' lots to
+    #: whichever holding claims the key. This preserves the distinction that
+    #: normalisation destroys, so the collision can be refused rather than
+    #: silently resolved. The tracker side of the same join already refuses it.
+    source_sheet: str | None = None
 
     @property
     def acquired_is_exact(self) -> bool:
@@ -229,6 +254,50 @@ class Tranche:
         if self.share_price is None or self.share_count is None:
             return None
         return self.share_price * self.share_count
+
+
+def position_held_at(rows: list[Tranche], on: date) -> bool | None:
+    """Did the fund hold any of this position at `on`, according to these rows?
+
+    Three-state, because the source has three answers, and separate from
+    `Tranche.held_by` because that answers for one row and this answers for a
+    position. The exits are what make them different questions: a purchase this
+    reader can place is no evidence of a holding if a sale it can also place
+    consumed the whole position first.
+
+    It reads the SOURCE rows rather than whatever survived into the contract
+    layer. Those are not the same set — a row of an unrecognised kind and a lot
+    whose date cell names a month both fail to become a `Lot` — and deriving
+    held-at-date from the survivors answered with whichever rows happened to be
+    contractable. Both directions were wrong: a position acquired after the
+    measurement date read as held because its only row became no lot at all, and
+    a position the source places years earlier read as NOT held because the lot
+    carrying that date was dropped for naming a month.
+
+    `None` means the source cannot say. Callers with nowhere to put that must
+    record what they chose instead.
+    """
+    if not rows:
+        return None
+    # An exit's date is when money came OUT, so it can never establish that a
+    # position was held; it can only end one.
+    inflow = [t for t in rows if not t.is_exit]
+    exits = [t for t in rows if t.is_exit]
+    if any(t.held_by(on) is None for t in exits):
+        return None
+    if not any(t.held_by(on) is True for t in inflow):
+        return None if any(t.held_by(on) is None for t in inflow) else False
+    sold = [t for t in exits if t.held_by(on) is True]
+    if not sold:
+        return True
+    bought = [t for t in inflow if t.held_by(on) is True]
+    if any(t.share_count is None for t in sold + bought):
+        # A sale whose size the source does not state cannot be shown to have
+        # left anything behind, nor to have consumed everything.
+        return None
+    total_sold = sum((t.share_count or Decimal(0) for t in sold), Decimal(0))
+    total_bought = sum((t.share_count or Decimal(0) for t in bought), Decimal(0))
+    return total_sold < total_bought
 
 
 def read_valuation_tracker(path: Path) -> list[TrackerSheet]:
@@ -312,7 +381,7 @@ def read_master_breakdown(path: Path) -> list[Tranche]:
             continue
         # "Jackpocket (Realized)" and "Jio (Indirect)" carry their status in the
         # tab name; the company is the part before the parenthesis.
-        company = ws.title.split(" (")[0].strip()
+        company = company_key(ws.title)
         for row in rows[header_at + 1 :]:
             kind = row[0]
             investment = _dec(row[1])
@@ -330,6 +399,7 @@ def read_master_breakdown(path: Path) -> list[Tranche]:
                     acquired=_as_date(row[5]),
                     acquired_text=str(row[5]) if row[5] is not None else None,
                     acquired_range=_as_range(row[5]),
+                    source_sheet=ws.title,
                 )
             )
     return tranches

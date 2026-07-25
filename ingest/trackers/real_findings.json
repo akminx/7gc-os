@@ -1,0 +1,332 @@
+{
+  "positions": 14,
+  "tranches": 18,
+  "fund_periods": 12,
+  "finding_count": 39,
+  "packet_scope_findings": 20,
+  "lineage_only_findings": 16,
+  "by_kind": {
+    "cost_basis_never_compared": 1,
+    "cost_total_disagrees_with_cells": 1,
+    "mark_at_cost_disagrees_with_purchase_prices": 2,
+    "mark_basis_assumes_an_unstated_treatment": 5,
+    "mark_basis_not_in_workbooks": 23,
+    "mark_never_compared": 5,
+    "stated_total_disagrees_with_cells": 1,
+    "unrecognised_tranche_kind": 1
+  },
+  "findings": [
+    {
+      "kind": "stated_total_disagrees_with_cells",
+      "subject": "Fund II Holdings by Quarter \u00b7 23Q4",
+      "scope": "packet",
+      "stated": "4000000",
+      "computed": "6000000",
+      "detail": "the column sums to 6,000,000 across 4 positions (Because Market, Moonfare, Sway, Jackpocket) but the sheet states 4,000,000"
+    },
+    {
+      "kind": "cost_total_disagrees_with_cells",
+      "subject": "Fund II Holdings by Quarter \u00b7 cost basis",
+      "scope": null,
+      "stated": "14000000",
+      "computed": "16000000",
+      "detail": "the column sums to 16,000,000 but the sheet states 14,000,000"
+    },
+    {
+      "kind": "unrecognised_tranche_kind",
+      "subject": "Jio \u00b7 7/2020",
+      "scope": null,
+      "stated": null,
+      "computed": null,
+      "detail": "row type 'Indirect Fund' is neither an investment nor an exit; its 1,000,000 has been left out of every total"
+    },
+    {
+      "kind": "cost_basis_never_compared",
+      "subject": "Jio (Indirect)",
+      "scope": null,
+      "stated": "1000000",
+      "computed": null,
+      "detail": "the valuation tracker states 1,000,000 but no master-breakdown sheet matched this company, so the two were never compared"
+    },
+    {
+      "kind": "mark_never_compared",
+      "subject": "Jio (Indirect) \u00b7 FY2021",
+      "scope": "lineage_only",
+      "stated": null,
+      "computed": null,
+      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
+    },
+    {
+      "kind": "mark_never_compared",
+      "subject": "Jio (Indirect) \u00b7 FY2022",
+      "scope": "lineage_only",
+      "stated": null,
+      "computed": null,
+      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
+    },
+    {
+      "kind": "mark_never_compared",
+      "subject": "Jio (Indirect) \u00b7 FY2023",
+      "scope": "packet",
+      "stated": null,
+      "computed": null,
+      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
+    },
+    {
+      "kind": "mark_never_compared",
+      "subject": "Jio (Indirect) \u00b7 FY2024",
+      "scope": "packet",
+      "stated": null,
+      "computed": null,
+      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
+    },
+    {
+      "kind": "mark_never_compared",
+      "subject": "Jio (Indirect) \u00b7 FY2025",
+      "scope": "packet",
+      "stated": null,
+      "computed": null,
+      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
+    },
+    {
+      "kind": "mark_at_cost_disagrees_with_purchase_prices",
+      "subject": "Fluidstack \u00b7 25Q2",
+      "scope": "lineage_only",
+      "stated": "2500000",
+      "computed": "3000000",
+      "detail": "carried at 2,500,000, which equals the cost of the lots held at this date, while the 200,000 shares then held at the later 5/30/2025 purchase price of 15 is 3,000,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes"
+    },
+    {
+      "kind": "mark_at_cost_disagrees_with_purchase_prices",
+      "subject": "Fluidstack \u00b7 25Q3",
+      "scope": "lineage_only",
+      "stated": "2500000",
+      "computed": "3000000",
+      "detail": "carried at 2,500,000, which equals the cost of the lots held at this date, while the 200,000 shares then held at the later 5/30/2025 purchase price of 15 is 3,000,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Moonfare \u00b7 24Q4",
+      "scope": "packet",
+      "stated": "1048515",
+      "computed": "1000000",
+      "detail": "carried at 1,048,515 against 1,000,000 of cost for the lots held at this date; no lot states both a share price and a share count, so no row this reader can parse implies this value"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Moonfare \u00b7 25Q2",
+      "scope": "lineage_only",
+      "stated": "1048515",
+      "computed": "1000000",
+      "detail": "carried at 1,048,515 against 1,000,000 of cost for the lots held at this date; no lot states both a share price and a share count, so no row this reader can parse implies this value"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Moonfare \u00b7 25Q3",
+      "scope": "lineage_only",
+      "stated": "1048515",
+      "computed": "1000000",
+      "detail": "carried at 1,048,515 against 1,000,000 of cost for the lots held at this date; no lot states both a share price and a share count, so no row this reader can parse implies this value"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Moonfare \u00b7 25Q4",
+      "scope": "packet",
+      "stated": "1048515",
+      "computed": "1000000",
+      "detail": "carried at 1,048,515 against 1,000,000 of cost for the lots held at this date; no lot states both a share price and a share count, so no row this reader can parse implies this value"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Moonfare \u00b7 26Q1",
+      "scope": "lineage_only",
+      "stated": "1048515",
+      "computed": "1000000",
+      "detail": "carried at 1,048,515 against 1,000,000 of cost for the lots held at this date; no lot states both a share price and a share count, so no row this reader can parse implies this value"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Sway \u00b7 25Q3",
+      "scope": "lineage_only",
+      "stated": "350000",
+      "computed": "2000000",
+      "detail": "carried at 350,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 800,000 shares then held at the 10/18/2023 purchase price of 2.5 is 2,000,000.0; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Sway \u00b7 25Q4",
+      "scope": "packet",
+      "stated": "350000",
+      "computed": "2000000",
+      "detail": "carried at 350,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 800,000 shares then held at the 10/18/2023 purchase price of 2.5 is 2,000,000.0; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Sway \u00b7 26Q1",
+      "scope": "lineage_only",
+      "stated": "350000",
+      "computed": "2000000",
+      "detail": "carried at 350,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 800,000 shares then held at the 10/18/2023 purchase price of 2.5 is 2,000,000.0; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Anthropic \u00b7 25Q4",
+      "scope": "packet",
+      "stated": "8000000",
+      "computed": "2000000",
+      "detail": "carried at 8,000,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 40,000 shares then held at the 2/7/2024 purchase price of 50 is 2,000,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Anthropic \u00b7 26Q1",
+      "scope": "lineage_only",
+      "stated": "8000000",
+      "computed": "2000000",
+      "detail": "carried at 8,000,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 40,000 shares then held at the 2/7/2024 purchase price of 50 is 2,000,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Lucra \u00b7 25Q4",
+      "scope": "packet",
+      "stated": "2250000",
+      "computed": "1500000",
+      "detail": "carried at 2,250,000, which the 1,500,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 750,000 shares then held at the 6/28/2024 purchase price of 2 is 1,500,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Lucra \u00b7 26Q1",
+      "scope": "lineage_only",
+      "stated": "2250000",
+      "computed": "1500000",
+      "detail": "carried at 2,250,000, which the 1,500,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 750,000 shares then held at the 6/28/2024 purchase price of 2 is 1,500,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Fluidstack \u00b7 25Q4",
+      "scope": "packet",
+      "stated": "6000000",
+      "computed": "3000000",
+      "detail": "carried at 6,000,000, which the 2,500,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 200,000 shares then held at the later 5/30/2025 purchase price of 15 is 3,000,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Fluidstack \u00b7 26Q1",
+      "scope": "lineage_only",
+      "stated": "6000000",
+      "computed": "3000000",
+      "detail": "carried at 6,000,000, which the 2,500,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 200,000 shares then held at the later 5/30/2025 purchase price of 15 is 3,000,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Dream \u00b7 25Q4",
+      "scope": "packet",
+      "stated": "5000000",
+      "computed": "2000000",
+      "detail": "carried at 5,000,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 625,000 shares then held at the 8/1/2025 purchase price of 3.2 is 2,000,000.0; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Dream \u00b7 26Q1",
+      "scope": "lineage_only",
+      "stated": "5000000",
+      "computed": "2000000",
+      "detail": "carried at 5,000,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 625,000 shares then held at the 8/1/2025 purchase price of 3.2 is 2,000,000.0; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Capsule \u00b7 FY2022",
+      "scope": "lineage_only",
+      "stated": "600000",
+      "computed": "2000000",
+      "detail": "carried at 600,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 500,000 shares then held at the 6/12/2019 purchase price of 4 is 2,000,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Capsule \u00b7 FY2023",
+      "scope": "packet",
+      "stated": "600000",
+      "computed": "2000000",
+      "detail": "carried at 600,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 500,000 shares then held at the 6/12/2019 purchase price of 4 is 2,000,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Capsule \u00b7 FY2024",
+      "scope": "packet",
+      "stated": "600000",
+      "computed": "2000000",
+      "detail": "carried at 600,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 500,000 shares then held at the 6/12/2019 purchase price of 4 is 2,000,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Capsule \u00b7 FY2025",
+      "scope": "packet",
+      "stated": "600000",
+      "computed": "2000000",
+      "detail": "carried at 600,000, which the 2,000,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 500,000 shares then held at the 6/12/2019 purchase price of 4 is 2,000,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_assumes_an_unstated_treatment",
+      "subject": "The Mom Project \u00b7 FY2021",
+      "scope": "lineage_only",
+      "stated": "2500000",
+      "computed": "2500000",
+      "detail": "carried at 2,500,000, which the 1,500,000 cost of the lots held at this date does not explain. It is reproduced exactly by the 500,000 shares then held at the later 9/15/2021 purchase price of 5 is 2,500,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes"
+    },
+    {
+      "kind": "mark_basis_assumes_an_unstated_treatment",
+      "subject": "The Mom Project \u00b7 FY2022",
+      "scope": "lineage_only",
+      "stated": "2500000",
+      "computed": "2500000",
+      "detail": "carried at 2,500,000, which the 1,500,000 cost of the lots held at this date does not explain. It is reproduced exactly by the 500,000 shares then held at the later 9/15/2021 purchase price of 5 is 2,500,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes"
+    },
+    {
+      "kind": "mark_basis_assumes_an_unstated_treatment",
+      "subject": "The Mom Project \u00b7 FY2023",
+      "scope": "packet",
+      "stated": "2750000",
+      "computed": "2750000",
+      "detail": "carried at 2,750,000, which the 1,750,000 cost of the lots held at this date does not explain. It is reproduced exactly by the 500,000 shares then held at the later 9/15/2021 purchase price of 5, plus 250,000 of investment for which these workbooks state no share price, carried at its own cost is 2,750,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes"
+    },
+    {
+      "kind": "mark_basis_assumes_an_unstated_treatment",
+      "subject": "The Mom Project \u00b7 FY2024",
+      "scope": "packet",
+      "stated": "2750000",
+      "computed": "2750000",
+      "detail": "carried at 2,750,000, which the 1,750,000 cost of the lots held at this date does not explain. It is reproduced exactly by the 500,000 shares then held at the later 9/15/2021 purchase price of 5, plus 250,000 of investment for which these workbooks state no share price, carried at its own cost is 2,750,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes"
+    },
+    {
+      "kind": "mark_basis_assumes_an_unstated_treatment",
+      "subject": "The Mom Project \u00b7 FY2025",
+      "scope": "packet",
+      "stated": "2750000",
+      "computed": "2750000",
+      "detail": "carried at 2,750,000, which the 1,750,000 cost of the lots held at this date does not explain. It is reproduced exactly by the 500,000 shares then held at the later 9/15/2021 purchase price of 5, plus 250,000 of investment for which these workbooks state no share price, carried at its own cost is 2,750,000 \u2014 a figure no row states, since it reprices shares bought at other prices and does not distinguish share classes"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Banzai \u00b7 FY2023",
+      "scope": "packet",
+      "stated": "120000",
+      "computed": "500000",
+      "detail": "carried at 120,000, which the 500,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 50,000 shares then held at the 3/4/2021 purchase price of 10 is 500,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Banzai \u00b7 FY2024",
+      "scope": "packet",
+      "stated": "55000",
+      "computed": "500000",
+      "detail": "carried at 55,000, which the 500,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 50,000 shares then held at the 3/4/2021 purchase price of 10 is 500,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    },
+    {
+      "kind": "mark_basis_not_in_workbooks",
+      "subject": "Banzai \u00b7 FY2025",
+      "scope": "packet",
+      "stated": "31000",
+      "computed": "500000",
+      "detail": "carried at 31,000, which the 500,000 cost of the lots held at this date does not explain. Nor do their purchase prices \u2014 the 50,000 shares then held at the 3/4/2021 purchase price of 10 is 500,000; no row in these trackers states that basis, so the supporting document is the evidence to obtain"
+    }
+  ]
+}

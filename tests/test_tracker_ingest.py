@@ -1,67 +1,39 @@
-"""Tracker ingestion, and the reconciliation it produces.
+"""Tracker ingestion: reading the workbooks, and the checks a sheet or a single
+tranche can answer on its own.
 
-Split in two on purpose. The date and classification logic is tested with no
-workbook at all, because it must be checkable in CI where the fund's private
-case-study material does not exist. The reconciliation tests skip when the
-workbooks are absent, the same way the schema tests skip without a DSN.
+The date and classification logic is tested with no workbook at all, because it
+must be checkable in CI where the fund's private case-study material does not
+exist. The tests that read the real workbooks skip when they are absent, the
+same way the schema tests skip without a DSN.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
-import pytest
-
+from ingest.trackers.findings import FindingKind, _period_end
 from ingest.trackers.read import (
     TrackerMark,
     TrackerSheet,
     Tranche,
     _as_range,
     _dec,
+    position_held_at,
     read_master_breakdown,
     read_valuation_tracker,
 )
-from ingest.trackers.reconcile import FindingKind, _period_end, reconcile
-
-TRACKERS = Path("7GC Audit Case Study/01_Internal Trackers")
-VALUATION = TRACKERS / "Funds I & II - Valuation Tracker (Case Study).xlsx"
-MASTER = TRACKERS / "Master Investment Breakdown - Funds I & II (Case Study).xlsx"
-needs_workbooks = pytest.mark.skipif(
-    not (VALUATION.exists() and MASTER.exists()),
-    reason="case-study workbooks are not in the repository",
+from ingest.trackers.reconcile import reconcile
+from tests.tracker_helpers import (
+    MASTER,
+    VALUATION,
+    _priced,
+    _tranche,
+    needs_workbooks,
 )
-
-
-def _tranche(kind: str, investment: str = "1000", text: str | None = None) -> Tranche:
-    return Tranche(
-        company="X",
-        fund="Fund II",
-        kind=kind,
-        investment=Decimal(investment),
-        entry_valuation=None,
-        share_price=None,
-        share_count=None,
-        acquired=None,
-        acquired_text=text,
-        acquired_range=_as_range(text) if text else None,
-    )
-
-
-def _priced(company: str, inv: str, price: str, count: str, text: str) -> Tranche:
-    return Tranche(
-        company=company,
-        fund="Fund II",
-        kind="Fund",
-        investment=Decimal(inv),
-        entry_valuation=None,
-        share_price=Decimal(price),
-        share_count=Decimal(count),
-        acquired=None,
-        acquired_text=text,
-        acquired_range=_as_range(text),
-    )
 
 
 # ── dates the source states imprecisely ──────────────────────────────────
@@ -163,7 +135,7 @@ def test_fluidstack_is_carried_at_cost_while_its_own_round_says_more() -> None:
     findings = [
         f
         for f in reconcile(read_valuation_tracker(VALUATION), read_master_breakdown(MASTER))
-        if f.kind is FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS
+        if f.kind is FindingKind.MARK_AT_COST_DISAGREES_WITH_PURCHASE_PRICES
     ]
     assert {f.subject.split(" · ")[1] for f in findings} == {"25Q2", "25Q3"}
     assert all(f.stated == Decimal("2500000") for f in findings)
@@ -239,117 +211,57 @@ def test_a_period_label_binds_to_its_own_column_not_an_inferred_offset() -> None
     assert end("whenever") is None
 
 
-def test_a_mark_is_never_compared_to_a_round_that_had_not_happened() -> None:
-    """Fluidstack's Dec-2024 mark was reported as diverging from a May-2025
-    tranche — a price that did not yet exist when the mark was struck."""
+def test_a_tranche_that_fails_its_own_arithmetic_is_reported() -> None:
+    """`check_tranche_arithmetic` had no positive test at all: deleting it left
+    only a negative exit-row assertion, and the suite stayed green."""
+    bad = _priced("X", "900", "100", "10", "1/1/2024")
+    findings = [
+        f for f in reconcile([], [bad]) if f.kind is FindingKind.TRANCHE_ARITHMETIC_DISAGREES
+    ]
+    assert len(findings) == 1
+    assert findings[0].stated == Decimal("900")
+    assert findings[0].computed == Decimal("1000")
+
+
+def test_a_stated_cost_total_that_disagrees_with_its_cells_is_reported() -> None:
+    """`check_stated_cost_total` had no test whatsoever — deleting the call from
+    `reconcile` changed nothing the suite could see."""
     sheet = TrackerSheet(
         fund_label="Fund II",
-        period_labels=["24Q4"],
-        companies=["Fluidstack"],
-        cost_basis={},
-        marks=[TrackerMark("Fluidstack", "24Q4", Decimal("1000000"))],
-        stated_totals={"24Q4": Decimal("1000000")},
-    )
-    early = _priced("Fluidstack", "1000000", "10", "100000", "10/10/2024")
-    late = _priced("Fluidstack", "1500000", "15", "100000", "5/30/2025")
-    kinds = [f.kind for f in reconcile([sheet], [early, late])]
-    assert FindingKind.MARK_DIVERGES_FROM_LATER_ROUND not in kinds
-    assert FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS not in kinds
-
-
-# ── the second reviewer's findings, from a different model family ────────
-def test_a_purchase_price_is_not_reported_as_a_round_price() -> None:
-    """The Mom Project is marked on a Series C basis named only in a
-    documentation line this reader does not parse. Comparing against the last
-    PURCHASE produced three confident false discrepancies. A mark matching
-    neither cost nor the last purchase is now reported as a basis we cannot
-    verify — which is true — rather than as a disagreement, which is not."""
-    sheet = TrackerSheet(
-        fund_label="Fund I",
-        period_labels=["FY2023"],
-        companies=["The Mom Project"],
-        cost_basis={},
-        marks=[TrackerMark("The Mom Project", "FY2023", Decimal("2750000"))],
-        stated_totals={"FY2023": Decimal("2750000")},
-    )
-    tranches = [
-        _priced("The Mom Project", "1000000", "2.5", "400000", "4/23/2020"),
-        _priced("The Mom Project", "500000", "5", "100000", "9/15/2021"),
-    ]
-    kinds = [f.kind for f in reconcile([sheet], tranches)]
-    assert FindingKind.MARK_BASIS_NOT_IN_WORKBOOKS in kinds
-    assert FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS not in kinds
-
-
-def test_an_undateable_period_stops_the_check_rather_than_the_guard() -> None:
-    """A label like `Q4 2024` returned None from _period_end, and skipping the
-    guard rather than the comparison silently re-enabled the anachronism it
-    exists to prevent."""
-    sheet = TrackerSheet(
-        fund_label="Fund II",
-        period_labels=["Q4 2024"],
-        companies=["Fluidstack"],
-        cost_basis={},
-        marks=[TrackerMark("Fluidstack", "Q4 2024", Decimal("1000000"))],
-        stated_totals={"Q4 2024": Decimal("1000000")},
-    )
-    tranches = [
-        _priced("Fluidstack", "1000000", "10", "100000", "10/10/2024"),
-        _priced("Fluidstack", "1500000", "15", "100000", "5/30/2025"),
-    ]
-    kinds = [f.kind for f in reconcile([sheet], tranches)]
-    assert FindingKind.UNRECOGNISED_PERIOD_LABEL in kinds
-    assert FindingKind.MARK_BASIS_NOT_IN_WORKBOOKS not in kinds
-
-
-def test_an_imprecise_tranche_date_is_not_treated_as_definitely_earlier() -> None:
-    """`low > measured` accepted a tranche whose range merely STARTS before the
-    measurement date. held_by() answers the three-state question the range was
-    built for."""
-    sheet = TrackerSheet(
-        fund_label="Fund II Holdings by Quarter",
-        period_labels=["FY2021"],
-        companies=["X"],
-        cost_basis={"X": Decimal("1400000")},
-        marks=[TrackerMark("X", "FY2021", Decimal("1000000"))],
-        stated_totals={"FY2021": Decimal("1000000")},
-    )
-    tranches = [
-        _priced("X", "500000", "1", "500000", "1/1/2019"),
-        _priced("X", "900000", "9", "100000", "2020 / 2021 / 2023"),
-    ]
-    assert reconcile([sheet], tranches) == []
-
-
-def test_the_same_company_in_two_funds_is_not_merged() -> None:
-    """Fund identity was discarded, so both correct fund-level costs would be
-    reported as disagreeing with a merged global total."""
-    fund_ii = TrackerSheet(
-        fund_label="Fund II Holdings by Quarter",
         period_labels=[],
-        companies=["X"],
-        cost_basis={"X": Decimal("2000000")},
+        companies=["X", "Y"],
+        cost_basis={"X": Decimal("200"), "Y": Decimal("100")},
         marks=[],
+        stated_cost_total=Decimal("250"),
     )
-    fund_i = TrackerSheet(
-        fund_label="Fund I Holdings by Year",
-        period_labels=[],
-        companies=["X"],
-        cost_basis={"X": Decimal("1000000")},
-        marks=[],
-    )
-    a = _tranche("Fund", "2000000")
-    b = Tranche(
-        company="X",
-        fund="Fund I",
-        kind="Fund",
-        investment=Decimal("1000000"),
-        entry_valuation=None,
-        share_price=None,
-        share_count=None,
-        acquired=None,
-    )
-    assert reconcile([fund_ii, fund_i], [a, b]) == []
+    findings = [
+        f for f in reconcile([sheet], []) if f.kind is FindingKind.COST_TOTAL_DISAGREES_WITH_CELLS
+    ]
+    assert len(findings) == 1
+    assert findings[0].stated == Decimal("250")
+    assert findings[0].computed == Decimal("300")
+
+
+def test_a_period_column_is_read_from_its_own_header_cell(tmp_path: Path) -> None:
+    """This test was named for column binding and asserted only `_period_end`,
+    so replacing the binding with an inferred offset left it green. It now reads
+    a workbook whose header carries a blank cell — exactly what shifted every
+    period by one and made the grid read cleanly against the wrong data."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    # The default sheet has no `Company` header, so the reader skips it — which
+    # is itself the behaviour that lets the real workbook carry divider tabs.
+    ws = wb.create_sheet("Fund II Holdings by Quarter")
+    ws.append(["Company", "Sector", "Cost Basis", "23Q4", None, "24Q2"])
+    ws.append(["Acme", "AI", 1000, 111, None, 222])
+    path = tmp_path / "tracker.xlsx"
+    wb.save(path)
+
+    sheet = read_valuation_tracker(path)[0]
+    assert sheet.period_labels == ["23Q4", "24Q2"]
+    assert sheet.amount("Acme", "23Q4") == Decimal("111")
+    assert sheet.amount("Acme", "24Q2") == Decimal("222")
 
 
 def test_exit_proceeds_are_not_checked_as_purchase_arithmetic() -> None:
@@ -367,3 +279,124 @@ def test_exit_proceeds_are_not_checked_as_purchase_arithmetic() -> None:
     )
     kinds = [f.kind for f in reconcile([], [exit_row])]
     assert FindingKind.TRANCHE_ARITHMETIC_DISAGREES not in kinds
+
+
+@needs_workbooks
+def test_the_real_workbook_findings_match_the_committed_snapshot() -> None:
+    """The reconciler's other tests are synthetic, because CI has no workbooks.
+    That proves a rule fires; it does not show what the fund's actual books
+    produce. Four review rounds moved that output between 11 and 34 findings and
+    every move was invisible in a diff. Now it is a file.
+    """
+    from ingest.trackers.snapshot import SNAPSHOT, build
+
+    assert SNAPSHOT.exists(), "run: .venv/bin/python -m ingest.trackers.snapshot"
+    committed = json.loads(SNAPSHOT.read_text())
+    fresh = json.loads(json.dumps(build()))
+    assert fresh["finding_count"] == committed["finding_count"]
+    assert fresh["by_kind"] == committed["by_kind"]
+    assert fresh["findings"] == committed["findings"]
+
+
+@needs_workbooks
+def test_the_snapshot_describes_the_whole_workbook() -> None:
+    """A snapshot of a subset would drift into looking complete. These are the
+    dimensions of the source: 14 positions, 18 tranches, 12 fund-periods."""
+    from ingest.trackers.snapshot import build
+
+    shape = build()
+    assert shape["positions"] == 14
+    assert shape["tranches"] == 18
+    assert shape["fund_periods"] == 12
+
+
+@needs_workbooks
+def test_findings_are_marked_packet_scope_or_lineage_only() -> None:
+    """SPEC 2 closes the packet date set at six fund-periods. The tracker carries
+    twelve, and the reconciler read all of them without distinguishing — so a
+    finding about 25Q3, a quarter the audit letter never mentions, was
+    indistinguishable from one about 12/31/2025, which it does.
+
+    The database enforces this on `reporting_period.audit_scope`. Enforcing it
+    there and not here is the one-side-only defect this project keeps producing.
+    """
+    from ingest.trackers.snapshot import build
+
+    shape = build()
+    assert shape["packet_scope_findings"] == 20
+    assert shape["lineage_only_findings"] == 16
+    found = cast(list[dict[str, str]], shape["findings"])
+    periods = {f["subject"].split(" · ")[1] for f in found if f["scope"] == "packet"}
+    # Exactly the dates Harwell & Kent asked about, and no others. Equality,
+    # not a subset: `<=` passed vacuously while five true packet findings were
+    # unscoped and therefore invisible to the filter.
+    assert periods == {"23Q4", "24Q4", "25Q4", "FY2023", "FY2024", "FY2025"}
+    # Nothing that names a single period may go unscoped.
+    unscoped = {f["subject"] for f in found if f["scope"] is None}
+    assert unscoped == {
+        "Fund II Holdings by Quarter · cost basis",  # a column, not a period
+        "Jio · 7/2020",  # a tranche row
+        "Jio (Indirect)",  # a company
+    }
+
+
+# ── held-at-date, over a whole position rather than one row ──────────────
+#
+# `position_held_at` answers what `Tranche.held_by` cannot: whether the fund
+# still held ANY of a position at a date. The mapper reads it to fill
+# `HoldingRow.held_at_date`, so every `None` below is a figure that either
+# enters a fund total or is dropped from one, and each branch is asserted
+# because a mutation run found three of them undefended.
+def _held(text: str, *, kind: str = "Fund", count: str | None = "100") -> Tranche:
+    return _tranche(kind, "1000", text=text, price="10", count=count)
+
+
+def test_a_position_bought_before_the_date_is_held_at_it() -> None:
+    assert position_held_at([_held("1/1/2020")], date(2025, 12, 31)) is True
+
+
+def test_a_position_bought_after_the_date_is_not_held_at_it() -> None:
+    assert position_held_at([_held("1/1/2026")], date(2025, 12, 31)) is False
+
+
+def test_an_acquisition_date_spanning_the_measurement_date_cannot_be_decided() -> None:
+    """`2020 / 2021 / 2023` spans the date, so the source answers neither yes nor
+    no. Collapsing that to `False` drops a position the fund may well have held
+    out of the total, with nothing saying which one or by how much — the shape of
+    every silent understatement this layer has produced."""
+    assert position_held_at([_held("2020 / 2021 / 2023")], date(2021, 6, 30)) is None
+
+
+def test_a_sale_this_reader_cannot_place_leaves_the_answer_undecided() -> None:
+    """An exit whose Date cell names a range straddling the measurement date may
+    or may not have happened by then. Treating it as no sale at all asserts the
+    position was still held, which is the claim the source declines to make."""
+    rows = [
+        _held("1/1/2020"),
+        _tranche("Exit", "5000", text="2025 / 2026", price="25", count="100"),
+    ]
+    assert position_held_at(rows, date(2025, 12, 31)) is None
+
+
+def test_a_sale_of_unstated_size_leaves_the_answer_undecided() -> None:
+    """Without a share count on the exit, nothing says whether it consumed the
+    position or a tenth of it. `True` here is a held-at-date claim resting on the
+    absence of a number."""
+    rows = [_held("1/1/2020"), _tranche("Exit", "5000", text="3/1/2024", price="25", count=None)]
+    assert position_held_at(rows, date(2025, 12, 31)) is None
+
+
+def test_a_sale_of_the_whole_position_ends_the_holding() -> None:
+    rows = [_held("1/1/2020"), _tranche("Exit", "5000", text="3/1/2024", price="25", count="100")]
+    assert position_held_at(rows, date(2025, 12, 31)) is False
+    # …and not before it happened.
+    assert position_held_at(rows, date(2023, 12, 31)) is True
+
+
+def test_a_partial_sale_leaves_the_position_held() -> None:
+    rows = [_held("1/1/2020"), _tranche("Exit", "2000", text="3/1/2024", price="25", count="40")]
+    assert position_held_at(rows, date(2025, 12, 31)) is True
+
+
+def test_a_position_with_no_master_rows_at_all_cannot_be_decided() -> None:
+    assert position_held_at([], date(2025, 12, 31)) is None
