@@ -1,0 +1,26 @@
+# Render Blueprint — the service configuration lives in git, not in a dashboard.
+#
+# Create the service with New -> Blueprint and point it at this repo; every
+# setting below is read from here. DATABASE_URL is marked sync:false because it
+# is a credential: Render prompts for it once and never stores it in the repo.
+#
+# There is no database block here on purpose. Render's free Postgres expires
+# after 30 days and is then deleted; Postgres is Supabase (SPEC §3.2).
+
+services:
+  - type: web
+    name: 7gc-os-api
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: pip install -e .
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

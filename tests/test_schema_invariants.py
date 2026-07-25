@@ -9,30 +9,15 @@ Skipped when MIGRATION_DATABASE_URL is unset, so the suite still runs offline.
 
 from __future__ import annotations
 
-import os
-import pathlib
 import uuid
 from collections.abc import Iterator
 
 import psycopg
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from api.config import dsn
 
-
-def _env() -> dict[str, str]:
-    env: dict[str, str] = {}
-    f = ROOT / ".env"
-    if f.exists():
-        for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                env[k.strip()] = v.strip().strip('"').strip("'")
-    return {**env, **os.environ}
-
-
-DSN = _env().get("MIGRATION_DATABASE_URL")
+DSN = dsn("MIGRATION_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
 
 
