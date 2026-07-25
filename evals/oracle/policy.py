@@ -36,6 +36,8 @@ class PolicyMixin:
             ):
                 return row
         raise OracleError(
+            # INV-2: authority is a lattice, so an unenumerated combination
+            # RAISES rather than falling back to a default rank.
             f"unenumerated policy tuple: ({req}, {doc['source_class']}, "
             f"{doc['execution_status']}, {position_type}). Fail closed — add the "
             f"cell to primitives.yaml deliberately."

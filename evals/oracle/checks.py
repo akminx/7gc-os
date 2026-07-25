@@ -178,6 +178,8 @@ class ChecksMixin:
             holding = doc["holding"]
             lot = next(lt for lt in self.lots if lt["holding"] == holding)
             recomputed = None
+            # INV-6: re-measurement is not carry-forward — a rate must be
+            # observed AT the measurement date, not inherited from a prior one.
             if doc.get("fx_rate") and lot.get("foreign_amount"):
                 recomputed = money(lot["foreign_amount"]) * money(doc["fx_rate"])
             on = d(doc["applicable_from"])

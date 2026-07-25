@@ -20,6 +20,7 @@ Discipline: see INVARIANTS.md. A guard must be able to FAIL, or it's just prose.
 
 import json
 import re
+from pathlib import Path
 
 
 def _iter_src(root, skip_dirs, subdirs, suffixes):
@@ -118,3 +119,24 @@ def check_ignore_budget(root, tracked_files, budget_dir, fix=False, ratchet=Fals
             "(don't suppress checks to go green)\n" + "\n".join(hits[:20]),
         )
     return ("OK", f"{len(hits)} suppressions ≤ ceiling {cap}")
+
+
+def check_invariant_matrix(root: Path) -> tuple[str, str]:
+    """Every invariant must be named by each layer that has to enforce it.
+
+    Two review rounds in a row found the same defect: a rule enforced on one
+    side only, with the fixed half making the other look covered. This turns
+    that from something a reviewer might spot into a cell that is empty.
+    """
+    import subprocess
+    import sys
+
+    r = subprocess.run(
+        [sys.executable, str(root / "scripts" / "invariant_matrix.py"), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode:
+        tail = [ln for ln in r.stdout.splitlines() if ln.strip().startswith("-")]
+        return "FAIL", "invariant coverage gaps:\n" + "\n".join(tail)
+    return "OK", "every invariant named by each layer that enforces it"

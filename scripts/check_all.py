@@ -464,6 +464,7 @@ def main():
         ("file sizes", lambda: check_file_sizes(fix)),
         ("debt markers", lambda: check_debt(fix, ratchet)),
         ("architecture", lambda: arch_checks.check_architecture(ROOT, _SKIP_DIRS)),
+        ("invariant coverage", lambda: arch_checks.check_invariant_matrix(ROOT)),
         (
             "ignore budget",
             lambda: arch_checks.check_ignore_budget(ROOT, tracked(), BUD, fix, ratchet),
