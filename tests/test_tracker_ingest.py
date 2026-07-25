@@ -15,12 +15,15 @@ from pathlib import Path
 import pytest
 
 from ingest.trackers.read import (
+    TrackerMark,
+    TrackerSheet,
     Tranche,
     _as_range,
+    _dec,
     read_master_breakdown,
     read_valuation_tracker,
 )
-from ingest.trackers.reconcile import FindingKind, reconcile
+from ingest.trackers.reconcile import FindingKind, _period_end, reconcile
 
 TRACKERS = Path("7GC Audit Case Study/01_Internal Trackers")
 VALUATION = TRACKERS / "Funds I & II - Valuation Tracker (Case Study).xlsx"
@@ -42,6 +45,20 @@ def _tranche(kind: str, investment: str = "1000", text: str | None = None) -> Tr
         acquired=None,
         acquired_text=text,
         acquired_range=_as_range(text) if text else None,
+    )
+
+
+def _priced(company: str, inv: str, price: str, count: str, text: str) -> Tranche:
+    return Tranche(
+        company=company,
+        kind="Fund",
+        investment=Decimal(inv),
+        entry_valuation=None,
+        share_price=Decimal(price),
+        share_count=Decimal(count),
+        acquired=None,
+        acquired_text=text,
+        acquired_range=_as_range(text),
     )
 
 
@@ -169,3 +186,70 @@ def test_fund_i_reconciles_completely() -> None:
     fund_i = next(s for s in sheets if "Fund I " in s.fund_label)
     for period in fund_i.period_labels:
         assert fund_i.cells_total(period) == fund_i.stated_totals[period]
+
+
+# ── silence must not look like agreement ─────────────────────────────────
+def test_a_company_on_only_one_side_is_reported_not_skipped() -> None:
+    """The critical review finding. A tab named `Fluid Stack` while the tracker
+    says `Fluidstack` made the join produce nothing, and the report read clean
+    because the two cost statements were never compared at all."""
+    sheet = TrackerSheet(
+        fund_label="F",
+        period_labels=[],
+        companies=["Fluidstack"],
+        cost_basis={"Fluidstack": Decimal("2500000")},
+        marks=[],
+    )
+    kinds = [f.kind for f in reconcile([sheet], [_tranche("Fund", "2500000")])]
+    assert FindingKind.COST_BASIS_NEVER_COMPARED in kinds
+
+
+def test_a_sheet_with_no_stated_total_says_nothing_was_checked() -> None:
+    """A footer renamed to `Sum (active)` left stated_totals empty, so every
+    period was skipped and the run reported clean."""
+    sheet = TrackerSheet(
+        fund_label="F",
+        period_labels=["23Q4"],
+        companies=["X"],
+        cost_basis={},
+        marks=[TrackerMark("X", "23Q4", Decimal("100"))],
+    )
+    assert FindingKind.NO_STATED_TOTAL_TO_CHECK in [f.kind for f in reconcile([sheet], [])]
+
+
+def test_a_number_stored_as_text_still_counts_toward_its_column() -> None:
+    """Excel stores pasted numbers as text. Dropping them understated a column
+    while the footer still counted them."""
+    assert _dec("2500000") == Decimal("2500000")
+    assert _dec("$2,500,000") == Decimal("2500000")
+    assert _dec("(1000)") == Decimal("-1000")
+    assert _dec("Realized 5/20/24") is None
+
+
+def test_a_period_label_binds_to_its_own_column_not_an_inferred_offset() -> None:
+    """A blank or merged header cell shifted every period by one, so the grid
+    read cleanly against the wrong data."""
+    end = _period_end
+    assert end("25Q4") == date(2025, 12, 31)
+    assert end("23Q4") == date(2023, 12, 31)
+    assert end("FY2024") == date(2024, 12, 31)
+    assert end("25Q1") == date(2025, 3, 31)
+    assert end("whenever") is None
+
+
+def test_a_mark_is_never_compared_to_a_round_that_had_not_happened() -> None:
+    """Fluidstack's Dec-2024 mark was reported as diverging from a May-2025
+    tranche — a price that did not yet exist when the mark was struck."""
+    sheet = TrackerSheet(
+        fund_label="F",
+        period_labels=["24Q4"],
+        companies=["Fluidstack"],
+        cost_basis={},
+        marks=[TrackerMark("Fluidstack", "24Q4", Decimal("1000000"))],
+        stated_totals={"24Q4": Decimal("1000000")},
+    )
+    early = _priced("Fluidstack", "1000000", "10", "100000", "10/10/2024")
+    late = _priced("Fluidstack", "1500000", "15", "100000", "5/30/2025")
+    kinds = [f.kind for f in reconcile([sheet], [early, late])]
+    assert FindingKind.MARK_DIVERGES_FROM_LATER_ROUND not in kinds
+    assert FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS not in kinds

@@ -13,11 +13,16 @@ set, not a severity number).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from enum import StrEnum
 
 from ingest.trackers.read import TrackerSheet, Tranche
+
+#: A gap smaller than this fraction of the implied value is not worth an
+#: auditor's attention. Named rather than inlined so it is reviewable, and set
+#: deliberately tight — this layer reports, it does not decide.
+_MATERIALITY = Decimal("0.001")
 
 
 class FindingKind(StrEnum):
@@ -26,6 +31,10 @@ class FindingKind(StrEnum):
     TRANCHE_ARITHMETIC_DISAGREES = "tranche_arithmetic_disagrees"
     COST_BASIS_DISAGREES_ACROSS_WORKBOOKS = "cost_basis_disagrees_across_workbooks"
     UNRECOGNISED_TRANCHE_KIND = "unrecognised_tranche_kind"
+    COST_BASIS_NEVER_COMPARED = "cost_basis_never_compared"
+    NO_STATED_TOTAL_TO_CHECK = "no_stated_total_to_check"
+    MARK_DIVERGES_FROM_LATER_ROUND = "mark_diverges_from_later_round"
+    LATEST_ROUND_IS_AMBIGUOUS = "latest_round_is_ambiguous"
     MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS = "mark_held_at_cost_while_later_round_exists"
 
 
@@ -53,6 +62,21 @@ def check_stated_totals(sheet: TrackerSheet) -> list[Finding]:
     appearing unprompted in the source data rather than as a hypothetical.
     """
     out: list[Finding] = []
+    missing = [p for p in sheet.period_labels if p not in sheet.stated_totals]
+    if missing and sheet.companies:
+        # A renamed footer ("Sum (active)") or an absent one leaves nothing to
+        # compare against, and every period is skipped in silence. The whole
+        # point of this check is the stated total, so its absence is a finding.
+        out.append(
+            Finding(
+                kind=FindingKind.NO_STATED_TOTAL_TO_CHECK,
+                subject=f"{sheet.fund_label} · {', '.join(missing)}",
+                detail=(
+                    f"{len(sheet.companies)} positions were read but no stated total was "
+                    f"found for {len(missing)} period(s), so nothing was checked against them"
+                ),
+            )
+        )
     for period in sheet.period_labels:
         stated = sheet.stated_totals.get(period)
         if stated is None:
@@ -160,7 +184,24 @@ def check_cost_basis_across_workbooks(
     for sheet in sheets:
         for company, stated in sheet.cost_basis.items():
             computed = by_company.get(company)
-            if computed is None or computed == stated:
+            if computed is None:
+                # Silence is not agreement. A tab named "Fluid Stack" while the
+                # tracker says "Fluidstack" makes the join produce nothing, and
+                # the report then reads clean because the two statements were
+                # never compared at all.
+                out.append(
+                    Finding(
+                        kind=FindingKind.COST_BASIS_NEVER_COMPARED,
+                        subject=company,
+                        detail=(
+                            f"the valuation tracker states {stated:,} but no master-breakdown "
+                            "sheet matched this company, so the two were never compared"
+                        ),
+                        stated=stated,
+                    )
+                )
+                continue
+            if computed == stated:
                 continue
             out.append(
                 Finding(
@@ -174,7 +215,39 @@ def check_cost_basis_across_workbooks(
                     computed=computed,
                 )
             )
+
+    tracked = {c for sheet in sheets for c in sheet.cost_basis}
+    for company, computed in sorted(by_company.items()):
+        if company not in tracked:
+            out.append(
+                Finding(
+                    kind=FindingKind.COST_BASIS_NEVER_COMPARED,
+                    subject=company,
+                    detail=(
+                        f"the master breakdown states {computed:,} of investment but this "
+                        "company has no cost-basis row in the valuation tracker"
+                    ),
+                    computed=computed,
+                )
+            )
     return out
+
+
+def _period_end(label: str) -> date | None:
+    """The last day of a tracker period label — `25Q4`, `FY2024`.
+
+    Returned rather than assumed so a label this reader does not understand
+    disables the anachronism guard loudly (None) instead of quietly comparing
+    against the wrong date.
+    """
+    text = label.strip().upper()
+    if text.startswith("FY") and text[2:].isdigit():
+        return date(int(text[2:]), 12, 31)
+    if len(text) == 4 and text[2] == "Q" and text[:2].isdigit() and text[3].isdigit():
+        year = 2000 + int(text[:2])
+        month = int(text[3]) * 3
+        return date(year + month // 12, month % 12 + 1, 1) - timedelta(days=1)
+    return None
 
 
 def check_marks_held_at_cost(sheets: list[TrackerSheet], tranches: list[Tranche]) -> list[Finding]:
@@ -201,29 +274,81 @@ def check_marks_held_at_cost(sheets: list[TrackerSheet], tranches: list[Tranche]
             for t in lots
             if t.is_investment and t.share_price is not None and t.share_count is not None
         ]
-        dated = [t for t in priced if t.acquired is not None]
-        if len(priced) < 2 or not dated:
+        if len(priced) < 2:
             continue
-        latest = max(dated, key=lambda t: t.acquired or date.min)
+
+        # Order by the LATEST day each tranche could have occurred. Keying on an
+        # exact date alone dropped any month-only tranche out of the running, so
+        # a later imprecise round lost to an earlier precise one and the whole
+        # check went silent — the range parsing existed but nothing used it.
+        def upper(t: Tranche) -> date | None:
+            return t.acquired_range[1] if t.acquired_range else None
+
+        ranked = [t for t in priced if upper(t) is not None]
+        if not ranked:
+            continue
+        latest = max(ranked, key=lambda t: upper(t) or date.min)
         assert latest.share_price is not None
+
+        # If another tranche's range overlaps the winner's, "most recent" is not
+        # decidable from the source and must not be guessed.
+        low = latest.acquired_range[0] if latest.acquired_range else date.min
+        contested = [t for t in ranked if t is not latest and (upper(t) or date.min) >= low]
+        if contested:
+            out.append(
+                Finding(
+                    kind=FindingKind.LATEST_ROUND_IS_AMBIGUOUS,
+                    subject=company,
+                    detail=(
+                        "which tranche is most recent cannot be determined: "
+                        + "; ".join(
+                            f"{t.acquired_text} at {t.share_price}" for t in [latest, *contested]
+                        )
+                    ),
+                )
+            )
+            continue
+
         shares = sum((t.share_count or Decimal(0)) for t in priced)
         at_latest_round = shares * latest.share_price
         cost = sum(t.investment for t in priced)
         if at_latest_round == cost:
             continue
+
         for sheet in sheets:
             for period in sheet.period_labels:
                 amount = sheet.amount(company, period)
-                if amount is None or amount != cost:
+                if amount is None:
                     continue
+                # A round cannot inform a mark struck before it happened.
+                # Without this, Fluidstack's Dec-2024 mark was compared against a
+                # May-2025 tranche and reported as diverging from a price that
+                # did not yet exist.
+                measured = _period_end(period)
+                if measured is not None and low > measured:
+                    continue
+                # Exact equality with cost was a brittle proxy. A mark one dollar
+                # off, or stale, escaped entirely — so the check silently stopped
+                # firing on precisely the sloppy data it exists to catch. What
+                # matters is a material gap between the carried figure and what
+                # the fund's own latest round implies.
+                gap = at_latest_round - amount
+                if gap == 0 or abs(gap) < at_latest_round * _MATERIALITY:
+                    continue
+                at_cost = amount == cost
                 out.append(
                     Finding(
-                        kind=FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS,
+                        kind=(
+                            FindingKind.MARK_HELD_AT_COST_WHILE_LATER_ROUND_EXISTS
+                            if at_cost
+                            else FindingKind.MARK_DIVERGES_FROM_LATER_ROUND
+                        ),
                         subject=f"{company} · {period}",
                         detail=(
-                            f"carried at {amount:,}, which equals total cost; the fund's own "
-                            f"{latest.acquired} tranche prices the security at "
-                            f"{latest.share_price}, implying {at_latest_round:,} "
+                            f"carried at {amount:,}"
+                            + (", which equals total cost" if at_cost else "")
+                            + f"; the fund's own {latest.acquired_text} tranche prices the "
+                            f"security at {latest.share_price}, implying {at_latest_round:,} "
                             f"across {shares:,} shares"
                         ),
                         stated=amount,

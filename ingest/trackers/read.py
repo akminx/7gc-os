@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import openpyxl
@@ -37,6 +37,19 @@ def _dec(value: object) -> Decimal | None:
         return None
     if isinstance(value, int | float):
         return Decimal(str(value))
+    if isinstance(value, str):
+        # Excel stores pasted numbers as text more often than anyone expects.
+        # Returning None here made the cell vanish from its column total while
+        # the stated total still counted it — an understated column that either
+        # reports a false disagreement or, if the footer is text too, nothing at
+        # all. Only genuinely non-numeric text stays None.
+        cleaned = value.strip().replace(",", "").replace("$", "")
+        if cleaned.startswith("(") and cleaned.endswith(")"):
+            cleaned = "-" + cleaned[1:-1]
+        try:
+            return Decimal(cleaned)
+        except (InvalidOperation, ValueError):
+            return None
     return None
 
 
@@ -223,8 +236,12 @@ def read_valuation_tracker(path: Path) -> list[TrackerSheet]:
         header = next((r for r in rows if r and r[0] == "Company"), None)
         if header is None:
             continue
-        periods = [str(c) for c in header[3:] if c]
-        first = len(header) - len(periods)
+        # Bind every period label to its OWN column index. Inferring the first
+        # period column from `len(header) - len(periods)` silently shifted every
+        # column when the header contained a blank or merged cell, so the grid
+        # read cleanly against the wrong data.
+        period_at = {str(c): i for i, c in enumerate(header) if c and i >= 3}
+        periods = list(period_at)
 
         marks: list[TrackerMark] = []
         cost: dict[str, Decimal] = {}
@@ -239,8 +256,8 @@ def read_valuation_tracker(path: Path) -> list[TrackerSheet]:
             basis = _dec(row[2])
             if basis is not None:
                 cost[name] = basis
-            for offset, label in enumerate(periods):
-                cell = row[first + offset]
+            for label, index in period_at.items():
+                cell = row[index] if index < len(row) else None
                 amount = _dec(cell)
                 note = str(cell) if amount is None and cell not in (None, "") else None
                 marks.append(TrackerMark(name, label, amount, note))
@@ -252,8 +269,8 @@ def read_valuation_tracker(path: Path) -> list[TrackerSheet]:
         stated_cost = None
         if total_row is not None:
             stated_cost = _dec(total_row[2])
-            for offset, label in enumerate(periods):
-                value = _dec(total_row[first + offset])
+            for label, index in period_at.items():
+                value = _dec(total_row[index]) if index < len(total_row) else None
                 if value is not None:
                     stated[label] = value
 
