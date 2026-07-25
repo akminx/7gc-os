@@ -7,6 +7,12 @@
 --
 -- Reference: docs/SPEC.md §6 (data model), §6.1 (attribute ownership),
 -- §6.2 (state machines), §6.3 (approvable resources).
+--
+-- Revised after schema-passB (cross-family review, Grok 4.5). The first version
+-- had a valuation approval whose "fingerprint" was three unconstrained text
+-- columns, and no immutability on the rows it claimed to bind — so an approved
+-- mark could be rewritten to any number afterwards and still read `approved`.
+-- Identity is now carried by foreign keys to immutable rows, never by strings.
 
 begin;
 
@@ -31,6 +37,7 @@ create type valuation_basis    as enum ('cost', 'last_round', 'third_party_memo'
                                         'quoted_price', 'administrator_nav', 'realization');
 create type gap_kind           as enum ('with_counsel', 'referenced_location_unspecified',
                                         'not_located');
+create type gap_remediation    as enum ('open', 'requested', 'received', 'unobtainable');
 create type decision_type      as enum ('transcription', 'valuation',
                                         'management_assessment', 'packet');
 create type decision_status    as enum ('draft', 'approved', 'rejected', 'superseded');
@@ -44,7 +51,7 @@ create table fund (
 );
 
 create table company (
-    id          text primary key,
+    id           text primary key,
     display_name text not null
 );
 
@@ -66,13 +73,9 @@ create table holding (
 
 -- INV-7 · held-at-date ≠ active-today.
 -- Lots are IMMUTABLE and carry their own acquisition and realisation dates, so
--- "was this held at date D" is computable rather than a mutable flag. A
--- holding-level `active` boolean cannot represent a second tranche acquired
--- later, or a partial realisation — both of which occur in the corpus.
+-- "was this held at date D" is computable rather than a mutable flag.
 --
 -- INV-17 · security class A ≠ security class B for valuation.
--- security_class is required so cross-class pricing is detectable rather than
--- silently propagated.
 create table lot (
     id              text primary key,
     holding_id      text not null references holding (id),
@@ -87,8 +90,6 @@ create table lot (
     cost_currency   char(3) not null,
     acquired_date   date not null,
     realized_date   date,
-    -- A lot either has both share inputs or neither. Fund and feeder interests
-    -- legitimately have neither; a half-populated lot is a data error.
     constraint lot_shares_and_pps_together
         check ((shares is null) = (entry_pps is null)),
     constraint lot_realized_after_acquired
@@ -101,10 +102,8 @@ create table lot (
 
 create index lot_holding_dates_idx on lot (holding_id, acquired_date, realized_date);
 
--- A security class conversion (Sway's recapitalisation). Recorded as an event
--- rather than by mutating the lot, so class-at-date stays derivable and the
--- original acquisition lineage survives — the r6 bug where conversion erased a
--- with_counsel gap came from resolving gaps against the current class.
+-- A security class conversion (Sway's recapitalisation), recorded as an event
+-- rather than by mutating the lot, so class-at-date stays derivable.
 create table lot_conversion (
     lot_id             text primary key references lot (id),
     effective_date     date not null,
@@ -119,24 +118,20 @@ create table lot_conversion (
 
 -- ── Periods ──────────────────────────────────────────────────────────────
 -- INV-20 · audit measurement date ≠ lineage-only tracker period.
--- audit_scope is explicit and never inferred from cadence or column name. A
--- lineage-only period may serve as the R3 predecessor observation but never
--- generates a requirement or enters packet completeness.
 create table reporting_period (
     id            text primary key,
     fund_id       text not null references fund (id),
     period_date   date not null,
     audit_scope   audit_scope not null,
     label         text not null,
-    unique (fund_id, period_date)
+    unique (fund_id, period_date),
+    -- Lets children carry audit_scope and bind it by FK, so a lineage-only
+    -- period cannot acquire packet-shaped state.
+    unique (id, audit_scope)
 );
 
 -- ── Source artifacts and claims ──────────────────────────────────────────
 -- INV-15 · transport ≠ authority, and authority lives on the CLAIM.
--- One physical artifact may carry several claims of differing authority: an
--- administrator statement arriving by email is an administrator statement, not
--- a company communication. Storing source_class on the file would let a whole
--- PDF lend its strongest class to every fact extracted from it.
 create table source_file (
     id            text primary key,
     filename      text not null,
@@ -160,16 +155,14 @@ create table claim (
     id                   text primary key,
     document_version_id  text not null references document_version (id),
     holding_id           text not null references holding (id),
-    claim_key            text not null,     -- e.g. dream/series_b_price
+    claim_key            text not null,
     source_class         source_class not null,
     execution_status     execution_status not null,
     -- INV-3: three distinct instants, never one `date` column.
     issued_date          date not null,
     as_of_date           date,
     received_date        date,
-    -- INV-16: the source-stated reliance window. Capsule's memo forbids later
-    -- reliance; without this the memo can be re-linked to a later date with
-    -- every date field correct and still be invalid.
+    -- INV-16: the source-stated reliance window.
     applicable_from      date not null,
     applicable_to        date,
     priced_class         text,
@@ -185,9 +178,10 @@ create table claim (
 
 create index claim_lookup_idx on claim (holding_id, claim_key, applicable_from);
 
--- Document gaps are OBSERVATIONS, not permanent properties (INV-12).
--- A with_counsel document can later be retrieved, so current remediation state
--- is tracked separately from the immutable observation.
+-- INV-12 · a gap OBSERVATION is immutable; remediation is a separate history.
+-- Overwriting kind='with_counsel' to 'not_located' is the cheapest collapse of
+-- this invariant, so the observation is append-only and progress is recorded as
+-- new remediation rows.
 create table document_gap (
     id               bigserial primary key,
     holding_id       text not null references holding (id),
@@ -199,15 +193,21 @@ create table document_gap (
     observed_at      timestamptz not null default now()
 );
 
+create table document_gap_remediation (
+    id          bigserial primary key,
+    gap_id      bigint not null references document_gap (id),
+    state       gap_remediation not null,
+    note        text,
+    recorded_at timestamptz not null default now()
+);
+
 -- ── Marks ────────────────────────────────────────────────────────────────
 -- INV-5 · a mark at a new date is a NEW assertion.
--- Keyed (holding, period) with no carry-forward write path. Re-using a source
--- document across dates is legitimate; re-using an assessment is not.
---
 -- INV-13 · reported ≠ validated ≠ supported.
--- Three orthogonal facts that must never share a field. Because Market's
--- arithmetic reproduces perfectly from the tracker and is still not derivable:
--- reproducible arithmetic is not evidentiary support.
+--
+-- Marks are append-only: a correction is a new revision, never an edit. The
+-- first schema allowed UPDATE, which let an approved mark be rewritten to any
+-- figure while its approval row still read `approved`.
 create table mark (
     id                  bigserial primary key,
     holding_id          text not null references holding (id),
@@ -220,75 +220,103 @@ create table mark (
     derivation_status   derivation_status not null,
     derivation_reason   text not null,
     basis               valuation_basis,
+    -- INV-17: set when this mark prices one security class off another's
+    -- evidence, which requires a cited policy decision before approval.
+    cross_class         boolean not null default false,
     created_at          timestamptz not null default now(),
     unique (holding_id, period_id, revision),
+    -- Lets assessments bind holding and period by FK rather than by convention.
+    unique (id, holding_id, period_id),
     constraint mark_validated_currency_together
         check ((validated_amount is null) = (validated_currency is null)),
-    -- A derivable mark must actually carry the derived amount.
     constraint mark_derivable_has_amount
         check (derivation_status <> 'derivable' or validated_amount is not null)
 );
 
 -- ── Evidence and requirements ────────────────────────────────────────────
-
+-- INV-20: a requirement may only exist for a packet-scope period.
 create table pbc_requirement (
     id           bigserial primary key,
     holding_id   text not null references holding (id),
     period_id    text not null references reporting_period (id),
+    audit_scope  audit_scope not null default 'packet',
     requirement  requirement_code not null,
     applicable   boolean not null,
-    unique (holding_id, period_id, requirement)
+    unique (holding_id, period_id, requirement),
+    unique (id, holding_id, period_id),
+    constraint requirement_is_packet_scope check (audit_scope = 'packet'),
+    foreign key (period_id, audit_scope)
+        references reporting_period (id, audit_scope)
 );
 
--- INV-5: every mark revision requires its OWN dated assessment. An assessment
--- is never inherited from a prior period.
+-- INV-5: every mark revision requires its OWN dated assessment.
+-- holding_id and period_id are carried so both parents can be bound by FK: an
+-- assessment for a 2025 requirement could otherwise be attached to a 2024 mark
+-- with nothing objecting.
 create table evidence_assessment (
     id              bigserial primary key,
-    requirement_id  bigint not null references pbc_requirement (id),
-    mark_id         bigint not null references mark (id),
+    requirement_id  bigint not null,
+    mark_id         bigint not null,
+    holding_id      text not null,
+    period_id       text not null,
     revision        int not null default 1,
     verdict         requirement_verdict not null,
     reason_codes    text[] not null default '{}',
     next_actions    text[] not null default '{}',
+    -- INV-4 · a derived pro-forma judgement ≠ the label the tracker carried.
+    -- Stored side by side so a disagreement is data rather than an overwrite.
+    pro_forma       boolean not null default false,
+    tracker_label   text,
     policy_version  text not null,
     assessed_at     timestamptz not null default now(),
-    unique (requirement_id, mark_id, revision)
+    unique (requirement_id, mark_id, revision),
+    unique (id, mark_id),
+    foreign key (requirement_id, holding_id, period_id)
+        references pbc_requirement (id, holding_id, period_id),
+    foreign key (mark_id, holding_id, period_id)
+        references mark (id, holding_id, period_id)
 );
 
 create table evidence_link (
     assessment_id  bigint not null references evidence_assessment (id),
     claim_id       text not null references claim (id),
     -- INV-3: set when the evidence post-dates the measurement date. Legitimate,
-    -- but it must be labelled rather than presented as contemporaneous.
+    -- but it must be labelled rather than presented as contemporaneous. The
+    -- value is verified against the dates by trigger, not trusted.
     is_subsequent  boolean not null default false,
     primary key (assessment_id, claim_id)
 );
 
 -- ── Facts: candidate → canonical → approved ──────────────────────────────
 -- INV-14 · candidate extraction ≠ canonical fact ≠ approved assertion.
--- The product promise is "AI proposes, human disposes". Enforced by FK
--- direction and a state column, not by application convention: a schema-valid,
--- perfectly cited candidate still cannot reach a packet before promotion.
+-- "AI proposes, human disposes" is enforced by FK direction and state, not by
+-- application convention. The promoting decision must be an APPROVED
+-- TRANSCRIPTION — the first schema accepted any decision at all, including a
+-- rejected packet decision.
 create table extracted_fact (
-    id              bigserial primary key,
-    claim_id        text not null references claim (id),
-    state           fact_state not null default 'candidate',
-    field_name      text not null,
-    value_text      text not null,
-    value_numeric   numeric(20, 6),
+    id                 bigserial primary key,
+    claim_id           text not null references claim (id),
+    state              fact_state not null default 'candidate',
+    field_name         text not null,
+    value_text         text not null,
+    value_numeric      numeric(20, 6),
     -- INV-8: a source fact resolves VERBATIM to an immutable version.
-    citation_quote  text not null,
-    span_start      int not null,
-    span_end        int not null,
-    promoted_by     bigint,                 -- FK added after decision table
+    citation_quote     text not null,
+    span_start         int not null,
+    span_end           int not null,
+    promoted_by        bigint,              -- composite FK added below
+    promoted_by_type   decision_type,
+    promoted_by_status decision_status,
+    unique (id, state),
     constraint fact_span_ordered check (span_end > span_start),
     constraint fact_promoted_requires_decision
-        check (state = 'candidate' or promoted_by is not null)
+        check (state = 'candidate' or promoted_by is not null),
+    constraint fact_promoter_is_approved_transcription
+        check (promoted_by is null
+               or (promoted_by_type = 'transcription' and promoted_by_status = 'approved'))
 );
 
 -- INV-8 · source fact ≠ derived figure.
--- A computed total appears verbatim in no document. Derived figures resolve
--- through a typed computation whose complete leaf set is cited source facts.
 create table derived_figure (
     id           bigserial primary key,
     label        text not null,
@@ -298,64 +326,104 @@ create table derived_figure (
     unit         text not null
 );
 
+-- A derived figure may not rest on an unpromoted candidate: that is the path by
+-- which an AI-proposed number becomes a validated mark without human disposal.
 create table derived_figure_input (
     figure_id   bigint not null references derived_figure (id),
-    fact_id     bigint references extracted_fact (id),
+    fact_id     bigint,
+    fact_state  fact_state,
     child_id    bigint references derived_figure (id),
     ordinal     int not null,
     primary key (figure_id, ordinal),
-    -- Every leaf is either a cited fact or another derived figure. Never neither.
     constraint input_exactly_one_source
-        check ((fact_id is null) <> (child_id is null))
+        check ((fact_id is null) <> (child_id is null)),
+    constraint input_fact_is_promoted
+        check (fact_id is null or fact_state <> 'candidate'),
+    foreign key (fact_id, fact_state) references extracted_fact (id, state)
+);
+
+-- ── Policy decisions ─────────────────────────────────────────────────────
+-- INV-17 · pricing one class off another's evidence is a POLICY act that must
+-- be cited, not an arithmetic convenience.
+create table valuation_policy_decision (
+    id             bigserial primary key,
+    holding_id     text not null references holding (id),
+    period_id      text not null references reporting_period (id),
+    from_class     text not null,
+    to_class       text not null,
+    rationale      text not null,
+    citation_quote text not null,
+    policy_version text not null,
+    decided_at     timestamptz not null default now()
 );
 
 -- ── Decisions ────────────────────────────────────────────────────────────
 -- INV-18 · independent state machines never share authorization semantics.
--- SPEC §6.3: four typed decisions, none implying another. Approving a faithful
--- transcription is not approving a fair value — without that split the packet
--- must either hide an unsupported figure or bless it.
---
 -- INV-10 · approval binds an immutable input AND policy snapshot.
--- The fingerprint covers mark revision, evidence set and policy version, so an
--- approval cannot survive a change to any constituent.
+--
+-- mark_id is a foreign key to the exact immutable mark revision approved. The
+-- previous `mark_revision text` column could hold '1', 'deadbeef' or anything
+-- else and satisfied the constraint, so the approval bound nothing.
 create table review_decision (
     id                bigint generated always as identity primary key,
     decision_type     decision_type not null,
     status            decision_status not null,
     subject_kind      text not null,
     subject_id        text not null,
-    mark_revision     text,
-    evidence_set_hash text,
+    mark_id           bigint references mark (id),
+    packet_id         text,
     policy_version    text,
     actor_id          text not null,
     decided_at        timestamptz not null default now(),
     notes             text,
-    -- A valuation approval is meaningless without its full identity.
-    constraint valuation_approval_fully_fingerprinted
-        check (
-            decision_type <> 'valuation'
-            or status <> 'approved'
-            or (mark_revision is not null
-                and evidence_set_hash is not null
-                and policy_version is not null)
-        )
+    unique (id, decision_type, status),
+    -- SPEC §6.3: a valuation approval binds mark revision, evidence set and
+    -- policy version. The evidence set is enforced by trigger below because it
+    -- is a set, not a column.
+    constraint valuation_approval_binds_mark
+        check (decision_type <> 'valuation' or status <> 'approved'
+               or (mark_id is not null and policy_version is not null)),
+    -- SPEC §6.3 / V12: a management assessment closes R3 only when bound to the
+    -- mark revision it assessed. Previously unconstrained entirely.
+    constraint management_assessment_binds_mark
+        check (decision_type <> 'management_assessment' or status <> 'approved'
+               or (mark_id is not null and policy_version is not null)),
+    constraint packet_decision_binds_packet
+        check (decision_type <> 'packet' or status <> 'approved'
+               or (packet_id is not null and policy_version is not null))
+);
+
+-- The evidence set an approval covers, by FK to immutable assessment rows.
+create table decision_evidence (
+    decision_id   bigint not null references review_decision (id),
+    assessment_id bigint not null references evidence_assessment (id),
+    primary key (decision_id, assessment_id)
 );
 
 alter table extracted_fact
     add constraint fact_promoted_by_fk
-    foreign key (promoted_by) references review_decision (id);
+    foreign key (promoted_by, promoted_by_type, promoted_by_status)
+    references review_decision (id, decision_type, status);
 
 -- ── Packets ──────────────────────────────────────────────────────────────
+-- INV-20: a lineage-only period never enters packet completeness.
 create table packet_version (
     id             text primary key,
     fund_id        text not null references fund (id),
     period_id      text not null references reporting_period (id),
+    audit_scope    audit_scope not null default 'packet',
     state          text not null,
     schema_version text not null,
     policy_version text not null,
     generator_ref  text not null,
-    created_at     timestamptz not null default now()
+    created_at     timestamptz not null default now(),
+    constraint packet_is_packet_scope check (audit_scope = 'packet'),
+    foreign key (period_id, audit_scope)
+        references reporting_period (id, audit_scope)
 );
+
+alter table review_decision
+    add constraint decision_packet_fk foreign key (packet_id) references packet_version (id);
 
 create table packet_manifest_entry (
     packet_id    text not null references packet_version (id),
@@ -388,6 +456,10 @@ create table workflow_event (
 -- INV-10 and INV-14 are only real if the database refuses the mutation.
 -- Revoking privileges alone is insufficient: the owner role bypasses grants,
 -- so these are triggers.
+--
+-- Every constituent of an approval fingerprint appears here. If any one of them
+-- stayed mutable, the approval would still name a row whose contents had since
+-- changed — which is the failure this whole section exists to prevent.
 
 create or replace function reject_mutation() returns trigger
 language plpgsql as $$
@@ -398,22 +470,105 @@ begin
 end;
 $$;
 
-create trigger review_decision_append_only
-    before update or delete on review_decision
-    for each row execute function reject_mutation();
+do $$
+declare t text;
+begin
+    foreach t in array array[
+        'lot', 'lot_conversion', 'source_file', 'document_version', 'claim',
+        'document_gap', 'mark', 'evidence_assessment', 'evidence_link',
+        'extracted_fact', 'derived_figure', 'derived_figure_input',
+        'valuation_policy_decision', 'review_decision', 'decision_evidence',
+        'packet_manifest_entry', 'workflow_event'
+    ] loop
+        execute format(
+            'create trigger %I_append_only before update or delete on %I'
+            ' for each row execute function reject_mutation()', t, t);
+    end loop;
+end;
+$$;
 
-create trigger workflow_event_append_only
-    before update or delete on workflow_event
-    for each row execute function reject_mutation();
+-- ── Cross-row invariants that a CHECK cannot express ─────────────────────
 
--- INV-7: lots are immutable, so held-at-date can never be rewritten under a
--- previously approved mark.
-create trigger lot_immutable
-    before update or delete on lot
-    for each row execute function reject_mutation();
+-- INV-10: an approved valuation must name the evidence set it approved.
+-- Deferred, because the bridge rows are written after the decision row.
+create or replace function require_evidence_set() returns trigger
+language plpgsql as $$
+begin
+    if new.decision_type = 'valuation' and new.status = 'approved'
+       and not exists (select 1 from decision_evidence d where d.decision_id = new.id)
+    then
+        raise exception
+            'INV-10: valuation approval % names no evidence set', new.id;
+    end if;
+    return null;
+end;
+$$;
 
-create trigger packet_manifest_immutable
-    before update or delete on packet_manifest_entry
-    for each row execute function reject_mutation();
+create constraint trigger valuation_approval_names_evidence
+    after insert on review_decision
+    deferrable initially deferred
+    for each row execute function require_evidence_set();
+
+-- INV-17: a cross-class mark cannot be approved without a cited policy decision.
+create or replace function require_cross_class_policy() returns trigger
+language plpgsql as $$
+declare m mark%rowtype;
+begin
+    if new.decision_type <> 'valuation' or new.status <> 'approved' then
+        return null;
+    end if;
+    select * into m from mark where id = new.mark_id;
+    if m.cross_class and not exists (
+        select 1 from valuation_policy_decision p
+         where p.holding_id = m.holding_id and p.period_id = m.period_id)
+    then
+        raise exception
+            'INV-17: mark % prices across security classes with no cited policy decision',
+            m.id;
+    end if;
+    return null;
+end;
+$$;
+
+create constraint trigger valuation_approval_needs_class_policy
+    after insert on review_decision
+    deferrable initially deferred
+    for each row execute function require_cross_class_policy();
+
+-- INV-16 / INV-3: a claim may only be linked where it is applicable, and
+-- is_subsequent must agree with the dates rather than being asserted.
+create or replace function check_link_applicability() returns trigger
+language plpgsql as $$
+declare
+    measured date;
+    c        claim%rowtype;
+begin
+    select rp.period_date into measured
+      from evidence_assessment ea
+      join mark m           on m.id  = ea.mark_id
+      join reporting_period rp on rp.id = m.period_id
+     where ea.id = new.assessment_id;
+
+    select * into c from claim where id = new.claim_id;
+
+    if measured < c.applicable_from
+       or (c.applicable_to is not null and measured > c.applicable_to) then
+        raise exception
+            'INV-16: claim % is not applicable at % (window % .. %)',
+            c.id, measured, c.applicable_from, coalesce(c.applicable_to::text, 'open');
+    end if;
+
+    if new.is_subsequent <> (c.issued_date > measured) then
+        raise exception
+            'INV-3: is_subsequent must equal (issued_date > measurement date) for claim % at %',
+            c.id, measured;
+    end if;
+    return new;
+end;
+$$;
+
+create trigger evidence_link_applicability
+    before insert on evidence_link
+    for each row execute function check_link_applicability();
 
 commit;

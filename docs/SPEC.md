@@ -202,7 +202,9 @@ INV-17); marks carry `reported_amount` **and** `validated_amount` separately
 computation lineage (INV-8).
 
 Money is `NUMERIC` with declared scale and a currency column; shares are
-`BIGINT` (INV-11).
+`NUMERIC` with a whole-number CHECK (INV-11) — **[r5] corrected, was `BIGINT`**.
+`BIGINT` coerces: Postgres accepts `100.5` and silently stores `101`. A
+fractional share count must be *rejected*, and a type that rounds cannot reject.
 
 ### 6.1 Attribute ownership — **[r2] corrected**
 
@@ -437,7 +439,8 @@ from this vocabulary; it is now declared.
 
 **[r3] Decimal policy — was deferred in r2, now specified.** Canonical amounts
 are stored unrounded at declared field scale: money `NUMERIC(20,4)`, PPS
-`NUMERIC(20,6)`, FX rates `NUMERIC(20,8)`, shares `BIGINT`. Python `Decimal`
+`NUMERIC(20,6)`, FX rates `NUMERIC(20,8)`, shares `NUMERIC(24,6)` constrained to
+whole numbers — **[r5]**, see §6. Python `Decimal`
 context: precision 34, trap on `Inexact` disabled, **`ROUND_HALF_EVEN`**.
 Operation order for `shares × PPS` is a single multiply with no intermediate
 rounding. Quantisation to currency minor units happens at exactly one point —
@@ -630,6 +633,7 @@ would trigger building it."*
 | Market calendar, splits, timezones (#19, #22) | corpus quotes are already dated to trading days; no splits occurred | a quote must be selected rather than read |
 | Fractional shares | `FRACTIONAL_SHARE_UNSUPPORTED` — a rejection, not a rounding rule | cash-in-lieu or fractional interests enter the data |
 | Latency ceilings (#43) | quality floors and cost tie-break only | the demo is latency-bound |
+| **[r5]** FX rate entity | no rate table. INV-6 goes red at the **policy** layer: an FX-denominated mark with no rate observed at the measurement date is `not_derivable`, and the schema cannot contradict that because it stores no rate at all | a second FX position, or an FX mark that must be *derivable* rather than honestly unsupported |
 
 **Not cut, and not negotiable:** reported vs validated amount · source fact vs
 derived figure · held-at-date lot/event logic · per-requirement verdicts and
