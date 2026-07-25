@@ -140,7 +140,6 @@ DREAM_MARK = Mark(
 DREAM_ASSESSMENTS = [
     RequirementAssessment(
         requirement=RequirementCode.R1,
-        applicable=True,
         verdict=RequirementVerdict.MISSING,
         reason_codes=["ACQUISITION_DOCS_NOT_LOCATED"],
         next_actions=["REQUEST_FROM_COMPANY"],
@@ -148,7 +147,6 @@ DREAM_ASSESSMENTS = [
     ),
     RequirementAssessment(
         requirement=RequirementCode.R2,
-        applicable=True,
         verdict=RequirementVerdict.PARTIAL,
         reason_codes=[
             "CLOSING_SET_PENDING",
@@ -167,7 +165,6 @@ DREAM_ASSESSMENTS = [
     # of an unchanged mark is a different question that does not arise here.
     RequirementAssessment(
         requirement=RequirementCode.R3,
-        applicable=False,
         verdict=RequirementVerdict.NOT_APPLICABLE,
         reason_codes=["VALUE_CHANGED_SINCE_2025-09-30"],
         policy_version="v1",
@@ -175,7 +172,6 @@ DREAM_ASSESSMENTS = [
     # R4 is realisation support; nothing was realised.
     RequirementAssessment(
         requirement=RequirementCode.R4,
-        applicable=False,
         verdict=RequirementVerdict.NOT_APPLICABLE,
         reason_codes=["NO_REALISATION_IN_PERIOD"],
         policy_version="v1",
@@ -186,7 +182,6 @@ DREAM_ASSESSMENTS = [
     # on a row whose overall verdict is `missing`.
     RequirementAssessment(
         requirement=RequirementCode.R5,
-        applicable=True,
         verdict=RequirementVerdict.SUFFICIENT,
         reason_codes=[],
         policy_version="v1",

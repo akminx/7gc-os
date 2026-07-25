@@ -85,8 +85,8 @@ create table lot (
     -- silent-rounding behaviour SPEC V13 forbids. `numeric` preserves the
     -- fractional value long enough for the check to refuse it.
     shares          numeric(24, 6),
-    entry_pps       numeric(20, 6),
-    cost_amount     numeric(20, 4) not null,
+    entry_pps       numeric(26, 12),
+    cost_amount     numeric(26, 12) not null,
     cost_currency   char(3) not null,
     acquired_date   date not null,
     realized_date   date,
@@ -97,7 +97,11 @@ create table lot (
     constraint lot_shares_non_negative
         check (shares is null or shares >= 0),
     constraint lot_shares_whole
-        check (shares is null or shares = trunc(shares))
+        check (shares is null or shares = trunc(shares)),
+    constraint lot_entry_pps_scale
+        check (entry_pps is null or entry_pps = trunc(entry_pps, 6)),
+    constraint lot_cost_amount_scale
+        check (cost_amount is null or cost_amount = trunc(cost_amount, 4))
 );
 
 create index lot_holding_dates_idx on lot (holding_id, acquired_date, realized_date);
@@ -109,11 +113,13 @@ create table lot_conversion (
     effective_date     date not null,
     to_security_class  text not null,
     to_shares          numeric(24, 6) not null,
-    exchange_ratio     numeric(20, 8) not null,
+    exchange_ratio     numeric(26, 14) not null,
     constraint conversion_shares_positive check (to_shares > 0),
     -- Sway's 800,000 x 1.09375 = 875,000 exactly. A ratio producing a
     -- fractional result fails rather than rounding into a plausible number.
-    constraint conversion_shares_whole check (to_shares = trunc(to_shares))
+    constraint conversion_shares_whole check (to_shares = trunc(to_shares)),
+    constraint lot_conversion_exchange_ratio_scale
+        check (exchange_ratio is null or exchange_ratio = trunc(exchange_ratio, 8))
 );
 
 -- ── Periods ──────────────────────────────────────────────────────────────
@@ -166,14 +172,18 @@ create table claim (
     applicable_from      date not null,
     applicable_to        date,
     priced_class         text,
-    price_per_share      numeric(20, 6),
-    stated_amount        numeric(20, 4),
+    price_per_share      numeric(26, 12),
+    stated_amount        numeric(26, 12),
     stated_currency      char(3),
     supersedes_claim_id  text references claim (id),
     constraint claim_window_ordered
         check (applicable_to is null or applicable_to >= applicable_from),
     constraint claim_amount_currency_together
-        check ((stated_amount is null) = (stated_currency is null))
+        check ((stated_amount is null) = (stated_currency is null)),
+    constraint claim_price_per_share_scale
+        check (price_per_share is null or price_per_share = trunc(price_per_share, 6)),
+    constraint claim_stated_amount_scale
+        check (stated_amount is null or stated_amount = trunc(stated_amount, 4))
 );
 
 create index claim_lookup_idx on claim (holding_id, claim_key, applicable_from);
@@ -213,9 +223,9 @@ create table mark (
     holding_id          text not null references holding (id),
     period_id           text not null references reporting_period (id),
     revision            int not null default 1,
-    reported_amount     numeric(20, 4) not null,
+    reported_amount     numeric(26, 12) not null,
     reported_currency   char(3) not null,
-    validated_amount    numeric(20, 4),
+    validated_amount    numeric(26, 12),
     validated_currency  char(3),
     derivation_status   derivation_status not null,
     derivation_reason   text not null,
@@ -227,7 +237,11 @@ create table mark (
     constraint mark_validated_currency_together
         check ((validated_amount is null) = (validated_currency is null)),
     constraint mark_derivable_has_amount
-        check (derivation_status <> 'derivable' or validated_amount is not null)
+        check (derivation_status <> 'derivable' or validated_amount is not null),
+    constraint mark_reported_amount_scale
+        check (reported_amount is null or reported_amount = trunc(reported_amount, 4)),
+    constraint mark_validated_amount_scale
+        check (validated_amount is null or validated_amount = trunc(validated_amount, 4))
 );
 
 -- ── Evidence and requirements ────────────────────────────────────────────
@@ -296,7 +310,7 @@ create table extracted_fact (
     state              fact_state not null default 'candidate',
     field_name         text not null,
     value_text         text not null,
-    value_numeric      numeric(20, 6),
+    value_numeric      numeric(26, 12),
     -- INV-8: a source fact resolves VERBATIM to an immutable version.
     citation_quote     text not null,
     span_start         int not null,
@@ -317,7 +331,9 @@ create table extracted_fact (
         check (num_nulls(promoted_by, promoted_by_type, promoted_by_status) in (0, 3)),
     constraint fact_promoter_is_approved_transcription
         check (promoted_by is null
-               or (promoted_by_type = 'transcription' and promoted_by_status = 'approved'))
+               or (promoted_by_type = 'transcription' and promoted_by_status = 'approved')),
+    constraint extracted_fact_value_numeric_scale
+        check (value_numeric is null or value_numeric = trunc(value_numeric, 6))
 );
 
 -- INV-8 · source fact ≠ derived figure.
@@ -325,9 +341,11 @@ create table derived_figure (
     id           bigserial primary key,
     label        text not null,
     operator     text not null,
-    amount       numeric(20, 4) not null,
+    amount       numeric(26, 12) not null,
     currency     char(3) not null,
-    unit         text not null
+    unit         text not null,
+    constraint derived_figure_amount_scale
+        check (amount is null or amount = trunc(amount, 4))
 );
 
 -- A derived figure may not rest on an unpromoted candidate: that is the path by

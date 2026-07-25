@@ -249,12 +249,21 @@ class EvidenceCitation(Contract):
 class RequirementAssessment(Contract):
     """INV-2 · a per-requirement verdict, from a closed vocabulary.
 
+    **Applicability is the verdict, not a field beside it.** The first version
+    carried `applicable: bool` *and* `verdict`, which is fourteen combinations of
+    which six are nonsense, guarded by validators I twice wrote incorrectly — the
+    worst let R1 be marked inapplicable, which made a holding with no
+    existence-and-cost evidence read as fully supported.
+
+    Removing the field removes the contradiction rather than forbidding it: there
+    is now exactly one place applicability is expressed, so nothing can disagree
+    with it.
+
     `reason_codes` is not decoration: a `partial` with no reason is an assertion
     the auditor cannot act on.
     """
 
     requirement: RequirementCode
-    applicable: bool
     verdict: RequirementVerdict
     reason_codes: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
@@ -262,6 +271,10 @@ class RequirementAssessment(Contract):
     pro_forma: bool = False
     tracker_label: str | None = None
     policy_version: str
+
+    @property
+    def applicable(self) -> bool:
+        return self.verdict is not RequirementVerdict.NOT_APPLICABLE
 
     @model_validator(mode="after")
     def _adverse_verdicts_state_a_reason(self) -> RequirementAssessment:
@@ -276,20 +289,11 @@ class RequirementAssessment(Contract):
         return self
 
     @model_validator(mode="after")
-    def _applicability_and_verdict_agree(self) -> RequirementAssessment:
-        """SPEC §6.2.1 · applicability and verdict are distinct facts, but not
-        every pairing is coherent. A reducer trusting either field alone
-        mis-classifies support when they disagree."""
-        if self.applicable and self.verdict is RequirementVerdict.NOT_APPLICABLE:
-            raise ValueError("an applicable requirement cannot be verdict not_applicable")
-        if not self.applicable and self.verdict is not RequirementVerdict.NOT_APPLICABLE:
+    def _always_applicable_codes_are_never_inapplicable(self) -> RequirementAssessment:
+        """SPEC 7.1 · R1 and R2 apply to every holding at every date."""
+        if self.requirement in ALWAYS_APPLICABLE and not self.applicable:
             raise ValueError(
-                f"an inapplicable requirement must be verdict not_applicable; got {self.verdict}"
-            )
-        if not self.applicable and self.requirement in ALWAYS_APPLICABLE:
-            raise ValueError(
-                f"{self.requirement} is always applicable (SPEC 7.1) and cannot be marked "
-                "inapplicable; doing so would exclude it from the support test"
+                f"{self.requirement} is always applicable and cannot be not_applicable"
             )
         return self
 
@@ -422,41 +426,39 @@ class HoldingRow(Contract):
     approval: Approval | None = None
 
     @property
-    def supported(self) -> bool:
-        """SPEC §7.1–7.2 · every applicable requirement is `sufficient`.
+    def unsupported_reasons(self) -> dict[RequirementCode, str]:
+        """Why this row is not supported, keyed by requirement. Empty means it is.
 
-        The subtlety that made the first version wrong: "every requirement in
-        the list" is not "every applicable requirement". R1 and R2 are ALWAYS
-        applicable, so a row carrying only a sufficient R1 — with R2 simply
-        absent — read as supported and dropped out of `unsupported_total`. An
-        under-assessed mark presenting as clean is the same auditor-facing lie
-        as an over-stated verdict, arriving by omission instead.
-
-        A missing always-applicable assessment therefore means unsupported, not
-        "nothing to object to".
+        `supported` is defined FROM this, so the flag and the explanation cannot
+        drift apart — a previous version computed them separately and they
+        disagreed about a requirement that was present but inapplicable.
         """
         by_code = {a.requirement: a for a in self.assessments}
-        for code in ALWAYS_APPLICABLE:
+        reasons: dict[RequirementCode, str] = {}
+        # R1 and R2 must each be present, applicable, and sufficient. Checking
+        # all three together is what the two earlier versions got wrong: one
+        # tested presence alone, the next skipped anything marked inapplicable.
+        for code in sorted(ALWAYS_APPLICABLE):
             got = by_code.get(code)
-            # Present-but-inapplicable was the second version's hole: the code
-            # appeared, so a presence check passed, while the applicable filter
-            # skipped it and nothing ever tested its verdict.
-            if got is None or not got.applicable:
-                return False
-        applicable = [a for a in self.assessments if a.applicable]
-        return bool(applicable) and all(
-            a.verdict is RequirementVerdict.SUFFICIENT for a in applicable
-        )
+            if got is None:
+                reasons[code] = "not assessed"
+            elif got.verdict is not RequirementVerdict.SUFFICIENT:
+                # Covers not_applicable too: an always-applicable requirement
+                # marked N/A is not sufficient, so it lands here. A separate
+                # branch for it was redundant — mutation testing showed removing
+                # it changed nothing, which is the signal to delete rather than
+                # to write a test for it.
+                reasons[code] = got.verdict.value
+        for a in self.assessments:
+            if a.applicable and a.verdict is not RequirementVerdict.SUFFICIENT:
+                reasons.setdefault(a.requirement, a.verdict.value)
+        return reasons
 
     @property
-    def unassessed_requirements(self) -> set[RequirementCode]:
-        """Named so a caller can say *why* a row is unsupported.
-
-        Counts a requirement as unassessed when it is absent OR present but not
-        actually applied, so this can never disagree with `supported`.
-        """
-        assessed = {a.requirement for a in self.assessments if a.applicable}
-        return set(ALWAYS_APPLICABLE) - assessed
+    def supported(self) -> bool:
+        """SPEC 7.1-7.2 · every applicable requirement is sufficient, and the
+        always-applicable ones were actually assessed."""
+        return not self.unsupported_reasons
 
     @property
     def approved(self) -> bool:

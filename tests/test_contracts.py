@@ -60,7 +60,6 @@ def _assessment(code: RequirementCode, verdict: RequirementVerdict) -> Requireme
     adverse = verdict is not RequirementVerdict.SUFFICIENT
     return RequirementAssessment(
         requirement=code,
-        applicable=True,
         verdict=verdict,
         reason_codes=["X"] if adverse else [],
         policy_version="v1",
@@ -136,13 +135,13 @@ def test_a_row_missing_an_always_applicable_requirement_is_not_supported() -> No
     dropping an under-assessed mark out of the unsupported subtotal."""
     row = _row([_assessment(RequirementCode.R1, RequirementVerdict.SUFFICIENT)])
     assert row.supported is False
-    assert row.unassessed_requirements == {RequirementCode.R2}
+    assert set(row.unsupported_reasons) == {RequirementCode.R2}
 
 
 def test_a_row_with_every_always_applicable_requirement_sufficient_is_supported() -> None:
     row = _row([_assessment(c, RequirementVerdict.SUFFICIENT) for c in sorted(ALWAYS_APPLICABLE)])
     assert row.supported is True
-    assert row.unassessed_requirements == set()
+    assert row.unsupported_reasons == {}
 
 
 def test_one_adverse_verdict_makes_a_row_unsupported() -> None:
@@ -163,27 +162,29 @@ def test_adverse_verdicts_must_carry_a_reason_code() -> None:
     with pytest.raises(ValidationError, match="at least one reason code"):
         RequirementAssessment(
             requirement=RequirementCode.R2,
-            applicable=True,
             verdict=RequirementVerdict.PARTIAL,
             policy_version="v1",
         )
 
 
-def test_applicability_and_verdict_cannot_contradict() -> None:
-    with pytest.raises(ValidationError, match="cannot be verdict not_applicable"):
+def test_an_always_applicable_code_cannot_be_not_applicable() -> None:
+    """The contradiction that used to need a validator pair is now expressed in
+    one field, so only this rule remains."""
+    with pytest.raises(ValidationError, match="always applicable"):
         RequirementAssessment(
-            requirement=RequirementCode.R3,
-            applicable=True,
+            requirement=RequirementCode.R1,
             verdict=RequirementVerdict.NOT_APPLICABLE,
             policy_version="v1",
         )
-    with pytest.raises(ValidationError, match="must be verdict not_applicable"):
-        RequirementAssessment(
-            requirement=RequirementCode.R3,
-            applicable=False,
-            verdict=RequirementVerdict.SUFFICIENT,
-            policy_version="v1",
-        )
+
+
+def test_a_conditional_requirement_may_be_not_applicable() -> None:
+    a = RequirementAssessment(
+        requirement=RequirementCode.R4,
+        verdict=RequirementVerdict.NOT_APPLICABLE,
+        policy_version="v1",
+    )
+    assert a.applicable is False
 
 
 # ── INV-19 · a total states what it is a total of ────────────────────────
@@ -261,7 +262,6 @@ def test_an_always_applicable_requirement_cannot_be_marked_inapplicable() -> Non
     with pytest.raises(ValidationError, match="always applicable"):
         RequirementAssessment(
             requirement=RequirementCode.R1,
-            applicable=False,
             verdict=RequirementVerdict.NOT_APPLICABLE,
             policy_version="v1",
         )
@@ -278,7 +278,6 @@ def test_supported_requires_applicability_not_mere_presence() -> None:
     """
     r1_na = RequirementAssessment.model_construct(
         requirement=RequirementCode.R1,
-        applicable=False,
         verdict=RequirementVerdict.NOT_APPLICABLE,
         reason_codes=[],
         next_actions=[],
@@ -302,7 +301,7 @@ def test_supported_requires_applicability_not_mere_presence() -> None:
         approval=None,
     )
     assert row.supported is False
-    assert RequirementCode.R1 in row.unassessed_requirements
+    assert RequirementCode.R1 in row.unsupported_reasons
 
 
 def test_model_copy_cannot_smuggle_a_float_into_money() -> None:
@@ -329,3 +328,50 @@ def test_model_copy_without_updates_still_works() -> None:
     m = _usd("1000")
     assert m.model_copy() == m
     assert m.model_copy(update={"amount": Decimal("2000")}).amount == Decimal("2000")
+
+
+def test_supported_and_its_reasons_cannot_disagree() -> None:
+    """Both derive from one function now. A previous version computed them
+    separately and they disagreed about a present-but-inapplicable requirement.
+
+    `model_construct` bypasses the validator on purpose: the predicate must be
+    correct on its own, not merely unreachable.
+    """
+    r1_na = RequirementAssessment.model_construct(
+        requirement=RequirementCode.R1,
+        verdict=RequirementVerdict.NOT_APPLICABLE,
+        reason_codes=[],
+        next_actions=[],
+        evidence=[],
+        pro_forma=False,
+        tracker_label=None,
+        policy_version="v1",
+    )
+    row = HoldingRow.model_construct(
+        holding_id="h",
+        company_name="Test Co",
+        position_type=PositionType.DIRECT_EQUITY,
+        mark=_mark(),
+        assessments=[r1_na, _assessment(RequirementCode.R2, RequirementVerdict.SUFFICIENT)],
+        gaps=[],
+        approval=None,
+    )
+    assert row.supported is False
+    assert RequirementCode.R1 in row.unsupported_reasons
+    assert bool(row.unsupported_reasons) is not row.supported
+
+
+def test_an_adverse_conditional_requirement_also_makes_a_row_unsupported() -> None:
+    """R1 and R2 are checked by name; every OTHER applicable requirement is
+    checked by the sweep beside it. Mutation testing showed no test reached that
+    sweep — every existing case failed on R1 or R2 first, so the branch could
+    have been deleted silently."""
+    row = _row(
+        [
+            _assessment(RequirementCode.R1, RequirementVerdict.SUFFICIENT),
+            _assessment(RequirementCode.R2, RequirementVerdict.SUFFICIENT),
+            _assessment(RequirementCode.R5, RequirementVerdict.INSUFFICIENT),
+        ]
+    )
+    assert row.supported is False
+    assert row.unsupported_reasons == {RequirementCode.R5: "insufficient"}

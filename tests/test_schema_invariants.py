@@ -336,3 +336,45 @@ def test_gap_remediation_is_append_only_history(conn: Conn, seed: dict[str, str]
     assert "append-only" in rejects(
         conn, "update document_gap_remediation set state = 'received' where id = %s", (rem,)
     )
+
+
+# ── INV-11 · storage must refuse what it cannot represent exactly ────────
+def test_over_precise_money_is_rejected_not_quantised(conn: Conn, seed: dict[str, str]) -> None:
+    """`numeric(20,4)` rounded 1109.999889 to 1109.9999 with nothing objecting —
+    the same silent coercion as the old `bigint` shares column, one layer down.
+
+    A CHECK on a narrow column cannot catch this: Postgres coerces to the column
+    scale BEFORE the constraint runs, so the check only ever sees the already
+    rounded value. The column is therefore wide enough for the bad value to
+    survive to be judged, exactly as `shares` became numeric rather than bigint.
+    """
+    assert "reported_amount_scale" in rejects(
+        conn,
+        "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
+        " derivation_status, derivation_reason)"
+        " values (%s, %s, 1109.999889, 'USD', 'not_derivable', 'x')",
+        (seed["h"], seed["p"]),
+    )
+
+
+def test_money_at_its_declared_scale_is_accepted(conn: Conn, seed: dict[str, str]) -> None:
+    conn.execute(
+        "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
+        " derivation_status, derivation_reason)"
+        " values (%s, %s, 1109.9999, 'USD', 'not_derivable', 'x')",
+        (seed["h"], seed["p"]),
+    )
+    conn.rollback()
+
+
+def test_over_precise_price_per_share_is_rejected(conn: Conn, seed: dict[str, str]) -> None:
+    """PPS is declared at six places; a seventh must fail rather than round into
+    a price that was never quoted."""
+    assert "price_per_share_scale" in rejects(
+        conn,
+        "insert into claim (id, document_version_id, holding_id, claim_key, source_class,"
+        " execution_status, issued_date, applicable_from, price_per_share)"
+        " values ('overprecise', %s, %s, 'k', 'company_cap_table', 'executed',"
+        " '2025-06-30', '2025-01-01', 3.3333333)",
+        (seed["dv"], seed["h"]),
+    )
