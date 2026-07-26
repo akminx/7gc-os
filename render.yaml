@@ -27,3 +27,17 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
+      # WHICH SCHEMA THE LEDGER IS IN. Not optional, and the default is wrong
+      # for a deployment: `api.config.ledger_schema()` falls back to `public`,
+      # which is the schema the test suites seed and roll back. Unset here, the
+      # deployed API connected successfully, read `public`, and served the
+      # residue of the one schema test that must commit — a dashboard listing
+      # fund-periods named `fund_0b16fca2 / FY2025` and a 404 for the real
+      # packet.
+      #
+      # `/ready` could not catch it: SPEC §3.2 locks it to `SELECT 1`, which is
+      # exactly the right contract for "is the database reachable" and says
+      # nothing about whether the right data is in it. A reachable, wrong
+      # schema is a green health check over an empty demo.
+      - key: LEDGER_SCHEMA
+        value: demo
