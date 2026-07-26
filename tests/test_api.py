@@ -18,8 +18,9 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from api import main
+from api import main, routes
 from api.main import app
+from tests.schema_helpers import DSN
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -243,3 +244,30 @@ def test_render_monitors_readiness_not_the_diagnostic_health_route() -> None:
         r"^\s*healthCheckPath:\s*(\S+)", (ROOT / "render.yaml").read_text(), re.MULTILINE
     )
     assert declared == ["/ready"]
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_ledger_connection_never_prepares_statements() -> None:
+    """Supabase's pooler runs in TRANSACTION mode, where a statement prepared on
+    one backend session is not there on the next.
+
+    psycopg prepares a query automatically after its fifth execution. Step 3
+    made `packet()` read the claims behind every assessment, which took one
+    query past five for the first time — and every packet route began returning
+    500 in production while the whole suite stayed green, because the tests
+    connect through `MIGRATION_DATABASE_URL`, the direct session-mode
+    connection, which supports prepared statements perfectly well.
+
+    The property is asserted on the connection rather than by driving a pooled
+    request, so it holds in CI where no pooler URL exists. A test that needed
+    the pooler to fail would be a test that never runs.
+    """
+    conn = routes._connect()
+    assert conn is not None
+    try:
+        assert conn.prepare_threshold is None, (
+            "the ledger connection prepares statements; against a transaction-mode "
+            "pooler that is a 500 on every route that runs one query six times"
+        )
+    finally:
+        conn.close()

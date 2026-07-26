@@ -49,7 +49,20 @@ def _connect() -> psycopg.Connection[tuple[object, ...]] | None:
     if not url:
         return None
     try:
-        conn = psycopg.connect(url, connect_timeout=10)
+        # `prepare_threshold=None` disables psycopg's automatic prepared
+        # statements. Supabase's pooler runs in TRANSACTION mode, where a
+        # statement prepared on one backend session is not there on the next —
+        # so psycopg preparing a query after its fifth execution produced
+        # `DuplicatePreparedStatement` and a 500 on every packet route.
+        #
+        # It only appeared in production. Locally `MIGRATION_DATABASE_URL` is
+        # the direct session-mode connection, which supports prepared
+        # statements perfectly well, so the whole test suite passes and the
+        # deployed service is down. And it only appeared once Step 3 made
+        # `packet()` read the claims behind every assessment, which took the
+        # per-request execution count of one query past five for the first
+        # time.
+        conn = psycopg.connect(url, connect_timeout=10, prepare_threshold=None)
         # Identifier, not a parameter — `set search_path to %s` quotes it as a
         # string literal and silently selects nothing. Restricted to a plain
         # identifier so a stray value cannot become SQL.
