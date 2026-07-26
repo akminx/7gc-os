@@ -17,7 +17,7 @@ from __future__ import annotations
 import psycopg
 import pytest
 
-from tests.schema_helpers import DSN, Conn, make_assessment, returned_id
+from tests.schema_helpers import DSN, Conn, cite_price, make_assessment, returned_id
 from tests.test_schema_approval import approve_valuation, assess
 
 pytestmark = pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
@@ -33,9 +33,10 @@ def _price_series_c_off_series_b(
         "insert into claim (id, document_version_id, holding_id, claim_key, source_class,"
         " execution_status, issued_date, applicable_from, priced_class, price_per_share)"
         " values (%s, %s, %s, 'k', 'company_cap_table', 'executed',"
-        " '2025-06-30', '2025-01-01', 'series_c', 9.0)",
+        " '2025-06-30', '2025-01-01', 'series_c', 8.00)",
         (xclaim, seed["dv"], seed["h"]),
     )
+    cite_price(conn, xclaim)
     mid = returned_id(
         conn,
         "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
@@ -123,8 +124,8 @@ def test_only_the_fair_value_evidence_decides_which_classes_price_a_mark(
         (f"{seed['lot']}_b", seed["h"]),
     )
     for cid, cls, price in (
-        (f"{seed['cl']}_r1", "series_a", 2.0),
-        (f"{seed['cl']}_r2", "series_b", 9.0),
+        (f"{seed['cl']}_r1", "series_a", 8.00),
+        (f"{seed['cl']}_r2", "series_b", 8.00),
     ):
         conn.execute(
             "insert into claim (id, document_version_id, holding_id, claim_key, source_class,"
@@ -133,6 +134,7 @@ def test_only_the_fair_value_evidence_decides_which_classes_price_a_mark(
             " '2025-06-30', '2025-01-01', %s, %s)",
             (cid, seed["dv"], seed["h"], cid, cls, price),
         )
+        cite_price(conn, cid)
     mid = returned_id(
         conn,
         "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
@@ -171,9 +173,10 @@ def test_r2_evidence_covering_every_held_class_still_approves(
             "insert into claim (id, document_version_id, holding_id, claim_key, source_class,"
             " execution_status, issued_date, applicable_from, priced_class, price_per_share)"
             " values (%s, %s, %s, %s, 'company_cap_table', 'executed',"
-            " '2025-06-30', '2025-01-01', %s, 9.0)",
+            " '2025-06-30', '2025-01-01', %s, 8.00)",
             (cid, seed["dv"], seed["h"], cid, cls),
         )
+        cite_price(conn, cid)
     mid = returned_id(
         conn,
         "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
@@ -202,6 +205,7 @@ def _class_claim(conn: Conn, seed: dict[str, str], cid: str, cls: str | None, pr
         " '2025-06-30', '2025-01-01', %s, %s)",
         (cid, seed["dv"], seed["h"], cid, cls, price),
     )
+    cite_price(conn, cid)
     return cid
 
 
@@ -238,15 +242,15 @@ def _approve_one_direction(
         # A class is PRICED that the holding does not hold; every held class is
         # priced, so direction 2 has nothing to say.
         r2_claims = [
-            _class_claim(conn, seed, f"{seed['cl']}_pa", "series_a", 9.0),
-            _class_claim(conn, seed, f"{seed['cl']}_pc", "series_c", 9.0),
+            _class_claim(conn, seed, f"{seed['cl']}_pa", "series_a", 8.00),
+            _class_claim(conn, seed, f"{seed['cl']}_pc", "series_c", 8.00),
         ]
         policy = ("series_c", "series_a")
     else:
         # A class is HELD that nothing prices; every priced class is held, so
         # direction 1 has nothing to say.
         _series_b_lot(conn, seed)
-        r2_claims = [_class_claim(conn, seed, f"{seed['cl']}_pa", "series_a", 9.0)]
+        r2_claims = [_class_claim(conn, seed, f"{seed['cl']}_pa", "series_a", 8.00)]
         policy = ("series_a", "series_b")
     mid = _priced_mark(conn, seed)
     r1 = assess(conn, seed, mid, "R1", claim=seed["cl"])
@@ -296,11 +300,11 @@ def test_an_r1_claim_pricing_without_a_class_does_not_block_the_approval(
     blocks a legitimate approval whose fair-value evidence is complete, which is
     the expensive direction of the same mistake and the harder one to notice.
     """
-    _class_claim(conn, seed, f"{seed['cl']}_r1", None, 2.0)
+    _class_claim(conn, seed, f"{seed['cl']}_r1", None, 8.00)
     mid = _priced_mark(conn, seed)
     r1 = assess(conn, seed, mid, "R1", claim=f"{seed['cl']}_r1")
     r2 = assess(
-        conn, seed, mid, "R2", claim=_class_claim(conn, seed, f"{seed['cl']}_pa", "series_a", 9.0)
+        conn, seed, mid, "R2", claim=_class_claim(conn, seed, f"{seed['cl']}_pa", "series_a", 8.00)
     )
     approve_valuation(conn, mid, [r1, r2])
     conn.execute("set constraints all immediate")
@@ -319,9 +323,10 @@ def test_a_claim_that_prices_without_stating_a_class_is_refused(
         "insert into claim (id, document_version_id, holding_id, claim_key, source_class,"
         " execution_status, issued_date, applicable_from, price_per_share)"
         " values (%s, %s, %s, 'k', 'company_cap_table', 'executed',"
-        " '2025-06-30', '2025-01-01', 9.0)",
+        " '2025-06-30', '2025-01-01', 8.00)",
         (noclass, seed["dv"], seed["h"]),
     )
+    cite_price(conn, noclass)
     mid = returned_id(
         conn,
         "insert into mark (holding_id, period_id, reported_amount, reported_currency,"
@@ -385,9 +390,10 @@ def test_every_held_class_priced_by_its_own_claim_is_allowed(
         "insert into claim (id, document_version_id, holding_id, claim_key, source_class,"
         " execution_status, issued_date, applicable_from, priced_class, price_per_share)"
         " values (%s, %s, %s, 'k2', 'company_cap_table', 'executed',"
-        " '2025-06-30', '2025-01-01', 'series_a', 4.0)",
+        " '2025-06-30', '2025-01-01', 'series_a', 8.00)",
         (own, seed["dv"], seed["h"]),
     )
+    cite_price(conn, own)
     mid = returned_id(
         conn,
         "insert into mark (holding_id, period_id, reported_amount, reported_currency,"

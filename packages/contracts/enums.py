@@ -40,6 +40,26 @@ class SourceClass(StrEnum):
     """
 
     EXECUTED_TRANSACTION_DOC = "executed_transaction_doc"
+    #: The Fund's own paperwork about its own position.
+    #:
+    #: Added because two document families hit the same wall independently.
+    #: Moonfare's FY2024 memo is headed "7GC — FUND OPERATIONS / Internal
+    #: Memorandum ... Prepared by Fund Operations; reviewed by the CFO" — it is
+    #: management's arithmetic on management's holding, and filing it as a
+    #: third-party valuation memo would make the mark read as though an outside
+    #: valuer had checked it. Nobody did.
+    #:
+    #: Poolside's and Roofstock's agreements each close with "no subsequent
+    #: financing rounds have been documented for this company as of the Fund's
+    #: most recent records" — the Fund's own record-keeping, and the assertion
+    #: the audit letter's request 3 (unchanged marks) actually turns on. With no
+    #: member for it, that sentence had nowhere to go and was dropped, which is
+    #: the quiet version of having no evidence at all.
+    #:
+    #: It sits below a company communication in what it can support and is not
+    #: ordered against it — INV-1, authority is a lattice. What it CAN do is
+    #: carry management's own assertion, which is exactly what R3 asks for.
+    FUND_INTERNAL_RECORD = "fund_internal_record"
     COMPANY_CAP_TABLE = "company_cap_table"
     COMPANY_COMMUNICATION = "company_communication"
     ADMINISTRATOR_STATEMENT = "administrator_statement"

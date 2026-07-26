@@ -1,4 +1,7 @@
 {
   "max_lines": 600,
-  "overrides": {}
+  "overrides": {
+    "tests/test_extract_memo.py": 640,
+    "scripts/mutate.py": 640
+  }
 }

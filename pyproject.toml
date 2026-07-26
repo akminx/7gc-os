@@ -15,6 +15,10 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    # The schema suites talk to a remote Postgres, so they are network-bound
+    # rather than CPU-bound and parallelise almost linearly. Every test seeds
+    # uuid-suffixed ids and rolls back, so workers cannot see each other's rows.
+    "pytest-xdist>=3.8",
     "ruff>=0.6",
     "mypy>=1.11",
     "httpx>=0.27",
@@ -42,6 +46,24 @@ exclude = "^evals/oracle/"
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "evals"]
+# Wall clock here is round-trips to a remote database, not computation, so the
+# workers spend their time waiting rather than competing. Set in addopts rather
+# than passed by hand so the gate, the pre-commit hook and CI all get it — a
+# speed-up only one caller knows about is one the other two keep paying for.
+#
+# `loadfile`, not the default `load`: every test in a file goes to one worker.
+# `test_real_data_ledger.py` seeds FIXED ids (`fund_ii_dream`, `fund_ii_23q4`)
+# rather than uuid-suffixed ones, so splitting that file across workers had two
+# transactions inserting the same rows at once — one aborted, and the sum it
+# read back afterwards was NULL. The failure surfaced as a Decimal conversion
+# error three assertions later, which is exactly how a parallelism bug hides.
+#
+# A fixed 4, not `auto`. Supabase's pooler allows 15 session-mode clients, and
+# `auto` gave 10 workers each holding a session connection plus whatever their
+# fixtures opened — the run died on EMAXCONNSESSION rather than on anything to
+# do with the code. The ceiling is the database's, so the worker count has to be
+# a number we choose rather than a property of whatever machine runs it.
+addopts = "-n 4 --dist loadfile"
 
 [tool.coverage.run]
 omit = ["evals/oracle/*"]

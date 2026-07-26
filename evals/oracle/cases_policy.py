@@ -589,8 +589,12 @@ def run(snap: dict, o: Oracle) -> None:
         if d_["source_file"] == "Jio statement 2025.pdf"
     ]
     check("one artifact carries two claims", len(jio), 2)
+    # This asserted DIFFERENT classes, and passed only because the delivery
+    # email was filed `company_communication` — the exact mis-tier INV-15 names.
+    # The anchor was locking the defect in. Authority is read from the speaker,
+    # and Meridian speaks as Administrator in both.
     check(
-        "with different authority classes",
+        "both read from the speaker, not the envelope",
         sorted(x["source_class"] for x in jio),
-        ["administrator_statement", "company_communication"],
+        ["administrator_statement", "administrator_statement"],
     )

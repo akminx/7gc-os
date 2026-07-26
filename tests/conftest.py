@@ -14,16 +14,42 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 
-from tests.schema_helpers import DSN, Conn
+from tests.schema_helpers import DSN, SEED_TEXT, Conn
+
+
+@pytest.fixture(scope="session")
+def _connection() -> Iterator[Conn]:
+    """One connection for the whole session, not one per test.
+
+    The database is remote, so connecting per test paid a TLS handshake to
+    us-east-1 before the first statement of each of the ~100 schema tests — a
+    quarter of the suite's wall clock spent opening sockets.
+
+    Isolation never came from the connection and does not change here: it comes
+    from the rollback in `conn` below and from the uuid-suffixed ids every seed
+    generates. Nothing in these suites commits.
+    """
+    assert DSN is not None  # callers guard with skipif
+    connection = psycopg.connect(DSN, connect_timeout=30)
+    try:
+        yield connection
+    finally:
+        # Explicit, because psycopg's own context manager COMMITS on a clean
+        # exit. A suite whose whole isolation story is "nothing commits" must
+        # not leave that to a default that does the opposite.
+        connection.rollback()
+        connection.close()
 
 
 @pytest.fixture
-def conn() -> Iterator[Conn]:
-    """Each test runs in a transaction that is always rolled back."""
-    assert DSN is not None  # callers guard with skipif
-    with psycopg.connect(DSN, connect_timeout=30) as c:
-        yield c
-        c.rollback()
+def conn(_connection: Conn) -> Iterator[Conn]:
+    """Each test runs in a transaction that is always rolled back.
+
+    Teardown also clears an aborted transaction, so a test that ends inside a
+    failed statement cannot leave the next one unable to execute.
+    """
+    yield _connection
+    _connection.rollback()
 
 
 @pytest.fixture
@@ -46,8 +72,8 @@ def seed(conn: Conn) -> dict[str, str]:
         (
             "insert into document_version"
             " (id, source_file_id, canonical_text, extractor, text_hash, page_count)"
-            " values (%s, %s, 'text', 'pdftotext@1', %s, 1)",
-            (i["dv"], i["sf"], f"th_{u}"),
+            " values (%s, %s, %s, 'pdftotext@1', %s, 1)",
+            (i["dv"], i["sf"], SEED_TEXT, f"th_{u}"),
         ),
         (
             "insert into claim (id, document_version_id, holding_id, claim_key,"

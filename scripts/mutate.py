@@ -47,6 +47,13 @@ RECONCILE = ROOT / "ingest/trackers/reconcile.py"
 READ = ROOT / "ingest/trackers/read.py"
 MAPPER = ROOT / "ingest/trackers/to_contracts.py"
 MODELS = ROOT / "packages/contracts/models.py"
+#: Step 2's document pipeline. The citation guards land here with the first
+#: extractor that writes one, so they are mutated from the day they exist rather
+#: than being added to this list later — which is when a guard quietly becomes
+#: prose.
+PARSE = ROOT / "ingest/documents/parse.py"
+CITATIONS = ROOT / "packages/contracts/citations.py"
+CLAIMS = ROOT / "ingest/documents/claims.py"
 SUITES = [
     "tests/test_tracker_marks.py",
     "tests/test_tracker_mark_sentences.py",
@@ -60,6 +67,14 @@ SUITES = [
     # packet is the same false green it exists to catch.
     "tests/test_real_data_end_to_end.py",
     "tests/test_contracts.py",
+    # The document pipeline. `test_document_store.py` is database-gated but NOT
+    # corpus-gated, so every write-path guard is still defended under `--ci`
+    # where the documents are hidden. `test_document_end_to_end.py` skips there,
+    # which is exactly why it is not the only thing defending them.
+    "tests/test_document_parse.py",
+    "tests/test_citations.py",
+    "tests/test_document_store.py",
+    "tests/test_document_end_to_end.py",
 ]
 CASE_STUDY = ROOT / "7GC Audit Case Study"
 
@@ -346,6 +361,160 @@ MUTATIONS: list[Mutation] = [
         "            unsupported_positions=sum(1 for r in self.rows"
         " if r.held_at_date and not r.supported),",
         "            unsupported_positions=sum(1 for r in self.rows if not r.supported),",
+    ),
+    # ── the parse layer: what a citation resolves against ────────────────
+    Mutation(
+        "pages: count the trailing form feed as an extra page",
+        PARSE,
+        "    if start < len(canonical_text):",
+        "    if start <= len(canonical_text):",
+    ),
+    Mutation(
+        "pages: attribute an out-of-range offset to the last page",
+        PARSE,
+        '        raise ValueError(\n            f"offset {offset} lies outside every page',
+        "        return self.pages[-1].number\n        raise ValueError(\n"
+        '            f"offset {offset} lies outside every page',
+    ),
+    Mutation(
+        "text hash: drop the separator between extractor and text",
+        PARSE,
+        '    digest.update(b"\\x00")\n',
+    ),
+    Mutation(
+        "text hash: identify the text without the extractor that produced it",
+        PARSE,
+        '    digest.update(extractor.encode("utf-8"))\n',
+    ),
+    Mutation(
+        "plain text: normalise newlines after extraction",
+        PARSE,
+        '    return raw.decode("utf-8"), "utf8-verbatim@1"',
+        '    return raw.decode("utf-8").replace("\\r\\n", "\\n"), "utf8-verbatim@1"',
+    ),
+    Mutation(
+        "parse: accept an empty extraction",
+        PARSE,
+        "    if not canonical_text.strip():",
+        "    if False:",
+    ),
+    # ── citations: the span is computed, and it binds ────────────────────
+    Mutation(
+        "locate: resolve an ambiguous quote to its first match",
+        CITATIONS,
+        "        if len(starts) > 1:",
+        "        if False:",
+    ),
+    Mutation(
+        "locate: search for the quote as a pattern, not a literal",
+        CITATIONS,
+        "re.escape(quote)",
+        "quote",
+    ),
+    Mutation(
+        "locate_pattern: take the first of several matching passages",
+        CITATIONS,
+        "    if len(matches) > 1:",
+        "    if False:",
+    ),
+    Mutation(
+        "resolves_in: trust the slice and skip the length check",
+        CITATIONS,
+        "    if citation.span_end > len(canonical_text):\n        return False\n",
+    ),
+    Mutation(
+        "cited_numeral: read a figure out of any text at all",
+        CITATIONS,
+        "    if _FIGURE.fullmatch(value_text) is None:\n        return None\n",
+    ),
+    Mutation(
+        "cited_numeral: use Unicode whitespace, diverging from Postgres",
+        CITATIONS,
+        r'_WS = r"[ \t\n\r\f\v]"',
+        r'_WS = r"\s"',
+    ),
+    Mutation(
+        "supports_value: accept a quote that does not contain the figure",
+        CITATIONS,
+        "    return value_token_occurrences(quote, value_text) == 1",
+        "    return bool(value_text)",
+    ),
+    Mutation(
+        # The defect a cross-family review found by executing it: `625` cited to
+        # a row stating `625,000` satisfied all three bindings and stored.
+        "supports_value: containment again, not a whole figure",
+        CITATIONS,
+        "    return value_token_occurrences(quote, value_text) == 1",
+        "    return bool(value_text) and value_text in quote",
+    ),
+    Mutation(
+        # The anchor this replaces went stale when the boundary rule grew sign
+        # and exponent cases — and a stale anchor tests nothing while reporting
+        # nothing, which is the defect this whole file exists to find.
+        "token count: nothing continues a figure any more",
+        CITATIONS,
+        "        if not continues:",
+        "        if True:",
+    ),
+    Mutation(
+        "token count: a leading minus is no longer a sign ('-8.00' -> +8.00)",
+        CITATIONS,
+        '            or before == "-"\n',
+    ),
+    Mutation(
+        "token count: an exponent no longer continues the figure ('8e3' -> 8)",
+        CITATIONS,
+        '            or (after in ("e", "E") and (beyond.isdigit() or beyond in ("+", "-")))\n',
+    ),
+    Mutation(
+        # Two independent cross-family reviews found this on the same day, from
+        # opposite ends: a claim reading 800 beside a citation reading $8.00.
+        "store_claim: a claim price need not be a figure any fact cites",
+        CLAIMS,
+        "    if draft.price_per_share is not None and draft.price_per_share not in cited:",
+        "    if False:",
+    ),
+    Mutation(
+        "figure grammar: any run of digits and commas again ('8,00' -> 800)",
+        CITATIONS,
+        r'_INT = r"(?:0|[1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]*)"',
+        r'_INT = r"[0-9][0-9,]*"',
+    ),
+    Mutation(
+        "store_claim: stop checking that the passage states the figure",
+        CLAIMS,
+        "        if not supports_value(fact.citation.quote, fact.value_text):",
+        "        if False:",
+    ),
+    Mutation(
+        "store_claim: stop checking the number against its text",
+        CLAIMS,
+        "        if cited_numeral(fact.value_text) != fact.value_numeric:",
+        "        if False:",
+    ),
+    # ── the write path ───────────────────────────────────────────────────
+    Mutation(
+        "cited_fact: store a value captured outside its own citation",
+        CLAIMS,
+        "    if not supports_value(citation.quote, value_text):",
+        "    if False:",
+    ),
+    Mutation(
+        "store_document: treat any existing row as a successful re-ingest",
+        CLAIMS,
+        "    if (stored_text, stored_extractor, stored_pages) != (",
+        "    if False and (stored_text, stored_extractor, stored_pages) != (",
+    ),
+    Mutation(
+        "store_claim: insert without re-resolving the citations",
+        CLAIMS,
+        "        verify(fact.citation, canonical_text)\n",
+    ),
+    Mutation(
+        "store_claim: store a fact cited into a different document version",
+        CLAIMS,
+        "        if fact.citation.document_version_id != version_id:",
+        "        if False:",
     ),
 ]
 

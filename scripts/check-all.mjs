@@ -20,6 +20,8 @@ import {
 } from "node:fs";
 import { extname, join, relative } from "node:path";
 
+import { checkWebBoundary } from "./check-web-arch.mjs";
+
 const ROOT = (() => {
   try {
     return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -350,6 +352,7 @@ function main() {
     ["lint", () => checkLint(projects)],
     ["typecheck", () => checkTypecheck(projects)],
     ["tests + coverage", () => checkTests(projects, fix, ratchet)],
+    ["web boundary §5.3", () => checkWebBoundary(ROOT)],
     ["duplicate code", checkDups],
     ["file sizes", () => checkFileSizes(fix)],
     ["debt markers", () => checkDebt(fix, ratchet)],

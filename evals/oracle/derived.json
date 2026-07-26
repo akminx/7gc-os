@@ -1215,9 +1215,13 @@
           ]
         },
         "R2": {
-          "verdict": "sufficient",
-          "reasons": [],
-          "next_actions": [],
+          "verdict": "insufficient",
+          "reasons": [
+            "MANAGEMENT_ASSERTION_WITHOUT_PRIMARY_SOURCE"
+          ],
+          "next_actions": [
+            "REQUEST_PRIMARY_EVIDENCE"
+          ],
           "relied_on": [
             "moonfare_fx_24"
           ],
@@ -1237,7 +1241,7 @@
         }
       },
       "applicable_count": 2,
-      "sufficient_count": 1,
+      "sufficient_count": 0,
       "row_verdict": "missing",
       "fully_supported": false,
       "tracker_label": [],

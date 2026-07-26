@@ -22,7 +22,7 @@ meta:
   # carries three dated observations; Jio's delivery email is an attribute of
   # the statement it transmits. _validate() now asserts both counts.
   physical_source_files: 19
-  evidence_records: 22
+  evidence_records: 23
   packet_periods: 6
   lot_count: 17
 
@@ -124,6 +124,14 @@ documents:
   roofstock_spa:     {source_file: "Roofstock SPA.pdf", claim: roofstock/series_e_price, holding: roofstock,  source_class: executed_transaction_doc,  execution_status: executed,             date: "2021-11-08", applicable_from: "2021-11-08", applicable_to: null, priced_class: series_e,  pps: "25.00"}
   fluidstack_a_spa:  {source_file: "Fluidstack A SPA.pdf", claim: fluidstack/series_a_price, holding: fluidstack, source_class: executed_transaction_doc,  execution_status: executed,             date: "2024-10-10", applicable_from: "2024-10-10", applicable_to: null, priced_class: series_a, pps: "10.00"}
   fluidstack_b_cap:  {source_file: "Fluidstack B captable.pdf", claim: fluidstack/series_b_price, holding: fluidstack, source_class: company_cap_table,         execution_status: pro_forma,            date: "2025-12-18", applicable_from: "2025-12-18", applicable_to: null, priced_class: series_b,  pps: "30.00"}
+  # Note (a) of the same table: "The Series A-2 tranche closed May 30, 2025 at
+  # $15.00 per share ($750,000,000 post-money); executed documents on file with
+  # company counsel." One artifact, a second claim, on different terms — a
+  # different class, a different as-of date, and an execution status of
+  # `unexecuted_referenced` because the closing set is elsewhere. INV-15's
+  # granularity clause is this: one document may carry several claims of
+  # differing authority. The oracle carried only the first of the two.
+  fluidstack_a2_ref: {source_file: "Fluidstack B captable.pdf", claim: fluidstack/series_a2_price, holding: fluidstack, source_class: company_cap_table,        execution_status: unexecuted_referenced, date: "2025-12-18", applicable_from: "2025-05-30", applicable_to: null, priced_class: series_a2, pps: "15.00"}
   dream_b_cap:       {source_file: "Dream B captable.pdf", claim: dream/series_b_price, holding: dream,      source_class: company_cap_table,         execution_status: pro_forma,            date: "2025-11-14", applicable_from: "2025-11-14", applicable_to: null, priced_class: series_b,  pps: "8.00"}
   dream_close_email: {source_file: "Dream closing email.txt", claim: dream/series_b_price, holding: dream,      source_class: company_communication,     execution_status: unexecuted_referenced, date: "2025-11-17", applicable_from: "2025-11-17", applicable_to: null, priced_class: series_b, pps: "8.00"}
   sway_recap_cap:    {source_file: "Sway recap captable.pdf", claim: sway/series_a3_price, holding: sway,       source_class: company_cap_table,         execution_status: pro_forma,            date: "2025-09-30", applicable_from: "2025-09-30", applicable_to: null, priced_class: series_a3, pps: "0.40"}
@@ -131,7 +139,7 @@ documents:
   lucra_ceo_email:   {source_file: "Lucra CEO email.txt", claim: lucra/series_a2_price, holding: lucra,      source_class: company_communication,     execution_status: unexecuted_referenced, date: "2025-10-17", applicable_from: "2025-10-17", applicable_to: null, priced_class: series_a2, pps: "3.00"}
   anthropic_press:   {source_file: "The Signal.txt", claim: anthropic/round_rumour, holding: anthropic,  source_class: press,                     execution_status: not_applicable,       date: "2025-12-09", applicable_from: "2025-12-09", applicable_to: null, priced_class: null,      pps: null}
   moonfare_memo_23:  {source_file: "Moonfare FY2023 memo.pdf", claim: moonfare/fy2023_value, holding: moonfare,   source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2023-12-31", applicable_from: "2023-12-31", applicable_to: "2023-12-31", priced_class: null, pps: null, concluded_value: "1000000", fx_rate: "1.0526"}
-  moonfare_fx_24:    {source_file: "Moonfare FX memo.pdf", claim: moonfare/fy2024_value, holding: moonfare,   source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: null, pps: null, concluded_value: "1048515", fx_rate: "1.1037"}
+  moonfare_fx_24:    {source_file: "Moonfare FX memo.pdf", claim: moonfare/fy2024_value, holding: moonfare,   source_class: fund_internal_record, execution_status: not_applicable,      date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: null, pps: null, concluded_value: "1048515", fx_rate: "1.1037"}
   capsule_memo_22:   {source_file: "Capsule FY2022 memo.pdf", claim: capsule/fy2022_value, holding: capsule,    source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2022-12-31", applicable_from: "2022-12-31", applicable_to: "2022-12-31", priced_class: series_b, pps: "1.20"}
   mom_c_term_sheet:  {source_file: "MomProject C term sheet.pdf", claim: mom_project/series_c_price, holding: mom_project, source_class: company_communication,    execution_status: non_binding,          date: "2021-09-15", applicable_from: "2021-09-15", applicable_to: null, priced_class: series_c,  pps: "5.00"}
   jackpocket_merger: {source_file: "Jackpocket merger notice.pdf", claim: jackpocket/merger_consideration, holding: jackpocket, source_class: executed_transaction_doc,  execution_status: executed,             date: "2024-05-20", applicable_from: "2024-05-20", applicable_to: null, priced_class: series_b,  pps: "6.20"}
@@ -146,7 +154,7 @@ documents:
   # One artifact, two claims, two authority classes (INV-15, Q1-7): the email is
   # a company communication; the statement it transmits is an administrator
   # statement. Authority belongs to the claim, never to the container.
-  jio_delivery_email: {source_file: "Jio statement 2025.pdf", claim: jio/fy2025_delivery, holding: jio, source_class: company_communication, execution_status: not_applicable, date: "2026-01-30", applicable_from: "2026-01-30", applicable_to: null, priced_class: null, pps: null}
+  jio_delivery_email: {source_file: "Jio statement 2025.pdf", claim: jio/fy2025_delivery, holding: jio, source_class: administrator_statement, execution_status: not_applicable, date: "2026-01-30", applicable_from: "2026-01-30", applicable_to: null, priced_class: null, pps: null}
   banzai_quote_23:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2023_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2023-12-29", applicable_from: "2023-12-29", applicable_to: "2023-12-31", priced_class: common, pps: "2.40"}
   banzai_quote_24:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2024_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: common, pps: "1.10"}
   banzai_quote_25:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2025_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2025-12-31", applicable_from: "2025-12-31", applicable_to: "2025-12-31", priced_class: common, pps: "0.62"}
@@ -282,6 +290,15 @@ policy_matrix:
   - {req: R2, source_class: third_party_valuation_memo, execution_status: not_applicable,        position_type: fx_denominated_interest, verdict: sufficient}
   - {req: R2, source_class: third_party_valuation_memo, execution_status: not_applicable,        position_type: direct_equity,           verdict: sufficient}
   - {req: R2, source_class: press,                      execution_status: not_applicable,        position_type: direct_equity,           verdict: insufficient, reason: PRESS_CANNOT_SUPPORT_FAIR_VALUE, next_action: REQUEST_PRIMARY_EVIDENCE}
+  # Management's own paperwork about management's own position. The letter asks for
+  # "the underlying source AND management's memo describing the basis of the mark" —
+  # this is the second half without the first. Moonfare FY2024 is the case: the memo
+  # translates a EUR figure carried from the FY2023 third-party memo, whose own text
+  # forbids reliance at a later date without an update that was never commissioned,
+  # at a rate the memo asserts and does not source (V7 wants a cited source).
+  # Insufficient, not missing: a document exists and says something. Insufficient,
+  # not partial: neither leg stands on its own.
+  - {req: R2, source_class: fund_internal_record,       execution_status: not_applicable,        position_type: fx_denominated_interest, verdict: insufficient, reason: MANAGEMENT_ASSERTION_WITHOUT_PRIMARY_SOURCE, next_action: REQUEST_PRIMARY_EVIDENCE}
 
   - {req: R4, source_class: executed_transaction_doc,   execution_status: executed,              position_type: direct_equity,           verdict: sufficient}
 

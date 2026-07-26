@@ -1,81 +1,190 @@
 import { useEffect, useState } from "react";
 
+import { Company } from "./Company";
+import { Dashboard } from "./Dashboard";
+import type { Async } from "./data";
+import { failureDetail, loadFunds, loadPacket } from "./data";
+import { GapInventory } from "./GapInventory";
+import type { FundPeriod, FundsResponse, PacketResponse } from "./responses";
+import { SourceBadge } from "./ui";
+
 /**
- * Step 0's frontend exists to prove one thing: the chain from this page to
- * FastAPI on Render to Postgres on Supabase is real. So it renders the health
- * response verbatim rather than a green tick — a tick can be drawn without the
- * request ever succeeding, which is the failure this page is here to rule out.
+ * The three read-only surfaces of SPEC §12: the dual-fund dashboard, the
+ * company evidence workspace, and the gap inventory.
+ *
+ * SPEC §3.1 · the public surface is read-only. There is no approve or reject
+ * control anywhere in this tree — approval STATE is rendered, and always with
+ * the decision type named, because a transcription approval is not a fair-value
+ * approval (SPEC §6.3).
+ *
+ * Which fund-period is on screen now comes from `GET /funds`. It used to be two
+ * constants in the data layer, which made a screen built to compare funds show
+ * exactly one, forever, whatever the ledger held.
  */
 
-const API = import.meta.env.VITE_API_BASE_URL ?? "";
+type Surface = "dashboard" | "company" | "gaps";
 
-type State =
-  | { kind: "unconfigured" }
-  | { kind: "loading" }
-  | { kind: "ok"; body: unknown }
-  | { kind: "error"; detail: string };
+const SURFACES: { id: Surface; label: string }[] = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "company", label: "Company evidence" },
+  { id: "gaps", label: "Gap inventory" },
+];
+
+function keyOf(period: FundPeriod): string {
+  return `${period.fund_id}/${period.period_id}`;
+}
+
+/**
+ * The fund-period picker.
+ *
+ * It takes the list as it comes and assumes nothing about its length. The dev
+ * database currently answers with about 140 entries, most of them left behind by
+ * a schema test; the same screen has to work when that is cleaned up to six, and
+ * neither number is written down anywhere here.
+ */
+function PeriodPicker({
+  periods,
+  chosen,
+  onChoose,
+}: {
+  periods: FundPeriod[];
+  chosen: string;
+  onChoose: (key: string) => void;
+}) {
+  return (
+    <label className="picker">
+      <span>Fund · period</span>
+      <select
+        value={chosen}
+        onChange={(event) => {
+          onChoose(event.target.value);
+        }}
+      >
+        {periods.map((period) => (
+          <option key={keyOf(period)} value={keyOf(period)}>
+            {period.fund_id} · {period.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function Surfaces({ packet }: { packet: PacketResponse }) {
+  const [surface, setSurface] = useState<Surface>("dashboard");
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const open = (holdingId: string) => {
+    setSelected(holdingId);
+    setSurface("company");
+  };
+
+  return (
+    <>
+      <nav className="tabs">
+        {SURFACES.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={tab.id === surface ? "tab tab--on" : "tab"}
+            aria-current={tab.id === surface}
+            onClick={() => {
+              setSurface(tab.id);
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+      {surface === "dashboard" && <Dashboard packet={packet} onOpenCompany={open} />}
+      {surface === "company" && (
+        <Company rows={packet.rows} selected={selected} onSelect={setSelected} />
+      )}
+      {surface === "gaps" && <GapInventory packet={packet} />}
+    </>
+  );
+}
 
 export function App() {
-  const [state, setState] = useState<State>(API ? { kind: "loading" } : { kind: "unconfigured" });
+  const [funds, setFunds] = useState<Async<FundsResponse>>({ kind: "loading" });
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [packet, setPacket] = useState<Async<PacketResponse>>({ kind: "loading" });
 
   useEffect(() => {
-    if (!API) return;
     let live = true;
-    fetch(`${API}/funds/fund_ii/periods/f2_25q4/packet`)
-      .then(async (r) => {
-        const body: unknown = await r.json();
-        if (live) setState({ kind: "ok", body });
+    loadFunds()
+      .then((data) => {
+        if (live) setFunds({ kind: "ready", data });
       })
-      .catch((e: unknown) => {
-        if (live) setState({ kind: "error", detail: e instanceof Error ? e.message : String(e) });
+      .catch((error: unknown) => {
+        if (live) setFunds({ kind: "error", detail: failureDetail(error) });
       });
     return () => {
       live = false;
     };
   }, []);
 
-  return (
-    <main
-      style={{
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        maxWidth: "44rem",
-        margin: "4rem auto",
-        padding: "0 1.5rem",
-        lineHeight: 1.6,
-      }}
-    >
-      <h1 style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>
-        7GC OS — Valuation Evidence Ledger
-      </h1>
-      <p style={{ opacity: 0.65, marginTop: 0 }}>
-        Step 0 — one packet, served through the frozen contract
-      </p>
+  const periods = funds.kind === "ready" ? funds.data.periods : [];
+  const first = periods.at(0);
+  const current = periods.find((p) => keyOf(p) === chosen) ?? first;
+  const fundId = current === undefined ? null : current.fund_id;
+  const periodId = current === undefined ? null : current.period_id;
 
-      <h2 style={{ fontSize: "0.9rem", marginTop: "2rem" }}>Fund II · FY2025 Q4</h2>
-      {state.kind === "unconfigured" && (
-        <p>
-          <code>VITE_API_BASE_URL</code> is not set, so this page has no service to call.
+  useEffect(() => {
+    if (fundId === null || periodId === null) return;
+    let live = true;
+    setPacket({ kind: "loading" });
+    loadPacket(fundId, periodId)
+      .then((data) => {
+        if (live) setPacket({ kind: "ready", data });
+      })
+      .catch((error: unknown) => {
+        if (live) setPacket({ kind: "error", detail: failureDetail(error) });
+      });
+    return () => {
+      live = false;
+    };
+  }, [fundId, periodId]);
+
+  return (
+    <main>
+      <header className="masthead">
+        <h1>7GC OS — Valuation Evidence Ledger</h1>
+        <p className="note">
+          Audit support, read-only. Every figure on these screens is supplied by the API; this
+          surface formats and orders, and computes nothing.
+        </p>
+        {funds.kind === "ready" && (
+          <p className="note">
+            <SourceBadge source={funds.data.source} />
+          </p>
+        )}
+      </header>
+
+      {funds.kind === "loading" && (
+        <p className="note">
+          Loading the fund list… a free Render instance sleeps after 15 minutes idle and takes about
+          50 seconds to wake.
         </p>
       )}
-      {state.kind === "loading" && (
-        <p>
-          Loading the packet… a free Render instance sleeps after 15 minutes idle and takes about 50
-          seconds to wake.
+      {funds.kind === "error" && <p className="error">Fund list failed: {funds.detail}</p>}
+      {funds.kind === "ready" && current === undefined && (
+        <p className="note">
+          The API lists no fund-period that a packet can be built for. That is an empty ledger, not
+          an empty screen.
         </p>
       )}
-      {state.kind === "error" && <p>Request failed: {state.detail}</p>}
-      {state.kind === "ok" && (
-        <pre
-          style={{
-            background: "rgba(127,127,127,0.12)",
-            padding: "1rem",
-            borderRadius: "6px",
-            overflowX: "auto",
-          }}
-        >
-          {JSON.stringify(state.body, null, 2)}
-        </pre>
+      {current !== undefined && (
+        <PeriodPicker periods={periods} chosen={keyOf(current)} onChoose={setChosen} />
       )}
+
+      {current !== undefined && packet.kind === "loading" && (
+        <p className="note">Loading the packet…</p>
+      )}
+      {current !== undefined && packet.kind === "error" && (
+        <p className="error">Packet request failed: {packet.detail}</p>
+      )}
+      {current !== undefined && packet.kind === "ready" && <Surfaces packet={packet.data} />}
     </main>
   );
 }

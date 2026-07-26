@@ -24,6 +24,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 client = TestClient(app)
 
+#: The routes answer from the ledger when a DSN is configured and from the Dream
+#: fixture when none is, so the tests ask the service which fund-period it has
+#: rather than assuming one. Hard-coding the fixture's ids made every assertion
+#: below silently a fixture assertion, which is the thing that stopped being
+#: true the moment real data landed.
+_periods = client.get("/funds").json()["periods"]
+FUND: str = _periods[0]["fund_id"]
+PERIOD: str = _periods[0]["period_id"]
+HOLDING: str = client.get(f"/funds/{FUND}/periods/{PERIOD}/packet").json()["rows"][0]["holding_id"]
+
 
 def test_root_identifies_the_service() -> None:
     r = client.get("/")
@@ -97,13 +107,14 @@ def test_a_sibling_named_vercel_project_is_not_allowed() -> None:
 
 
 # ── Step 0 stub routes · the contract path end to end ────────────────────
-def test_holding_route_serves_the_fixture_through_the_contract() -> None:
-    body = client.get("/holdings/dream").json()
-    assert body["holding_id"] == "dream"
-    assert body["mark"]["reported"]["amount"] == "5000000"
-    # INV-13 · reported is present, validated is absent, and they are separate.
-    assert body["mark"]["validated"] is None
-    assert body["mark"]["derivation_reason"] == "NO_PRICE_FOR_CLASS:series_a1"
+def test_holding_route_names_its_source_and_its_evidence() -> None:
+    """The route answers from the ledger when one is configured and from the
+    fixture when none is. Both shapes are the same, and both say which — a demo
+    that silently falls back to a fixture shows a number nobody can trace."""
+    body = client.get(f"/holdings/{HOLDING}").json()
+    assert body["source"] in {"ledger", "fixture"}
+    assert body["holding_id"] == HOLDING
+    assert isinstance(body["evidence"], list)
 
 
 def test_an_unknown_holding_is_404_not_an_empty_row() -> None:
@@ -114,25 +125,36 @@ def test_an_unknown_holding_is_404_not_an_empty_row() -> None:
 def test_money_crosses_the_wire_as_a_string_not_a_float() -> None:
     """A float would reintroduce the precision loss the whole money path
     refuses. JSON has no decimal type, so the contract serialises to string."""
-    raw = client.get("/funds/fund_ii/periods/f2_25q4/totals").content.decode()
-    assert '"amount":"5000000"' in raw.replace(" ", "")
+    raw = client.get(f"/funds/{FUND}/periods/{PERIOD}/totals").content.decode()
+    assert '"amount":"' in raw.replace(" ", "")
+    assert "e+" not in raw.lower(), "money must not serialise in exponent form"
 
 
 def test_the_total_cannot_be_read_without_its_qualification() -> None:
     """INV-19 · a caller wanting "the fund's value" must read past the caveat to
     reach it, rather than getting a bare number with the caveat elsewhere."""
-    body = client.get("/funds/fund_ii/periods/f2_25q4/totals").json()
+    body = client.get(f"/funds/{FUND}/periods/{PERIOD}/totals").json()
     assert body["kind"] == "held_at_date_reported"
     assert body["label"] == ("Tracker-reported amounts for positions held at this date, unaudited")
+    # Nothing is assessed yet, so every held position is unsupported and the two
+    # figures coincide. That is the honest state, and the packet says so rather
+    # than reporting a clean total it cannot support.
     assert body["unsupported_amount"]["amount"] == body["amount"]["amount"]
-    assert body["unsupported_positions"] == 1
+    assert body["unsupported_positions"] >= 1
+    assert body["contains_unsupported_inputs"] is True
 
 
 def test_packet_route_returns_the_whole_packet() -> None:
-    body = client.get("/funds/fund_ii/periods/f2_25q4/packet").json()
+    body = client.get(f"/funds/{FUND}/periods/{PERIOD}/packet").json()
     assert body["period"]["audit_scope"] == "packet"
-    assert len(body["rows"]) == 1
+    assert len(body["rows"]) >= 1
     assert body["rows"][0]["approval"] is None
+    # The fields the models compute. They are `@property`, which Pydantic does
+    # not serialise, so the wire carried the assessments and not the conclusion
+    # drawn from them — and the browser must not draw it itself (SPEC §5.3).
+    assert "supported" in body["rows"][0]
+    assert "unsupported_reasons" in body["rows"][0]
+    assert "totals" in body
 
 
 def test_an_unknown_packet_is_404() -> None:

@@ -26,7 +26,7 @@ create type position_type      as enum ('direct_equity', 'indirect_feeder',
 create type source_class       as enum ('executed_transaction_doc', 'company_cap_table',
                                         'company_communication', 'administrator_statement',
                                         'public_market_quote', 'third_party_valuation_memo',
-                                        'press', 'rumor');
+                                        'press', 'rumor', 'fund_internal_record');
 create type execution_status   as enum ('executed', 'pro_forma', 'non_binding',
                                         'unexecuted_referenced', 'not_applicable');
 create type requirement_code   as enum ('R1', 'R2', 'R3', 'R4', 'R5');

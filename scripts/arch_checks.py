@@ -42,11 +42,77 @@ def _iter_src(root, skip_dirs, subdirs, suffixes):
                     yield p
 
 
+#: The two fields that must never be typed by a human. INV-8.
+_SPAN_FIELDS = {"span_start", "span_end"}
+
+
+def _hand_written_spans(path: Path, root: Path) -> list[str]:
+    """Every place this file states a citation offset instead of computing one.
+
+    Catches both shapes an offset can arrive in: a keyword argument to a call
+    (`Citation(span_start=0, ...)`) and a mapping key (`{"span_start": 0}`),
+    which is the same assertion wearing a different hat and is how the rule
+    would otherwise be walked around without anyone intending to.
+    """
+    import ast
+
+    try:
+        tree = ast.parse(path.read_text(errors="ignore"))
+    except SyntaxError as exc:
+        return [f"{path.relative_to(root)}:{exc.lineno} could not be parsed: {exc.msg}"]
+
+    hits: list[str] = []
+    for node in ast.walk(tree):
+        named: set[str] = set()
+        if isinstance(node, ast.Call):
+            named = {kw.arg for kw in node.keywords if kw.arg in _SPAN_FIELDS if kw.arg}
+        elif isinstance(node, ast.Constant) and node.value in _SPAN_FIELDS:
+            # Any bare mention of the field name as a string. The first version
+            # matched dict literals and call keywords only, so
+            # `fields["span_start"] = start` followed by `Citation(**fields)`
+            # walked straight past it — the same assertion, spelled differently.
+            # Exact equality, so the column list inside a longer SQL string is
+            # untouched.
+            named = {str(node.value)}
+        else:
+            continue
+        if named:
+            hits.append(
+                f"{path.relative_to(root)}:{node.lineno} states a citation span "
+                f"({', '.join(sorted(named))}) instead of computing it; use "
+                "packages.contracts.citations.locate() (INV-8)"
+            )
+    return hits
+
+
 def check_architecture(root, skip_dirs):
     """Repo-specific structural invariants (INVARIANTS.md). Add rules below.
     Ships empty so it passes out of the box and never false-positives before you
     have anything to enforce."""
     v = []
+
+    # INV-8 · a citation's span is COMPUTED from the text, never asserted beside
+    # the quote.
+    #
+    # This is the shape audit finding #3 found: `span_start=0, span_end=1` next
+    # to a forty-character quote satisfied every check in the system, and the
+    # figure read as cited while resolving to nothing. `locate()` and
+    # `locate_pattern()` in packages/contracts/citations.py take a quote or a
+    # pattern and return the offsets they found — there is no parameter through
+    # which a caller can supply one. This keeps it that way: an extractor cannot
+    # write a wrong span because it cannot write a span at all.
+    #
+    # Scoped to the producers. Tests construct spans deliberately, to prove the
+    # guards refuse bad ones, and a rule that forbade that would forbid its own
+    # negative cases.
+    # Parsed rather than grepped. A regex over lines flagged this rule's own
+    # explanation of itself, and the obvious repair — rewording the prose — puts
+    # the guard at the mercy of how the next person phrases a docstring. The
+    # syntax tree only ever sees `span_start=` where it is actually an argument.
+    for p in _iter_src(root, skip_dirs, ("ingest", "packages", "api", "evals"), {".py"}):
+        if p.name in ("citations.py",):  # the sanctioned producer
+            continue
+        v.extend(_hand_written_spans(p, root))
 
     # ── Add a rule each time you name an invariant that types/tests can't span.
     # Copy a block, scope it to the right dirs/suffixes, and cite the INV id.
@@ -88,9 +154,9 @@ def check_architecture(root, skip_dirs):
     )
 
 
-# Set to True (or just len-check your rules) once you've added real rules, so the
-# OK line reads "invariants hold" instead of the "none yet" nudge.
-_rule_count = False
+# True once real rules exist, so the OK line reads "invariants hold" instead of
+# the "none yet" nudge.
+_rule_count = True
 
 
 def check_ignore_budget(root, tracked_files, budget_dir, fix=False, ratchet=False):

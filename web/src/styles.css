@@ -1,0 +1,620 @@
+/* Seven verdicts, seven treatments. The palette exists to keep `missing` and
+   `not_applicable` from ever reading as the same finding. */
+
+:root {
+  --bg: #fbfaf8;
+  --panel: #ffffff;
+  --ink: #16181d;
+  --muted: #5d6470;
+  --line: #dcd8d0;
+  --accent: #1b4d8f;
+  --v-not_assessed: #6b7280;
+  --v-not_applicable: #3f6b8c;
+  --v-missing: #b4232a;
+  --v-insufficient: #b4541b;
+  --v-partial: #8a6d10;
+  --v-conflicting: #6d2ea0;
+  --v-sufficient: #1c6b3f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --panel: #1b1e24;
+    --ink: #eceef2;
+    --muted: #a2aab8;
+    --line: #333944;
+    --accent: #7fb0ee;
+    --v-not_assessed: #9aa3b2;
+    --v-not_applicable: #79aed6;
+    --v-missing: #f0797f;
+    --v-insufficient: #e79a5c;
+    --v-partial: #ddc061;
+    --v-conflicting: #bb8ef0;
+    --v-sufficient: #6cc48f;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.55;
+}
+
+main {
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 5rem;
+}
+
+code,
+.num,
+.figure__amount {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.masthead h1 {
+  font-size: 1.3rem;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.25rem;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 0.4rem 0;
+  max-width: 62rem;
+}
+
+.error {
+  color: var(--v-missing);
+  font-weight: 600;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin: 1.5rem 0 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px 6px 0 0;
+}
+
+.tab--on {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.section > h2 {
+  font-size: 0.95rem;
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.02em;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.4rem 1.2rem;
+  margin: 0.6rem 0;
+}
+
+.meta dt {
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.meta dd {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.totals {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  margin-top: 0.8rem;
+}
+
+.totals__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.totals__label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.totals__figures,
+.triptych {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.total-kind {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+}
+
+.figure {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.figure--unsupported {
+  border-left-color: var(--v-missing);
+}
+
+.figure--reported {
+  border-left-color: var(--accent);
+}
+
+.figure--validated {
+  border-left-color: var(--v-not_applicable);
+}
+
+.figure--support {
+  border-left-color: var(--v-partial);
+}
+
+.figure__caption {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.figure__amount {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.scroller {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.83rem;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+thead th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+td.num {
+  white-space: nowrap;
+}
+
+.cell--absent,
+.absent {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.sub {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.linkish {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+  white-space: nowrap;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid currentcolor;
+}
+
+.verdict--not_assessed {
+  color: var(--v-not_assessed);
+  border-style: dashed;
+}
+
+.verdict--not_applicable {
+  color: var(--v-not_applicable);
+  border-style: dotted;
+}
+
+.verdict--missing {
+  color: var(--v-missing);
+  font-weight: 700;
+}
+
+.verdict--insufficient {
+  color: var(--v-insufficient);
+}
+
+.verdict--partial {
+  color: var(--v-partial);
+}
+
+.verdict--conflicting {
+  color: var(--v-conflicting);
+  border-width: 2px;
+  font-weight: 700;
+}
+
+.verdict--sufficient {
+  color: var(--v-sufficient);
+}
+
+/* Which store answered. The fixture treatment is loud on purpose: a viewer who
+   does not notice it is reading a demo stub as the fund. */
+.source {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid currentcolor;
+}
+
+.source--ledger {
+  color: var(--v-sufficient);
+}
+
+.source--fixture {
+  color: var(--v-missing);
+  font-weight: 700;
+  border-width: 2px;
+}
+
+.support {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.75rem;
+}
+
+.support--supported {
+  color: var(--v-sufficient);
+  font-weight: 600;
+}
+
+.support--unsupported .support__flag {
+  color: var(--v-missing);
+  font-weight: 700;
+}
+
+.support__reasons {
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.support__reasons code {
+  color: var(--v-missing);
+}
+
+.qualified {
+  font-size: 0.78rem;
+  margin: 0.35rem 0;
+  font-weight: 600;
+}
+
+.qualified--yes {
+  color: var(--v-missing);
+}
+
+.qualified--no {
+  color: var(--v-sufficient);
+}
+
+.approval__fv {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.approval__fv--yes {
+  color: var(--v-sufficient);
+}
+
+.approval__fv--no {
+  color: var(--muted);
+}
+
+.approval {
+  font-size: 0.75rem;
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.approval--none {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.approval--approved {
+  color: var(--v-sufficient);
+}
+
+.approval--rejected {
+  color: var(--v-missing);
+}
+
+.approval__actor {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.tag {
+  font-size: 0.68rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  color: var(--muted);
+}
+
+.tag--exec {
+  border-color: var(--v-insufficient);
+  color: var(--v-insufficient);
+}
+
+.tag--subsequent {
+  border-color: var(--v-conflicting);
+  color: var(--v-conflicting);
+}
+
+.codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  margin: 0.35rem 0;
+}
+
+.codes__label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.codes code {
+  font-size: 0.72rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+}
+
+/* The evidence surface. The quote is the product; it gets the most contrast on
+   the page and is never truncated, wrapped in an ellipsis or highlighted. */
+.claim-list,
+.citation-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.claim {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+}
+
+.citation {
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+
+.citation__quote {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  color: var(--ink);
+  border-left: 3px solid var(--accent);
+  background: var(--bg);
+  padding: 0.5rem 0.7rem;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.citation__where {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+}
+
+.citation__where .sub {
+  display: inline;
+}
+
+.claim__uncited {
+  border-left: 2px dashed var(--v-insufficient);
+  padding-left: 0.6rem;
+}
+
+.empty-evidence {
+  border: 1px dashed var(--v-missing);
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+  color: var(--ink);
+  font-size: 0.85rem;
+  margin: 0.6rem 0 0;
+}
+
+.tag--authority {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.evidence__when {
+  margin: 0 0 0.4rem;
+}
+
+.checklist,
+.gap-list,
+.evidence-list,
+.lineage-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.check,
+.gap,
+.evidence,
+.lineage {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+}
+
+.check__head,
+.gap__head,
+.evidence__head,
+.lineage__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gap--with_counsel {
+  border-left: 3px solid var(--v-partial);
+}
+
+.gap--referenced_location_unspecified {
+  border-left: 3px solid var(--v-insufficient);
+}
+
+.gap--not_located {
+  border-left: 3px solid var(--v-missing);
+}
+
+.gap-kind {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.gap-kind--with_counsel {
+  color: var(--v-partial);
+}
+
+.gap-kind--referenced_location_unspecified {
+  color: var(--v-insufficient);
+}
+
+.gap-kind--not_located {
+  color: var(--v-missing);
+}
+
+.gap__doc {
+  font-weight: 600;
+  margin: 0.4rem 0 0.2rem;
+  font-size: 0.9rem;
+}
+
+blockquote {
+  margin: 0.3rem 0;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.picker select {
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.lineage__input {
+  font-size: 0.8rem;
+  margin: 0.3rem 0;
+}

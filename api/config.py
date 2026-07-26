@@ -29,3 +29,20 @@ def load_env() -> dict[str, str]:
 
 def dsn(key: str = "DATABASE_URL") -> str | None:
     return load_env().get(key) or None
+
+
+def ledger_schema() -> str:
+    """Which schema the application reads. `public` unless told otherwise.
+
+    The test suites and the demo want opposite things from the same database:
+    the schema tests need an empty ledger they can seed and roll back, and the
+    demo needs the fund loaded and nothing else. Sharing one schema meant
+    `test_the_database_accepts_every_mapped_row` — which asserts the database
+    refuses nothing about the real corpus — started failing the moment the real
+    corpus was loaded for the demo, because every insert was then a duplicate.
+
+    Two schemas in one database rather than two databases: no console access is
+    needed, the same migrations build both, and `search_path` is the only thing
+    that differs between them.
+    """
+    return load_env().get("LEDGER_SCHEMA") or "public"

@@ -13,6 +13,7 @@ import psycopg
 import pytest
 
 from tests.schema_helpers import (
+    CITED,
     DSN,
     Conn,
     make_assessment,
@@ -106,10 +107,10 @@ def test_null_discriminators_cannot_smuggle_a_promotion(conn: Conn, seed: dict[s
     pointing at a decision id that does not even exist."""
     assert "fact_promoter_all_or_nothing" in rejects(
         conn,
-        "insert into extracted_fact (claim_id, state, field_name, value_text,"
+        "insert into extracted_fact (claim_id, state, field_name, value_text, value_numeric,"
         " citation_quote, span_start, span_end, promoted_by)"
-        " values (%s, 'canonical', 'pps', '8.00', 'q', 0, 1, 999999)",
-        (seed["cl"],),
+        " values (%s, 'canonical', 'pps', %s, %s, %s, %s, %s, 999999)",
+        (seed["cl"], *CITED),
     )
 
 

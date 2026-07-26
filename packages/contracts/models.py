@@ -16,14 +16,21 @@ structural here rather than conventional:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, model_validator
 
+from packages.contracts.base import (
+    PPS_SCALE as PPS_SCALE,
+)
+from packages.contracts.base import (
+    Contract as Contract,
+)
+from packages.contracts.base import (
+    Money as Money,
+)
 from packages.contracts.enums import (
     AuditScope,
     DecisionStatus,
@@ -39,89 +46,6 @@ from packages.contracts.enums import (
     SourceClass,
     ValuationBasis,
 )
-
-
-class Contract(BaseModel):
-    """Frozen and strict: unknown fields are an error, not a silent drop.
-
-    A tolerant parser is how a renamed field becomes a null downstream and then
-    a zero in a total.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Any:
-        """Re-validate when fields are replaced.
-
-        Pydantic's `model_copy(update=...)` writes straight past every validator,
-        so a guard that only runs at construction is not a guard at all: a float
-        could be posted into `Money.amount`, and an `approved_fair_value` total
-        could acquire unsupported positions, both bypassing the exact rules those
-        models exist to enforce.
-        """
-        if not update:
-            return super().model_copy(deep=deep)
-        merged = {**{f: getattr(self, f) for f in type(self).model_fields}, **update}
-        return type(self)(**merged)
-
-
-#: Declared money scale, matching the `trunc(x, 4)` checks in the migration.
-MONEY_SCALE = 4
-#: Price per share is quoted to six places.
-PPS_SCALE = 6
-
-
-class Money(Contract):
-    """An amount that knows its currency. INV-11.
-
-    `Decimal` throughout — a float amount is wrong before anyone reads it.
-    """
-
-    amount: Decimal
-    currency: str = Field(min_length=3, max_length=3)
-
-    @field_validator("amount", mode="before")
-    @classmethod
-    def _refuse_float(cls, v: object) -> object:
-        """A float has already lost precision by the time it reaches here.
-
-        `Money(amount=0.1 + 0.2)` coerces to Decimal('0.30000000000000004') and
-        then freezes that binary residue as if it were exact money. Accepting
-        the input silently is what makes INV-11's guard decorative — the type
-        must refuse the one value that breaks it.
-        """
-        if isinstance(v, float):
-            raise ValueError(
-                f"money must not be constructed from a float ({v!r}); "
-                "pass a Decimal or a string — the precision is already gone by here"
-            )
-        return v
-
-    @model_validator(mode="after")
-    def _amount_fits_its_declared_scale(self) -> Money:
-        """Mirrors the database scale checks. INV-11.
-
-        The database was taught to reject `1109.999889`; this model still built
-        it happily, and `Packet.totals()` would have carried the residue into an
-        auditor-facing figure without ever touching a column. An invariant
-        enforced on one side only is not enforced — `Lot.shares` already mirrors
-        its DB check, and money did not.
-        """
-        exponent = self.amount.as_tuple().exponent
-        if isinstance(exponent, int) and -exponent > MONEY_SCALE:
-            raise ValueError(
-                f"money carries more than {MONEY_SCALE} decimal places ({self.amount}); "
-                "quantise deliberately before constructing it"
-            )
-        return self
-
-    def __add__(self, other: Money) -> Money:
-        if self.currency != other.currency:
-            raise ValueError(
-                f"refusing to add {self.currency} to {other.currency}: "
-                "a cross-currency sum needs a rate observed at the measurement date"
-            )
-        return Money(amount=self.amount + other.amount, currency=self.currency)
 
 
 class Citation(Contract):
@@ -466,7 +390,19 @@ class HoldingRow(Contract):
     #: summed realisation-only rows into a held-at-date figure. An invariant
     #: enforced on one side only is not enforced.
     held_at_date: bool = True
-    mark: Mark
+    #: Absent when the ledger holds no mark for this holding at this date.
+    #:
+    #: A position realised during the period under audit still belongs in the
+    #: packet — the audit letter's request 4 asks for realised investments — but
+    #: it has no mark at the measurement date, because it was not held then.
+    #: `evals/oracle/derived.json` states exactly this: Jackpocket at 2024-12-31
+    #: is `held_at_date: false` with `reported_amount: null`.
+    #:
+    #: Required until now, which is why `api/ledger.py` anchored the packet on
+    #: marks and dropped every realised position — the one class of row the
+    #: letter asks for by name. Carrying the last known mark forward instead
+    #: would put a stale figure where the oracle says there is none.
+    mark: Mark | None = None
     assessments: list[RequirementAssessment] = Field(default_factory=list)
     gaps: list[GapObservation] = Field(default_factory=list)
     approval: Approval | None = None
@@ -576,11 +512,30 @@ class Packet(Contract):
         """
         if not self.rows:
             raise ValueError("a packet with no rows has no meaningful total")
-        currency = self.rows[0].mark.reported.currency
+        # The currency comes from the first row that is actually an INPUT, not
+        # from `rows[0]`. An unheld EUR row before a held USD row set the zero
+        # to EUR and then refused to add USD to it — a cross-currency error
+        # raised by a row the total excludes.
+        # A packet where nothing is held at the date has a total of zero, not an
+        # error — a fund that exited every position still files a packet, and
+        # `test_a_single_exit_selling_the_whole_position_realises_every_lot` is
+        # that case. So the currency comes from the held inputs when there are
+        # any, and from the first marked row otherwise: with no inputs the sum is
+        # zero either way, and taking it from an EXCLUDED row while real inputs
+        # exist is what made an unheld EUR row refuse to add a held USD one.
+        marked = [r for r in self.rows if r.mark is not None]
+        if not marked:
+            raise ValueError("a packet whose rows carry no mark has no meaningful total")
+        inputs = [r for r in marked if r.held_at_date]
+        source = (inputs or marked)[0].mark
+        assert source is not None  # every row in `marked` has one
+        currency = source.reported.currency
         total = Money(amount=Decimal(0), currency=currency)
         unsupported = Money(amount=Decimal(0), currency=currency)
         for row in self.rows:
             if not row.held_at_date:
+                continue
+            if row.mark is None:
                 continue
             total = total + row.mark.reported  # raises on a currency mismatch
             if not row.supported:

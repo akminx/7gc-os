@@ -18,7 +18,7 @@ from __future__ import annotations
 import psycopg
 import pytest
 
-from tests.schema_helpers import DSN, Conn, make_mark, rejects, returned_id
+from tests.schema_helpers import CITED, DSN, Conn, make_mark, rejects, returned_id
 
 pytestmark = pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
 
@@ -216,9 +216,9 @@ def test_derived_figure_cannot_rest_on_an_unpromoted_candidate(
     to a mark. AI-proposed numbers become validated with no human disposal."""
     row = conn.execute(
         "insert into extracted_fact (claim_id, field_name, value_text,"
-        " citation_quote, span_start, span_end) values (%s, 'pps', '8.00', 'q', 0, 1)"
-        " returning id",
-        (seed["cl"],),
+        " value_numeric, citation_quote, span_start, span_end)"
+        " values (%s, 'pps', %s, %s, %s, %s, %s) returning id",
+        (seed["cl"], *CITED),
     ).fetchone()
     assert row is not None
     conn.execute(
@@ -242,8 +242,9 @@ def test_canonical_fact_requires_a_promoting_decision(conn: Conn, seed: dict[str
     assert "fact_promoted_requires_decision" in rejects(
         conn,
         "insert into extracted_fact (claim_id, state, field_name, value_text,"
-        " citation_quote, span_start, span_end) values (%s, 'canonical', 'pps', '8.00', 'q', 0, 1)",
-        (seed["cl"],),
+        " value_numeric, citation_quote, span_start, span_end)"
+        " values (%s, 'canonical', 'pps', %s, %s, %s, %s, %s)",
+        (seed["cl"], *CITED),
     )
 
 
@@ -259,10 +260,10 @@ def test_promotion_requires_a_transcription_not_just_any_decision(
     assert row is not None
     assert "fact_promoter_is_approved_transcription" in rejects(
         conn,
-        "insert into extracted_fact (claim_id, state, field_name, value_text, citation_quote,"
-        " span_start, span_end, promoted_by, promoted_by_type, promoted_by_status)"
-        " values (%s, 'canonical', 'pps', '8.00', 'q', 0, 1, %s, 'packet', 'rejected')",
-        (seed["cl"], row[0]),
+        "insert into extracted_fact (claim_id, state, field_name, value_text, value_numeric,"
+        " citation_quote, span_start, span_end, promoted_by, promoted_by_type, promoted_by_status)"
+        " values (%s, 'canonical', 'pps', %s, %s, %s, %s, %s, %s, 'packet', 'rejected')",
+        (seed["cl"], *CITED, row[0]),
     )
 
 
@@ -275,10 +276,10 @@ def test_an_approved_transcription_does_promote(conn: Conn, seed: dict[str, str]
     ).fetchone()
     assert row is not None
     conn.execute(
-        "insert into extracted_fact (claim_id, state, field_name, value_text, citation_quote,"
-        " span_start, span_end, promoted_by, promoted_by_type, promoted_by_status)"
-        " values (%s, 'canonical', 'pps', '8.00', 'q', 0, 1, %s, 'transcription', 'approved')",
-        (seed["cl"], row[0]),
+        "insert into extracted_fact (claim_id, state, field_name, value_text, value_numeric,"
+        " citation_quote, span_start, span_end, promoted_by, promoted_by_type, promoted_by_status)"
+        " values (%s, 'canonical', 'pps', %s, %s, %s, %s, %s, %s, 'transcription', 'approved')",
+        (seed["cl"], *CITED, row[0]),
     )
     conn.rollback()
 

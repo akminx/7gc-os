@@ -1,0 +1,219 @@
+{
+  "funds": {
+    "periods": [
+      {
+        "fund_id": "fund_ii",
+        "label": "FY2025 Q4",
+        "period_id": "f2_25q4"
+      }
+    ],
+    "source": "fixture"
+  },
+  "holding": {
+    "company_name": "Dream",
+    "evidence": [],
+    "holding_id": "dream",
+    "source": "fixture"
+  },
+  "packet": {
+    "fund_id": "fund_ii",
+    "generated_at": "2026-01-15T12:00:00Z",
+    "period": {
+      "audit_scope": "packet",
+      "fund_id": "fund_ii",
+      "id": "f2_25q4",
+      "label": "FY2025 Q4",
+      "period_date": "2025-12-31"
+    },
+    "policy_version": "v1",
+    "rows": [
+      {
+        "approval": null,
+        "approved": false,
+        "assessments": [
+          {
+            "applicable": true,
+            "evidence": [],
+            "next_actions": [
+              "REQUEST_FROM_COMPANY"
+            ],
+            "policy_version": "v1",
+            "pro_forma": false,
+            "reason_codes": [
+              "ACQUISITION_DOCS_NOT_LOCATED"
+            ],
+            "requirement": "R1",
+            "tracker_label": null,
+            "verdict": "missing"
+          },
+          {
+            "applicable": true,
+            "evidence": [
+              {
+                "claim": {
+                  "applicable_from": "2025-11-14",
+                  "applicable_to": null,
+                  "as_of_date": null,
+                  "claim_key": "dream/series_b_price",
+                  "document_version_id": "dv_dream_b_captable",
+                  "execution_status": "pro_forma",
+                  "holding_id": "dream",
+                  "id": "dream_b_cap",
+                  "issued_date": "2025-11-14",
+                  "price_per_share": "8.00",
+                  "priced_class": "series_b",
+                  "received_date": null,
+                  "source_class": "company_cap_table",
+                  "stated": null,
+                  "supersedes_claim_id": null
+                },
+                "is_subsequent": false
+              },
+              {
+                "claim": {
+                  "applicable_from": "2025-11-17",
+                  "applicable_to": null,
+                  "as_of_date": null,
+                  "claim_key": "dream/series_b_price",
+                  "document_version_id": "dv_dream_closing_email",
+                  "execution_status": "unexecuted_referenced",
+                  "holding_id": "dream",
+                  "id": "dream_close_email",
+                  "issued_date": "2025-11-17",
+                  "price_per_share": "8.00",
+                  "priced_class": "series_b",
+                  "received_date": null,
+                  "source_class": "company_communication",
+                  "stated": null,
+                  "supersedes_claim_id": null
+                },
+                "is_subsequent": false
+              }
+            ],
+            "next_actions": [
+              "RECORD_VALUATION_POLICY_DECISION"
+            ],
+            "policy_version": "v1",
+            "pro_forma": true,
+            "reason_codes": [
+              "CLOSING_SET_PENDING",
+              "CROSS_CLASS_POLICY_DECISION_REQUIRED",
+              "PRO_FORMA_PENDING_EXECUTION"
+            ],
+            "requirement": "R2",
+            "tracker_label": null,
+            "verdict": "partial"
+          },
+          {
+            "applicable": false,
+            "evidence": [],
+            "next_actions": [],
+            "policy_version": "v1",
+            "pro_forma": false,
+            "reason_codes": [
+              "VALUE_CHANGED_SINCE_2025-09-30"
+            ],
+            "requirement": "R3",
+            "tracker_label": null,
+            "verdict": "not_applicable"
+          },
+          {
+            "applicable": false,
+            "evidence": [],
+            "next_actions": [],
+            "policy_version": "v1",
+            "pro_forma": false,
+            "reason_codes": [
+              "NO_REALISATION_IN_PERIOD"
+            ],
+            "requirement": "R4",
+            "tracker_label": null,
+            "verdict": "not_applicable"
+          },
+          {
+            "applicable": true,
+            "evidence": [],
+            "next_actions": [],
+            "policy_version": "v1",
+            "pro_forma": false,
+            "reason_codes": [],
+            "requirement": "R5",
+            "tracker_label": null,
+            "verdict": "sufficient"
+          }
+        ],
+        "company_name": "Dream",
+        "gaps": [
+          {
+            "holding_id": "dream",
+            "id": 1,
+            "kind": "not_located",
+            "missing_document": "Series A-1 acquisition docs",
+            "remediation": "open",
+            "requirement": "R1",
+            "security_class": "series_a1",
+            "source_quote": "no executed acquisition document in corpus"
+          }
+        ],
+        "held_at_date": true,
+        "holding_id": "dream",
+        "mark": {
+          "basis": null,
+          "derivation_reason": "NO_PRICE_FOR_CLASS:series_a1",
+          "derivation_status": "not_derivable",
+          "holding_id": "dream",
+          "id": 1,
+          "lineage": [],
+          "period_id": "f2_25q4",
+          "reported": {
+            "amount": "5000000",
+            "currency": "USD"
+          },
+          "revision": 1,
+          "validated": null
+        },
+        "position_type": "direct_equity",
+        "supported": false,
+        "unsupported_reasons": {
+          "R1": "missing",
+          "R2": "partial"
+        }
+      }
+    ],
+    "schema_version": "1",
+    "source": "fixture",
+    "totals": {
+      "amount": {
+        "amount": "5000000",
+        "currency": "USD"
+      },
+      "contains_unsupported_inputs": true,
+      "kind": "held_at_date_reported",
+      "label": "Tracker-reported amounts for positions held at this date, unaudited",
+      "packet_gap_positions": 1,
+      "unheld_gap_positions": 0,
+      "unsupported_amount": {
+        "amount": "5000000",
+        "currency": "USD"
+      },
+      "unsupported_positions": 1
+    }
+  },
+  "totals": {
+    "amount": {
+      "amount": "5000000",
+      "currency": "USD"
+    },
+    "contains_unsupported_inputs": true,
+    "kind": "held_at_date_reported",
+    "label": "Tracker-reported amounts for positions held at this date, unaudited",
+    "packet_gap_positions": 1,
+    "source": "fixture",
+    "unheld_gap_positions": 0,
+    "unsupported_amount": {
+      "amount": "5000000",
+      "currency": "USD"
+    },
+    "unsupported_positions": 1
+  }
+}
