@@ -40,6 +40,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from api import routes
 from api.serialize import row_json, totals_json
 from packages.contracts import enums, models
 from packages.contracts.fixtures.dream import dream_packet
@@ -226,14 +227,20 @@ def test_every_route_envelope_is_declared_key_for_key() -> None:
         )
 
 
-def test_the_evidence_claim_is_a_claim_plus_its_citations() -> None:
-    """`GET /holdings/{id}` dumps the `Claim` model and adds `citations`.
+def test_the_evidence_claim_is_a_claim_plus_what_the_route_adds() -> None:
+    """`GET /holdings/{id}` dumps the `Claim` model and adds one key.
 
     Checked against the model rather than against a captured instance because
     the fixture branch has no claim store, so the captured evidence list is
     empty — and an empty list agrees with any shape at all.
+
+    The added key is read off `api/routes.py` rather than written here. It used
+    to be the literal `"citations"`, which meant this assertion described the
+    route instead of consulting it: the route moved to `facts`, this stayed
+    green, and the browser crashed on every claim in the ledger.
     """
-    assert _fields("EvidenceClaim") == set(models.Claim.model_fields) | {"citations"}
+    extra = {routes.EVIDENCE_CLAIM_EXTRA}
+    assert _fields("EvidenceClaim") == set(models.Claim.model_fields) | extra
 
 
 def test_the_source_field_names_the_two_stores_the_routes_can_answer_from() -> None:

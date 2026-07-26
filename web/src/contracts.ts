@@ -239,7 +239,21 @@ export interface HoldingRow {
   company_name: string;
   position_type: PositionType;
   held_at_date: boolean;
-  mark: Mark;
+  /**
+   * Absent when the ledger holds no mark for this holding at this date.
+   *
+   * A position realised during the period is still in the packet — the audit
+   * letter asks for realised investments by name — and has no mark at the
+   * measurement date because it was not held then. `evals/oracle/derived.json`
+   * states Jackpocket at 2024-12-31 as `held_at_date: false`,
+   * `reported_amount: null`.
+   *
+   * `Mark | null`, not an optional field: the API always sends the key. The
+   * browser must render the ABSENCE — carrying the last known mark forward
+   * would put a stale figure where the oracle says there is none, and a blank
+   * cell reads as zero on a screen full of amounts.
+   */
+  mark: Mark | null;
   assessments: RequirementAssessment[];
   gaps: GapObservation[];
   approval: Approval | null;

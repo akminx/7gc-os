@@ -1,6 +1,7 @@
-import type { DerivedFigure, HoldingRow, RequirementAssessment } from "./contracts";
+import type { DerivedFigure, HoldingRow, Mark, RequirementAssessment } from "./contracts";
 import { formatMoney } from "./format";
 import { DERIVATION_STATUS, POSITION_TYPE, REQUIREMENT, VALUATION_BASIS } from "./labels";
+import type { MetaItem } from "./ui";
 import {
   ApprovalState,
   CodeList,
@@ -8,7 +9,10 @@ import {
   Figure,
   GapItem,
   Meta,
+  NO_MARK_MEANING,
+  NoMark,
   Section,
+  SourceFactItem,
   SupportState,
   VerdictChip,
 } from "./ui";
@@ -34,17 +38,7 @@ function LineageNode({ figure }: { figure: DerivedFigure }) {
       <ul>
         {figure.inputs.map((input) => (
           <li key={input.ordinal} className="lineage__input">
-            {input.fact !== null && (
-              <div>
-                <code>{input.fact.field_name}</code> = {input.fact.value_text}{" "}
-                <span className="tag">{input.fact.state}</span>
-                <blockquote>{input.fact.citation.quote}</blockquote>
-                <span className="sub">
-                  {input.fact.citation.document_version_id} · offsets{" "}
-                  {input.fact.citation.span_start}–{input.fact.citation.span_end}
-                </span>
-              </div>
-            )}
+            {input.fact !== null && <SourceFactItem fact={input.fact} />}
             {input.child !== null && (
               <ul>
                 <LineageNode figure={input.child} />
@@ -99,8 +93,55 @@ function Assessment({ assessment }: { assessment: RequirementAssessment }) {
   );
 }
 
+/**
+ * Reported and validated, or the statement that neither exists.
+ *
+ * Support is deliberately outside this: it is a judgement about evidence and is
+ * answerable for a row with no mark at all, which is why the third panel sits
+ * beside this one rather than inside it.
+ */
+function MarkFigures({ mark }: { mark: Mark | null }) {
+  if (mark === null) {
+    return (
+      <div className="figure figure--no-mark">
+        <span className="figure__caption">Reported and validated — neither exists</span>
+        <span className="figure__amount">
+          <NoMark />
+        </span>
+        <span className="sub">{NO_MARK_MEANING}</span>
+      </div>
+    );
+  }
+  const derivation = DERIVATION_STATUS[mark.derivation_status];
+  return (
+    <>
+      <Figure caption="Reported — tracker" money={mark.reported} tone="reported" />
+      <div className="figure figure--validated">
+        <span className="figure__caption">Validated — independently derived</span>
+        <span className="figure__amount">
+          {mark.validated === null ? "none" : formatMoney(mark.validated)}
+        </span>
+        <span className="sub">
+          {derivation.label} · {mark.derivation_reason}
+        </span>
+      </div>
+    </>
+  );
+}
+
 export function Workspace({ row }: { row: HoldingRow }) {
-  const derivation = DERIVATION_STATUS[row.mark.derivation_status];
+  const mark = row.mark;
+  const markItems: MetaItem[] =
+    mark === null
+      ? [{ label: "mark", value: <NoMark />, hint: NO_MARK_MEANING }]
+      : [
+          { label: "period", value: mark.period_id },
+          { label: "mark revision", value: mark.revision },
+          {
+            label: "valuation basis",
+            value: mark.basis === null ? "none declared" : VALUATION_BASIS[mark.basis],
+          },
+        ];
   return (
     <>
       <Section title={`${row.company_name} · ${row.holding_id}`}>
@@ -111,12 +152,7 @@ export function Workspace({ row }: { row: HoldingRow }) {
               label: "held at measurement date",
               value: row.held_at_date ? "yes" : "no — not an input to the held-at-date total",
             },
-            { label: "period", value: row.mark.period_id },
-            { label: "mark revision", value: row.mark.revision },
-            {
-              label: "valuation basis",
-              value: row.mark.basis === null ? "none declared" : VALUATION_BASIS[row.mark.basis],
-            },
+            ...markItems,
           ]}
         />
       </Section>
@@ -126,16 +162,7 @@ export function Workspace({ row }: { row: HoldingRow }) {
         note="Reported is what the tracker says. Validated is what the evidence independently derives. Support is a separate judgement entirely: a mark can be perfectly derivable and wholly unsupported."
       >
         <div className="triptych">
-          <Figure caption="Reported — tracker" money={row.mark.reported} tone="reported" />
-          <div className="figure figure--validated">
-            <span className="figure__caption">Validated — independently derived</span>
-            <span className="figure__amount">
-              {row.mark.validated === null ? "none" : formatMoney(row.mark.validated)}
-            </span>
-            <span className="sub">
-              {derivation.label} · {row.mark.derivation_reason}
-            </span>
-          </div>
+          <MarkFigures mark={mark} />
           <div className="figure figure--support">
             <span className="figure__caption">Support — evidence verdicts</span>
             <span className="figure__amount">
@@ -144,10 +171,12 @@ export function Workspace({ row }: { row: HoldingRow }) {
             <span className="sub">decided by the API from the verdicts in the checklist below</span>
           </div>
         </div>
-        <p className="note">{derivation.meaning}</p>
-        {row.mark.lineage.length > 0 && (
+        {mark !== null && (
+          <p className="note">{DERIVATION_STATUS[mark.derivation_status].meaning}</p>
+        )}
+        {mark !== null && mark.lineage.length > 0 && (
           <ul className="lineage-list">
-            {row.mark.lineage.map((figure) => (
+            {mark.lineage.map((figure) => (
               <LineageNode key={figure.id} figure={figure} />
             ))}
           </ul>

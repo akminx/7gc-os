@@ -11,10 +11,11 @@ them and a second derivation is a second answer:
 * **held-at-date comes from `lot`** (INV-7), never from a flag on the holding. A
   holding with a lot acquired after the measurement date, or realised before it,
   is not held then — and that decides whether its mark enters the fund total.
-* **the evidence is whatever `claim` holds**, with its citations. No assessment
-  layer exists yet, so no requirement verdicts are invented: `assessments` is
-  empty and every row therefore reads `not assessed` rather than `sufficient`.
-  That is the honest state and the packet says so.
+* **the verdicts come from `policy/`**, evaluated over the same ledger. They are
+  computed on read rather than stored, so a packet cannot show a verdict that
+  disagrees with the evidence currently in the ledger — which is the failure a
+  cached assessment table invites, and the reason `evidence_assessment` is
+  written by the assessment run rather than read by this one.
 """
 
 from __future__ import annotations
@@ -36,13 +37,19 @@ from packages.contracts.enums import (
 )
 from packages.contracts.models import (
     Claim,
+    EvidenceCitation,
+    GapObservation,
     HoldingRow,
     Mark,
     Money,
     Packet,
     Period,
+    RequirementAssessment,
     SourceFact,
 )
+from policy.from_ledger import load as load_policy
+from policy.inputs import Ledger as PolicyLedger
+from policy.requirements import assess_row
 
 Conn = psycopg.Connection[tuple[object, ...]]
 
@@ -213,11 +220,84 @@ def claims_for(conn: Conn, holding_id: str) -> list[tuple[Claim, list[SourceFact
     return out
 
 
+def _assessments(
+    ledger: PolicyLedger, claims: dict[str, Claim], holding_id: str, on: date
+) -> list[RequirementAssessment]:
+    """The five requirements, evaluated now, with the claims each rests on.
+
+    `not_assessed` never appears here: every requirement is answered, and where
+    it does not arise the answer is `not_applicable`. Those are different
+    findings and INV-2 exists to keep them apart — "the requirement does not
+    arise" and "nobody looked" must not render the same way.
+    """
+    row = assess_row(ledger, holding_id, on)
+    out = []
+    for code in sorted(row.outcomes):
+        outcome = row.outcomes[code]
+        out.append(
+            RequirementAssessment(
+                requirement=code,
+                verdict=outcome.verdict,
+                reason_codes=list(outcome.reasons),
+                next_actions=list(outcome.next_actions),
+                evidence=[
+                    EvidenceCitation(
+                        claim=claims[claim_id],
+                        # INV-3 · the evidence post-dates the measurement date.
+                        # Legitimate — an administrator's year-end statement
+                        # arrives in January — but it must be labelled rather
+                        # than presented as contemporaneous.
+                        is_subsequent=_claim_is_subsequent(ledger, claim_id, on),
+                    )
+                    for claim_id in outcome.relied_on
+                    if claim_id in claims
+                ],
+                pro_forma=outcome.pro_forma,
+                policy_version=POLICY_VERSION,
+            )
+        )
+    return out
+
+
+def _claim_is_subsequent(ledger: PolicyLedger, claim_id: str, on: date) -> bool:
+    found = next((c for c in ledger.claims if c.id == claim_id), None)
+    return found is not None and found.effective_date > on
+
+
+def _gaps(ledger: PolicyLedger, holding_id: str) -> list[GapObservation]:
+    """Every recorded absence for this holding, whichever requirement it blocks.
+
+    Not filtered to the requirements that came back short: a gap is an
+    observation about the fund's records, and the auditor's list of what to
+    chase is the same list whether or not some other document happened to
+    satisfy the requirement anyway.
+    """
+    return [
+        GapObservation(
+            id=n,
+            holding_id=gap.holding_id,
+            requirement=gap.requirement,
+            security_class=gap.security_class,
+            missing_document=gap.missing_document,
+            kind=gap.kind,
+            source_quote=gap.source_quote,
+        )
+        for n, gap in enumerate((g for g in ledger.gaps if g.holding_id == holding_id), start=1)
+    ]
+
+
 def packet(conn: Conn, fund_id: str, period_id: str) -> Packet | None:
     """The packet for one fund-period, assembled from the ledger."""
     period = _period(conn, fund_id, period_id)
     if period is None:
         return None
+
+    policy = load_policy(conn)
+    claims = {
+        claim.id: claim
+        for holding_id in policy.holdings
+        for claim, _ in claims_for(conn, holding_id)
+    }
 
     # Membership comes from the LOTS, not from the marks. Anchoring on marks
     # dropped every realised position — the one class of row the audit letter
@@ -299,17 +379,16 @@ def packet(conn: Conn, fund_id: str, period_id: str) -> Packet | None:
                 derivation_status=DerivationStatus(_s(r[10])),
                 derivation_reason=_s(r[11]),
             )
+        holding_id = _s(r[0])
         built.append(
             HoldingRow(
-                holding_id=_s(r[0]),
+                holding_id=holding_id,
                 company_name=_s(r[1]),
                 position_type=PositionType(_s(r[2])),
                 held_at_date=bool(r[3]),
                 mark=mark,
-                # No policy layer yet, so no verdicts are invented. Every row
-                # reads `not assessed`, which is what it is.
-                assessments=[],
-                gaps=[],
+                assessments=_assessments(policy, claims, holding_id, period.period_date),
+                gaps=_gaps(policy, holding_id),
             )
         )
 

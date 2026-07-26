@@ -15,6 +15,7 @@ absent, exactly as the database tests skip without a DSN.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -171,6 +172,28 @@ class TrackerSheet:
 
 
 @dataclass(frozen=True)
+class SheetNote:
+    """One prose line from a company sheet, exactly as the workbook states it.
+
+    `ordinal` is its position among the rows below the header, so a note that
+    qualifies the tranche above it can be tied back to it, and two notes with
+    identical text on one sheet stay distinguishable.
+    """
+
+    company: str
+    fund: str | None
+    text: str
+    source_sheet: str
+    ordinal: int
+    #: The whole row, verbatim. Sway's recapitalisation is why: its row reads
+    #: `Post-Recap | | $10M | 0.4 | 875000 | 9/30/2025` and carries no
+    #: investment, so it is not a tranche — but the 875,000 shares and the
+    #: effective date are the conversion event INV-17 turns on, and keeping only
+    #: the first cell discarded them.
+    cells: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True)
 class Tranche:
     """One row from the Master Investment Breakdown.
 
@@ -234,8 +257,17 @@ class Tranche:
         produced a confident false finding that the workbooks disagreed. Between
         an over-broad and an over-narrow rule the answer is neither — see
         `is_recognised`.
+
+        `startswith` was still too narrow for the same reason one step along.
+        Jio's row is `Indirect Fund` — a 1,000,000 subscription into a feeder —
+        and it became no lot at all. With no lot, held-at-date had nothing to
+        ask about a live $1,000,000 position, and `api/ledger.py` carried a
+        fallback so it would not vanish from Fund I's total, as it had once
+        before. The word appears; where it appears in the phrase is not the
+        distinction. An exit is still tested first, so a row that names both
+        stays an exit.
         """
-        return self.kind.strip().lower().startswith("fund")
+        return bool(re.search(r"\bfund\b", self.kind, re.I)) and not self.is_exit
 
     @property
     def is_recognised(self) -> bool:
@@ -361,14 +393,15 @@ def read_valuation_tracker(path: Path) -> list[TrackerSheet]:
     return sheets
 
 
-def read_master_breakdown(path: Path) -> list[Tranche]:
-    """Every tranche across the per-company sheets.
+def _company_sheets(path: Path) -> Iterator[tuple[str, str | None, str, list[list[object]]]]:
+    """`(company, fund, sheet title, rows below the header)` per company sheet.
 
     Sheets named `Fund I >>` / `Fund II >>` are section dividers with no rows;
-    a company sheet is one whose header row starts with `Type`.
+    a company sheet is one whose header row starts with `Type`. Walked once
+    here so the tranche reader and the note reader cannot drift into different
+    ideas of which sheets and which rows are in scope.
     """
     wb = openpyxl.load_workbook(path, data_only=True)
-    tranches: list[Tranche] = []
     fund: str | None = None
     for ws in wb.worksheets:
         divider = ws.title.strip()
@@ -381,12 +414,18 @@ def read_master_breakdown(path: Path) -> list[Tranche]:
             continue
         # "Jackpocket (Realized)" and "Jio (Indirect)" carry their status in the
         # tab name; the company is the part before the parenthesis.
-        company = company_key(ws.title)
-        for row in rows[header_at + 1 :]:
+        yield company_key(ws.title), fund, ws.title, rows[header_at + 1 :]
+
+
+def read_master_breakdown(path: Path) -> list[Tranche]:
+    """Every tranche across the per-company sheets."""
+    tranches: list[Tranche] = []
+    for company, fund, title, rows in _company_sheets(path):
+        for row in rows:
             kind = row[0]
             investment = _dec(row[1])
             if not isinstance(kind, str) or investment is None:
-                continue  # documentation lines and footnotes
+                continue  # documentation lines and footnotes — see read_master_notes
             tranches.append(
                 Tranche(
                     company=company,
@@ -399,7 +438,48 @@ def read_master_breakdown(path: Path) -> list[Tranche]:
                     acquired=_as_date(row[5]),
                     acquired_text=str(row[5]) if row[5] is not None else None,
                     acquired_range=_as_range(row[5]),
-                    source_sheet=ws.title,
+                    source_sheet=title,
                 )
             )
     return tranches
+
+
+def read_master_notes(path: Path) -> list[SheetNote]:
+    """Every prose line the breakdown carries, verbatim.
+
+    `read_master_breakdown` drops these: a documentation line has no number in
+    the "Investment ($)" column, so it is not a tranche. But they are where the
+    workbook states the things the grid does not — which security class each
+    tranche is, that Jio is held through a feeder and Banzai is listed, that
+    Moonfare's interest is denominated in euro — and, for eleven positions,
+    that a document is missing and why.
+
+    Those were all recorded as *assumptions* while these lines went unread:
+    every lot took `security_class = 'unstated'` and every holding
+    `position_type = direct_equity`, which made INV-17's cross-class rule fire
+    on all fourteen and the policy matrix refuse three. The workbook was saying
+    so the whole time.
+
+    Kept verbatim, and not parsed here. A note is a source passage; what it
+    means is decided in `to_contracts.py`, where the decision can be reviewed
+    beside the value it produces.
+    """
+    notes: list[SheetNote] = []
+    for company, fund, title, rows in _company_sheets(path):
+        for ordinal, row in enumerate(rows):
+            first = row[0]
+            if not isinstance(first, str) or not first.strip():
+                continue
+            if _dec(row[1]) is not None:
+                continue  # a tranche, already read
+            notes.append(
+                SheetNote(
+                    company=company,
+                    fund=fund,
+                    text=first.strip(),
+                    source_sheet=title,
+                    ordinal=ordinal,
+                    cells=tuple(row),
+                )
+            )
+    return notes

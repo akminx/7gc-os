@@ -1,4 +1,4 @@
-import type { HoldingRow } from "./contracts";
+import type { HoldingRow, Mark } from "./contracts";
 import type { FundsResponse, HoldingResponse, PacketResponse, TotalsResponse } from "./responses";
 
 /**
@@ -25,23 +25,33 @@ export const FIXTURE_FUNDS: FundsResponse = {
   periods: [{ fund_id: "fund_ii", period_id: "f2_25q4", label: "FY2025 Q4" }],
 };
 
+/**
+ * Dream's mark, named so it can be spread without first proving it is not null.
+ *
+ * `HoldingRow.mark` is `Mark | null` — a realised position has none — so reading
+ * it back off the row gives a nullable value that a variant cannot extend. This
+ * is the same captured object, referenced by `FIXTURE_ROW` below rather than
+ * copied, so the snapshot comparison is unaffected.
+ */
+export const FIXTURE_MARK: Mark = {
+  id: 1,
+  holding_id: "dream",
+  period_id: "f2_25q4",
+  revision: 1,
+  reported: { amount: "5000000", currency: "USD" },
+  validated: null,
+  derivation_status: "not_derivable",
+  derivation_reason: "NO_PRICE_FOR_CLASS:series_a1",
+  basis: null,
+  lineage: [],
+};
+
 export const FIXTURE_ROW: HoldingRow = {
   holding_id: "dream",
   company_name: "Dream",
   position_type: "direct_equity",
   held_at_date: true,
-  mark: {
-    id: 1,
-    holding_id: "dream",
-    period_id: "f2_25q4",
-    revision: 1,
-    reported: { amount: "5000000", currency: "USD" },
-    validated: null,
-    derivation_status: "not_derivable",
-    derivation_reason: "NO_PRICE_FOR_CLASS:series_a1",
-    basis: null,
-    lineage: [],
-  },
+  mark: FIXTURE_MARK,
   assessments: [
     {
       requirement: "R1",

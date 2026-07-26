@@ -46,6 +46,12 @@ FACTS = ROOT / "ingest/trackers/mark_facts.py"
 RECONCILE = ROOT / "ingest/trackers/reconcile.py"
 READ = ROOT / "ingest/trackers/read.py"
 MAPPER = ROOT / "ingest/trackers/to_contracts.py"
+LOTS = ROOT / "ingest/trackers/to_lots.py"
+CLASSIFY = ROOT / "ingest/trackers/classify.py"
+TUPLES = ROOT / "policy/valid_tuples.py"
+REDUCER = ROOT / "policy/reducer.py"
+REQS = ROOT / "policy/requirements.py"
+SEED = ROOT / "ingest/policy_seed.py"
 MODELS = ROOT / "packages/contracts/models.py"
 #: Step 2's document pipeline. The citation guards land here with the first
 #: extractor that writes one, so they are mutated from the day they exist rather
@@ -75,6 +81,19 @@ SUITES = [
     "tests/test_citations.py",
     "tests/test_document_store.py",
     "tests/test_document_end_to_end.py",
+    # The policy layer. Omitting these made every one of its twelve mutations
+    # report STILL GREEN on a first run — the guards were defended, by tests
+    # this list did not name. That is the harness reporting a false negative
+    # about itself, which is one level worse than the defect it hunts: it would
+    # have sent someone to write tests that already existed.
+    #
+    # `test_policy_vs_oracle.py` needs both a DSN and the workbooks and skips
+    # without them, so under `--ci` the matrix, the reducer and the injected
+    # branches in `test_policy_guards.py` are what hold the line — which is the
+    # point of splitting the pure rules from the ledger adapter.
+    "tests/test_policy_matrix.py",
+    "tests/test_policy_guards.py",
+    "tests/test_policy_vs_oracle.py",
 ]
 CASE_STUDY = ROOT / "7GC Audit Case Study"
 
@@ -284,8 +303,18 @@ MUTATIONS: list[Mutation] = [
     Mutation(
         "reader: an exit row counts as an investment",
         READ,
+        'return bool(re.search(r"\\bfund\\b", self.kind, re.I)) and not self.is_exit',
+        'return bool(re.search(r"\\bfund\\b", self.kind, re.I)) or True',
+    ),
+    Mutation(
+        # The narrowing that lost Jio: `Indirect Fund` does not START with
+        # "fund", so a live $1,000,000 feeder subscription became no lot at
+        # all, held-at-date had nothing to ask, and the position's membership
+        # in every Fund I total rested on a fallback.
+        "reader: only a kind STARTING with 'fund' is an investment again",
+        READ,
+        'return bool(re.search(r"\\bfund\\b", self.kind, re.I)) and not self.is_exit',
         'return self.kind.strip().lower().startswith("fund")',
-        "return not self.is_exit or True",
     ),
     Mutation(
         "reader: numbers stored as text are dropped",
@@ -327,9 +356,24 @@ MUTATIONS: list[Mutation] = [
     ),
     Mutation(
         "mapper: a full exit across several lots is refused again",
-        MAPPER,
+        LOTS,
         "    if len(exits) == 1 and sold >= held and held > 0 and when is not None:",
         "    if len(exits) == 1 and len(purchases) == 1 and sold == held and when is not None:",
+    ),
+    Mutation(
+        # The invented day only matters where a measurement date falls inside
+        # the range. Accepting every range fabricates the day that decides
+        # held-at-date (INV-7); refusing every range is what lost Jio's lot.
+        "mapper: an imprecise acquisition date is accepted however wide the range",
+        LOTS,
+        "    straddled = sorted(d for d in measured if start <= d < end)",
+        "    straddled = []",
+    ),
+    Mutation(
+        "mapper: the recapitalisation is dropped, so class-at-date never changes",
+        LOTS,
+        "    recap = classify.recapitalisation(notes)",
+        "    recap = None",
     ),
     Mutation(
         "mapper: master-side key collisions merge silently again",
@@ -516,13 +560,193 @@ MUTATIONS: list[Mutation] = [
         "        if fact.citation.document_version_id != version_id:",
         "        if False:",
     ),
+    # ── the policy layer (SPEC 7) ────────────────────────────────────────
+    Mutation(
+        # The mechanism by which the corpus is allowed to grow. A default files
+        # a new kind of evidence under whatever the neighbouring cell says.
+        "policy: an unenumerated tuple defaults instead of raising",
+        TUPLES,
+        "    result = MATRIX.get(key)\n    if result is None:",
+        "    result = MATRIX.get(key, PolicyResult(verdict=_SUFFICIENT))\n    if result is None:",
+    ),
+    Mutation(
+        "policy: two partials compose to sufficient",
+        REDUCER,
+        "    ranked = sorted(verdicts, key=_rank)\n    if not ranked:\n"
+        '        raise ReducerError("best() of nothing has no answer;'
+        ' decide the empty case at the caller")\n    return ranked[-1]',
+        "    ranked = sorted(verdicts, key=_rank)\n"
+        "    if ranked.count(RequirementVerdict.PARTIAL) > 1:\n"
+        "        return RequirementVerdict.SUFFICIENT\n    return ranked[-1]",
+    ),
+    Mutation(
+        "policy: conflicting stops dominating and reduces on the severity scale",
+        REDUCER,
+        "    if contradicted:\n        return RequirementVerdict.CONFLICTING",
+        "    if contradicted and not verdicts:\n        return RequirementVerdict.CONFLICTING",
+    ),
+    Mutation(
+        "policy: not_applicable is ordered into the row reduction",
+        REDUCER,
+        "    applicable = [\n        v\n        for v in seen\n"
+        "        if v not in (RequirementVerdict.NOT_APPLICABLE, RequirementVerdict.NOT_ASSESSED)\n"
+        "    ]",
+        "    applicable = [v for v in seen if v is not RequirementVerdict.NOT_ASSESSED]",
+    ),
+    Mutation(
+        # Capsule FY2023: a memo dated 12/31/2022 read at 12/31/2023 is exactly
+        # twelve months old and R3 must NOT fire. One character.
+        "policy: exactly twelve months counts as stale",
+        REQS,
+        "        if latest is None or latest < threshold:",
+        "        if latest is None or latest <= threshold:",
+    ),
+    Mutation(
+        # r2 had `every`, and Moonfare's fresh FX rate rescued its 33-month-old
+        # underlying valuation, so R3 did not fire at all.
+        "policy: R3 needs EVERY component stale, not at least one",
+        REQS,
+        "    if not stale:",
+        "    if len(stale) < len(components):",
+    ),
+    Mutation(
+        # Limb (a) said "audit measurement date" through r4, which made R3
+        # structurally unable to fire at a fund's first packet date — Roofstock
+        # escaped calibration at FY2023, the exact position the letter addresses.
+        "policy: R3's predecessor must be a packet date, not any observation",
+        REQS,
+        "    prior = [(d, amount) for d, amount in ledger.mark_observations(holding_id, fund_id)"
+        " if d < on]",
+        "    prior = [(d, amount) for d, amount in ledger.mark_observations(holding_id, fund_id)"
+        " if d < on and ledger.period_at(fund_id, d) is not None"
+        " and ledger.period_at(fund_id, d).audit_scope.value == 'packet']",
+    ),
+    Mutation(
+        # Set EQUALITY. Both one-way tests were wrong on this corpus: asking
+        # only "is every held class covered" misses Lucra pricing A-1 shares at
+        # the A-2 price; asking only "is the priced class held" misses B shares
+        # marked at the C price.
+        "policy: cross-class becomes a one-way test again",
+        REQS,
+        "    cross_class = bool(priced_classes) and held_classes != priced_classes",
+        "    cross_class = bool(priced_classes) and not (priced_classes <= held_classes)",
+    ),
+    Mutation(
+        "policy: INV-16's reliance window stops closing",
+        REQS,
+        "            if claim.applicable_to is not None and claim.applicable_to < on:\n"
+        "                continue",
+        "            if False:\n                continue",
+    ),
+    Mutation(
+        # Inferring supersession from dates drops Dream's cap table in favour of
+        # its closing notice, taking the pro_forma label with it.
+        "policy: supersession is inferred from dates rather than recorded",
+        REQS,
+        "    replaced = {c.supersedes_claim_id for c in claims if c.supersedes_claim_id}",
+        "    replaced = {c.id for c in claims"
+        " if any(o.priced_class == c.priced_class and o.issued_date > c.issued_date"
+        " for o in claims)}",
+    ),
+    Mutation(
+        # Omission used to fail OPEN: a holding with no components returned
+        # "all components have support" and R3 silently never fired.
+        "policy: a holding with no recorded components reads as nothing stale",
+        REQS,
+        "    stale = _stale(ledger.components_for(holding_id), on)",
+        "    stale = _stale(tuple(x for x in ledger.components if x.holding_id == holding_id), on)",
+    ),
+    Mutation(
+        "policy: R1 stops scoping a gap to the lot it affects",
+        REQS,
+        "        for gap in ledger.gaps_for(holding_id, RequirementCode.R1, lot.security_class):",
+        "        for gap in ledger.gaps_for(holding_id, RequirementCode.R1):",
+    ),
+    Mutation(
+        "seed: a claim relied upon for nothing no longer has to say so",
+        SEED,
+        "    if stored != declared:",
+        "    if stored - declared and False:",
+    ),
+    Mutation(
+        "classify: two position-type signals resolve by order instead of raising",
+        CLASSIFY,
+        "    if len(hits) > 1:",
+        "    if False:",
+    ),
+    Mutation(
+        "classify: two dated lines naming two classes resolve to the first",
+        CLASSIFY,
+        "        if len(named) > 1:\n            return None",
+        "        if len(named) > 1:\n            note, match = named[0]\n"
+        "            return Reading(_slug_class(match.group(1)), note.text, note.source_sheet)",
+    ),
 ]
 
 
-def run_suite(python: str) -> bool:
-    """True when the suite passes."""
+#: Which suites can possibly defend a guard in each file. Running all ten for
+#: all ninety-two mutations spent most of its wall clock in pytest collection,
+#: re-collecting suites that could not fail whatever the mutation did.
+#:
+#: Narrowing is safe in one direction only, and it is the loud one: a RED
+#: requires a test to actually fail, so no narrowing can invent one. Too narrow
+#: a list can only turn a true RED into a STILL GREEN — which reports work to
+#: do rather than work already done, and gets investigated. An unmapped file
+#: falls back to every suite, so adding a mutation in a new file is slow rather
+#: than silently under-checked.
+FILE_SUITES: dict[Path, list[str]] = {
+    # The four tracker modules share their defenders: `findings.py`'s fund key
+    # and materiality decide what `reconcile()` emits, `mark_facts.py` decides
+    # what it compares, and the assertions live across all three tracker suites
+    # plus the end-to-end one. Narrowing these lost NINE reds on a first run —
+    # every one a guard that IS defended, reported as undefended. So they get
+    # the whole tracker set, which is also the cheap one.
+    **{
+        f: [
+            "tests/test_tracker_ingest.py",
+            "tests/test_tracker_marks.py",
+            "tests/test_tracker_mark_sentences.py",
+            "tests/test_real_data_end_to_end.py",
+        ]
+        for f in (FINDINGS, MARKS, FACTS, RECONCILE)
+    },
+    READ: [
+        "tests/test_tracker_ingest.py",
+        "tests/test_tracker_marks.py",
+        "tests/test_real_data_end_to_end.py",
+    ],
+    MAPPER: ["tests/test_real_data_end_to_end.py", "tests/test_contracts.py"],
+    LOTS: ["tests/test_real_data_end_to_end.py"],
+    CLASSIFY: ["tests/test_real_data_end_to_end.py", "tests/test_policy_guards.py"],
+    MODELS: [
+        "tests/test_contracts.py",
+        "tests/test_real_data_end_to_end.py",
+        "tests/test_policy_vs_oracle.py",
+    ],
+    PARSE: ["tests/test_document_parse.py", "tests/test_document_end_to_end.py"],
+    CITATIONS: ["tests/test_citations.py", "tests/test_document_store.py"],
+    CLAIMS: ["tests/test_document_store.py", "tests/test_document_end_to_end.py"],
+    TUPLES: ["tests/test_policy_matrix.py", "tests/test_policy_guards.py"],
+    REDUCER: ["tests/test_policy_matrix.py", "tests/test_policy_guards.py"],
+    REQS: [
+        "tests/test_policy_guards.py",
+        "tests/test_policy_matrix.py",
+        "tests/test_policy_vs_oracle.py",
+    ],
+    SEED: ["tests/test_policy_guards.py", "tests/test_policy_vs_oracle.py"],
+}
+
+
+def run_suite(python: str, target: Path | None = None) -> bool:
+    """True when the suites that could defend `target` pass.
+
+    `-n0` overrides the `-n 4` in `addopts`: spinning up four xdist workers
+    costs more than it saves on one or two files, and this runs ninety-two
+    times.
+    """
+    suites = FILE_SUITES.get(target, SUITES) if target is not None else SUITES
     proc = subprocess.run(
-        [python, "-m", "pytest", *SUITES, "-q", "-x", "--no-header"],
+        [python, "-m", "pytest", *suites, "-q", "-x", "--no-header", "-n0", "-p", "no:randomly"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -571,7 +795,7 @@ def main() -> int:
                 continue
             m.path.write_text(source.replace(m.before, m.after, 1))
             try:
-                if run_suite(python):
+                if run_suite(python, m.path):
                     green.append(m.name)
                     print(f"  XX STILL GREEN  {m.name}")
                 else:

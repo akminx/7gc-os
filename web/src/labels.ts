@@ -4,6 +4,7 @@ import type {
   DecisionType,
   DerivationStatus,
   ExecutionStatus,
+  FactState,
   GapKind,
   GapRemediation,
   PositionType,
@@ -219,6 +220,28 @@ export const EXECUTION_STATUS: Record<ExecutionStatus, string> = {
   non_binding: "non-binding",
   unexecuted_referenced: "unexecuted, referenced",
   not_applicable: "not applicable",
+};
+
+/**
+ * How far an extracted figure has got. A candidate is what an extractor
+ * proposed, a canonical fact is the one the ledger relies on, and an approved
+ * one carries a recorded human decision. Rendered because "a number appears in
+ * a document" and "a number a person signed off" are different evidence, and a
+ * bare state string on screen states neither.
+ */
+export const FACT_STATE: Record<FactState, Term> = {
+  candidate: {
+    label: "candidate",
+    meaning: "Extracted and not yet adopted. Nothing relies on it.",
+  },
+  canonical: {
+    label: "canonical",
+    meaning: "The fact the ledger relies on for this field.",
+  },
+  approved: {
+    label: "approved",
+    meaning: "Canonical and carrying a recorded human decision.",
+  },
 };
 
 /** INV-13 · derivable is about arithmetic; supported is about evidence. */

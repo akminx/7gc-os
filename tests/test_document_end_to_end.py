@@ -47,6 +47,13 @@ pytestmark = [
 #: construction and prove nothing.
 EXPECTED: dict[str, tuple[str, str | None]] = {
     "fund_shares": ("625,000", "625000"),
+    # The class the fund HOLDS, read from the section heading its row sits
+    # under. Distinct from `series_b_price_per_share`, which is the class this
+    # table PRICES — a cap table's holders-of-record section and its round are
+    # different sections answering different questions, and INV-17 turns on the
+    # first. It was a constant in `extract_dream.py` and reached no fact, so the
+    # lot arrived at the policy layer as `unstated` while the document named it.
+    "fund_held_security_class": ("Series A-1 Preferred", None),
     "fund_entry_price_per_share": ("$3.20", "3.20"),
     "series_b_price_per_share": ("$8.00", "8.00"),
     "post_money_valuation": ("$800,000,000", "800000000"),

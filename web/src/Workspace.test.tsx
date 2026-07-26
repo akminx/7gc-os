@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { HoldingRow } from "./contracts";
 import { FIXTURE_ROW } from "./fixture";
-import { POOLSIDE_ROW, SWAY_ROW } from "./testdata";
+import { POOLSIDE_ROW, REALISED_ROW, SWAY_ROW } from "./testdata";
 import { Workspace } from "./Workspace";
 
 afterEach(cleanup);
@@ -53,7 +53,10 @@ describe("the mark", () => {
     expect(screen.getByText("shares × PPS")).toBeDefined();
     expect(screen.getByText("multiply")).toBeDefined();
     expect(screen.getByText(/Series B price per share/)).toBeDefined();
-    expect(screen.getByText(/offsets 120/)).toBeDefined();
+    // The lineage leaf and the evidence workspace render a SourceFact through
+    // one component, so a cited input names the field it fills here too.
+    expect(screen.getByText("price_per_share")).toBeDefined();
+    expect(screen.getByText("characters 120–152")).toBeDefined();
     expect(screen.getByText("share count")).toBeDefined();
   });
 
@@ -71,6 +74,40 @@ describe("the mark", () => {
     cleanup();
     show(SWAY_ROW);
     expect(screen.getByText(/not an input to the held-at-date total/)).toBeDefined();
+  });
+
+  /**
+   * A realised position carries no mark, and the oracle says so:
+   * `evals/oracle/derived.json` has Jackpocket at 2024-12-31 with
+   * `reported_amount: null`. The absence has to be rendered AS an absence — the
+   * failure being prevented is a zero, or a blank that reads as one, or the
+   * previous mark carried forward into a date it does not speak for.
+   */
+  it("states that a realised row has no mark instead of showing a figure", () => {
+    const { container } = show(REALISED_ROW);
+    expect(container.querySelectorAll(".no-mark")).toHaveLength(2);
+    expect(screen.getByText("Reported and validated — neither exists")).toBeDefined();
+    expect(screen.getAllByText(/Not zero, and not the last mark carried forward/).length).toBe(1);
+    expect(screen.queryByText("Reported — tracker")).toBeNull();
+    expect(container.querySelector(".figure--validated")).toBeNull();
+    // No amount of any kind reaches the screen, so there is nothing to mistake
+    // for a mark of zero.
+    expect(container.textContent).not.toContain("USD");
+  });
+
+  /**
+   * Support is a judgement about evidence, not about a mark, so it is still
+   * answerable for a row that has none — and the meta block drops the three
+   * fields that are properties of a mark rather than rendering them empty.
+   */
+  it("still reports support for a row with no mark, and drops the mark's own fields", () => {
+    const { container } = show(REALISED_ROW);
+    expect(container.querySelector(".support--unsupported")).not.toBeNull();
+    expect(container.querySelector(".support__reasons")?.textContent).toBe(
+      "R1 not assessedR2 not assessed",
+    );
+    const labels = [...container.querySelectorAll(".meta dt")].map((dt) => dt.textContent);
+    expect(labels).toEqual(["position type", "held at measurement date", "mark"]);
   });
 });
 

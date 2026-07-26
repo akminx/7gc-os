@@ -33,6 +33,16 @@ router = APIRouter()
 #: Kept so the app is demonstrable without a database. Step 0's one holding.
 _FIXTURE_ROWS = {DREAM_ROW.holding_id: DREAM_ROW}
 
+#: The one key `GET /holdings/{id}` adds to a `Claim` dump. Named here, and read
+#: by `tests/test_web_contracts.py`, because that test previously asserted the
+#: browser's shape against the model plus the *literal* `"citations"` — never
+#: against this route. So when the route began sending `facts` the assertion
+#: went on passing while it described something the route no longer did, and
+#: the evidence workspace read `.length` of `undefined` on every claim the
+#: ledger held. Only the fixture branch, which serves an empty evidence list,
+#: hid it: an empty list agrees with any shape at all.
+EVIDENCE_CLAIM_EXTRA = "facts"
+
 
 def _connect() -> psycopg.Connection[tuple[object, ...]] | None:
     url = dsn("MIGRATION_DATABASE_URL") or dsn("DATABASE_URL")
@@ -108,7 +118,7 @@ def get_holding(holding_id: str) -> dict[str, Any]:
                 # Each figure, with the passage that states it — not a detached
                 # list of quotes. An auditor needs to know which citation
                 # supports which number, and `field_name` is that link.
-                "facts": [f.model_dump(mode="json") for f in facts],
+                EVIDENCE_CLAIM_EXTRA: [f.model_dump(mode="json") for f in facts],
             }
             for claim, facts in ledger.claims_for(conn, holding_id)
         ]

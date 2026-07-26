@@ -1,8 +1,17 @@
-import type { HoldingRow, PacketTotals, RequirementCode } from "./contracts";
+import type { HoldingRow, Mark, PacketTotals, RequirementCode } from "./contracts";
 import { formatDate, formatMoney } from "./format";
 import { AUDIT_SCOPE, DERIVATION_STATUS, POSITION_TYPE, REQUIREMENT, TOTAL_KIND } from "./labels";
 import type { PacketResponse } from "./responses";
-import { ApprovalState, Figure, Meta, Section, SourceBadge, SupportState, VerdictChip } from "./ui";
+import {
+  ApprovalState,
+  Figure,
+  Meta,
+  NoMark,
+  Section,
+  SourceBadge,
+  SupportState,
+  VerdictChip,
+} from "./ui";
 
 const CODES: RequirementCode[] = ["R1", "R2", "R3", "R4", "R5"];
 
@@ -99,6 +108,37 @@ function AssessmentCell({ row, code }: { row: HoldingRow; code: RequirementCode 
   );
 }
 
+/**
+ * The reported and validated columns, or the statement that there is no mark.
+ *
+ * One cell spanning both when the mark is absent, rather than two cells that
+ * happen to be empty: an auditor reading down a column of amounts reads a blank
+ * as nothing owed, and "there is no mark at this date" is a different finding.
+ */
+function MarkCells({ mark }: { mark: Mark | null }) {
+  if (mark === null) {
+    return (
+      <td className="cell--no-mark" colSpan={2}>
+        <NoMark />
+      </td>
+    );
+  }
+  return (
+    <>
+      <td className="num">{formatMoney(mark.reported)}</td>
+      <td className="num">
+        {mark.validated === null ? (
+          <span className="absent" title={DERIVATION_STATUS[mark.derivation_status].meaning}>
+            none · {mark.derivation_reason}
+          </span>
+        ) : (
+          formatMoney(mark.validated)
+        )}
+      </td>
+    </>
+  );
+}
+
 function Row({ row, onOpen }: { row: HoldingRow; onOpen: (holdingId: string) => void }) {
   return (
     <tr>
@@ -109,16 +149,7 @@ function Row({ row, onOpen }: { row: HoldingRow; onOpen: (holdingId: string) => 
         <span className="sub">{POSITION_TYPE[row.position_type]}</span>
       </th>
       <td>{row.held_at_date ? "held at date" : "not held at date"}</td>
-      <td className="num">{formatMoney(row.mark.reported)}</td>
-      <td className="num">
-        {row.mark.validated === null ? (
-          <span className="absent" title={DERIVATION_STATUS[row.mark.derivation_status].meaning}>
-            none · {row.mark.derivation_reason}
-          </span>
-        ) : (
-          formatMoney(row.mark.validated)
-        )}
-      </td>
+      <MarkCells mark={row.mark} />
       {CODES.map((code) => (
         <AssessmentCell key={code} row={row} code={code} />
       ))}

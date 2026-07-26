@@ -66,6 +66,14 @@ def _assessment(code: RequirementCode, verdict: RequirementVerdict) -> Requireme
     )
 
 
+def _na(code: RequirementCode) -> RequirementAssessment:
+    """A requirement that does not arise. `not_applicable` needs no reason —
+    "the question does not come up here" is its own explanation."""
+    return RequirementAssessment(
+        requirement=code, verdict=RequirementVerdict.NOT_APPLICABLE, policy_version="v1"
+    )
+
+
 def _row(
     assessments: list[RequirementAssessment], amount: str = "1000", held: bool = True
 ) -> HoldingRow:
@@ -170,15 +178,40 @@ def test_adverse_verdicts_must_carry_a_reason_code() -> None:
         )
 
 
-def test_an_always_applicable_code_cannot_be_not_applicable() -> None:
-    """The contradiction that used to need a validator pair is now expressed in
-    one field, so only this rule remains."""
-    with pytest.raises(ValidationError, match="always applicable"):
-        RequirementAssessment(
-            requirement=RequirementCode.R1,
-            verdict=RequirementVerdict.NOT_APPLICABLE,
-            policy_version="v1",
+def test_an_always_applicable_code_cannot_be_not_applicable_on_a_held_row() -> None:
+    """SPEC §7.1's "always" means "for every position HELD at this date".
+
+    The check lives on `HoldingRow` rather than on the assessment, because an
+    assessment cannot see whether the position was held. On the assessment it
+    read the word literally and refused the one case the audit letter separates:
+    ¶1 asks for existence and cost "for each portfolio investment held during
+    the periods under audit", ¶4 asks for realisation support. Jackpocket at
+    12/31/2024 is the second, and `derived.json` states R1 and R2 there as
+    `not_applicable`."""
+    with pytest.raises(ValidationError, match="cannot be not_applicable"):
+        _row(
+            [
+                _na(RequirementCode.R1),
+                _assessment(RequirementCode.R2, RequirementVerdict.SUFFICIENT),
+            ]
         )
+
+
+def test_a_realised_row_may_have_no_existence_or_fair_value_requirement() -> None:
+    """The other direction, and the reason the check moved.
+
+    A position sold during the period has no mark at the measurement date and no
+    position whose existence can be evidenced at it. Refusing this shape made the
+    packet unable to carry the one class of row the letter asks for by name."""
+    row = _row(
+        [
+            _na(RequirementCode.R1),
+            _na(RequirementCode.R2),
+            _assessment(RequirementCode.R4, RequirementVerdict.SUFFICIENT),
+        ],
+        held=False,
+    )
+    assert row.supported is False
 
 
 def test_a_conditional_requirement_may_be_not_applicable() -> None:
@@ -281,11 +314,12 @@ def test_an_always_applicable_requirement_cannot_be_marked_inapplicable() -> Non
     """The previous fix created this hole. Making `applicable=False` legal gave
     a route to mark R1 not-applicable, which the presence check accepted and the
     applicable filter then skipped — so nothing ever tested its verdict."""
-    with pytest.raises(ValidationError, match="always applicable"):
-        RequirementAssessment(
-            requirement=RequirementCode.R1,
-            verdict=RequirementVerdict.NOT_APPLICABLE,
-            policy_version="v1",
+    with pytest.raises(ValidationError, match="cannot be not_applicable"):
+        _row(
+            [
+                _na(RequirementCode.R1),
+                _assessment(RequirementCode.R2, RequirementVerdict.SUFFICIENT),
+            ]
         )
 
 
@@ -310,7 +344,7 @@ def test_supported_requires_applicability_not_mere_presence() -> None:
     )
     r2 = _assessment(RequirementCode.R2, RequirementVerdict.SUFFICIENT)
 
-    with pytest.raises(ValidationError, match="always applicable"):
+    with pytest.raises(ValidationError, match="cannot be not_applicable"):
         _row([r1_na, r2])
 
     row = HoldingRow.model_construct(

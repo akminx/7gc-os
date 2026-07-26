@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CitationQuote, ClaimCard, EvidencePanel } from "./Evidence";
+import { ClaimCard, EvidencePanel } from "./Evidence";
 import {
   CITED_CLAIM,
   HOLDING_WITH_EVIDENCE,
@@ -11,37 +11,48 @@ import {
 
 afterEach(cleanup);
 
-describe("CitationQuote", () => {
-  /**
-   * The quote is the product. Any edit to it — truncation, an ellipsis, a
-   * highlighted "relevant" span — breaks the one thing it is for, which is that
-   * an auditor can re-verify it against the stored text character for character.
-   */
-  it("renders the passage verbatim, with the offsets that locate it", () => {
-    const citation = CITED_CLAIM.citations[0];
-    if (citation === undefined) throw new Error("the cited claim has no citation");
-    const { container } = render(
-      <ul>
-        <CitationQuote citation={citation} />
-      </ul>,
-    );
-    const quote = container.querySelector(".citation__quote");
-    expect(quote?.textContent).toBe(citation.quote);
-    expect(screen.getByText("dv_poolside_spa")).toBeDefined();
-    expect(screen.getByText("characters 4821–4891")).toBeDefined();
-  });
-});
-
 describe("ClaimCard", () => {
-  it("puts every passage under the claim that cites it", () => {
+  /**
+   * The point of `field_name`: an auditor needs to know which citation supports
+   * which number. Read pairwise off the rendered facts, because asserting that
+   * a field label and a quote each appear SOMEWHERE cannot tell a correct
+   * pairing from a shuffled one — and the route was changed from a detached
+   * citation list to labelled facts precisely to make the pairing sayable.
+   */
+  it("puts every figure under the claim that states it, beside the field it fills", () => {
     const { container } = render(
       <ul>
         <ClaimCard claim={CITED_CLAIM} />
       </ul>,
     );
-    expect(container.querySelectorAll(".citation")).toHaveLength(2);
-    expect(screen.getByText(/the Purchase Price shall be \$2\.50 per share/)).toBeDefined();
-    expect(screen.getByText(/1,000,000 shares of Series B Preferred Stock/)).toBeDefined();
+    const facts = [...container.querySelectorAll(".fact")].map((fact) => ({
+      field: fact.querySelector(".fact__field")?.textContent,
+      value: fact.querySelector(".fact__value")?.textContent,
+      numeric: fact.querySelector(".fact__numeric")?.textContent,
+      state: fact.querySelector(".tag--state")?.textContent,
+      quote: fact.querySelector(".citation__quote")?.textContent,
+      where: fact.querySelector(".citation__where")?.textContent,
+    }));
+    expect(facts).toEqual([
+      {
+        field: "price_per_share",
+        value: "$2.50",
+        numeric: "parsed · 2.500000",
+        state: "fact · canonical",
+        quote: "the Purchase Price shall be $2.50 per share of Series B Preferred Stock",
+        where: "dv_poolside_spacharacters 4821–4891",
+      },
+      {
+        field: "security_class",
+        value: "Series B Preferred Stock",
+        // Not every extracted value is a number. The slot is absent rather than
+        // rendered empty, so nothing reads as a figure of zero.
+        numeric: undefined,
+        state: "fact · candidate",
+        quote: "1,000,000 shares of Series B Preferred Stock",
+        where: "dv_poolside_spacharacters 5102–5146",
+      },
+    ]);
     // The claim's own facts travel with it: authority and artifact state are
     // two separate questions about the same document (INV-15, INV-4).
     expect(screen.getByText(/authority · executed transaction doc/)).toBeDefined();
@@ -49,18 +60,37 @@ describe("ClaimCard", () => {
   });
 
   /**
-   * A claim on file with no passage attached is a real state — the claim row
-   * exists, the extraction that pins it to text has not run — and it is not the
-   * same as a claim whose passages say nothing. An empty area would merge them.
+   * The quote is the product. Any edit to it — truncation, an ellipsis, a
+   * highlighted "relevant" span — breaks the one thing it is for, which is that
+   * an auditor can re-verify it against the stored text character for character.
    */
-  it("states an uncited claim rather than leaving space where the quote goes", () => {
+  it("renders each passage verbatim, with the offsets that locate it", () => {
+    const fact = CITED_CLAIM.facts[0];
+    if (fact === undefined) throw new Error("the cited claim has no fact");
+    const { container } = render(
+      <ul>
+        <ClaimCard claim={CITED_CLAIM} />
+      </ul>,
+    );
+    expect(container.querySelector(".citation__quote")?.textContent).toBe(fact.citation.quote);
+    expect(screen.getAllByText("dv_poolside_spa").length).toBeGreaterThan(0);
+    expect(screen.getByText("characters 4821–4891")).toBeDefined();
+  });
+
+  /**
+   * A claim on file with no fact attached is a real state — the claim row
+   * exists, the extraction that pins its figures to text has not run — and it is
+   * not the same as a claim whose facts say nothing. An empty area would merge
+   * them.
+   */
+  it("states an unextracted claim rather than leaving space where the figures go", () => {
     const { container } = render(
       <ul>
         <ClaimCard claim={UNCITED_CLAIM} />
       </ul>,
     );
-    expect(container.querySelectorAll(".citation")).toHaveLength(0);
-    expect(screen.getByText(/No stored passage is attached to this claim/)).toBeDefined();
+    expect(container.querySelectorAll(".fact")).toHaveLength(0);
+    expect(screen.getByText(/No extracted fact is attached to this claim/)).toBeDefined();
   });
 });
 

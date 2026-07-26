@@ -9,6 +9,7 @@ chain would have looked different.
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -136,10 +137,16 @@ def test_the_total_cannot_be_read_without_its_qualification() -> None:
     body = client.get(f"/funds/{FUND}/periods/{PERIOD}/totals").json()
     assert body["kind"] == "held_at_date_reported"
     assert body["label"] == ("Tracker-reported amounts for positions held at this date, unaudited")
-    # Nothing is assessed yet, so every held position is unsupported and the two
-    # figures coincide. That is the honest state, and the packet says so rather
-    # than reporting a clean total it cannot support.
-    assert body["unsupported_amount"]["amount"] == body["amount"]["amount"]
+    # The two figures used to coincide, because nothing was assessed and every
+    # held position was therefore unsupported. The policy layer now assesses
+    # them, and Jio's administrator statements support its $1,000,000 — so the
+    # unsupported subtotal is strictly SMALLER than the total, which is the
+    # arrangement INV-19 exists to make legible. Asserting equality would now
+    # pass only while the policy layer found nothing.
+    total = Decimal(body["amount"]["amount"])
+    unsupported = Decimal(body["unsupported_amount"]["amount"])
+    assert Decimal(0) < unsupported < total
+    assert body["contains_unsupported_inputs"] is True
     assert body["unsupported_positions"] >= 1
     assert body["contains_unsupported_inputs"] is True
 

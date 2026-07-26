@@ -168,7 +168,7 @@ def test_the_database_accepts_every_mapped_row(
         "company": 14,
         "holding": 14,
         "reporting_period": 12,
-        "lot": 16,
+        "lot": 17,
         "mark": 72,
         # Six, not twelve: SPEC 2 closes the packet date set, and the other six
         # fund-periods reach the ledger as `reporting_period` rows without ever

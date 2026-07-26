@@ -26,17 +26,18 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from ingest.trackers.read import (
+    SheetNote,
     TrackerMark,
     TrackerSheet,
     read_master_breakdown,
+    read_master_notes,
     read_valuation_tracker,
 )
 from ingest.trackers.to_contracts import (
-    ASSUMED_CURRENCY,
-    ASSUMED_SECURITY_CLASS,
     Mapped,
     map_workbooks,
 )
+from ingest.trackers.to_lots import ASSUMED_CURRENCY, ASSUMED_SECURITY_CLASS
 from packages.contracts.enums import AuditScope, RequirementCode
 from packages.contracts.fixtures.dream import dream_packet
 from packages.contracts.models import TotalKind
@@ -52,31 +53,120 @@ _FUND_OF_SHEET = {
 
 
 def _mapped() -> Mapped:
+    # The breakdown's prose lines are an argument, not an option: without them
+    # every position reads as direct equity with an unstated security class,
+    # which is where this started and what the policy layer could not use.
     return map_workbooks(
-        read_valuation_tracker(VALUATION), read_master_breakdown(MASTER), GENERATED_AT
+        read_valuation_tracker(VALUATION),
+        read_master_breakdown(MASTER),
+        GENERATED_AT,
+        read_master_notes(MASTER),
     )
 
 
 # ── the shape of the mapper, checkable with no workbook ──────────────────
-def test_a_lot_whose_date_cell_names_a_range_is_dropped_not_guessed() -> None:
-    """Jio's cell says `7/2020`. `Lot.acquired_date` is a required `date`, so a
-    month the reader deliberately preserved as a range has nowhere to go. Picking
-    July 1st would fabricate the day that decides held-at-date (INV-7), so the
-    lot is refused instead — and the refusal is counted."""
+def test_a_date_range_is_refused_only_when_the_day_would_decide_held_at_date() -> None:
+    """Jio's cell says `7/2020`, a month. `Lot.acquired_date` is a required
+    `date`, so the range has nowhere to go.
+
+    Refusing outright cost more than it saved: the lot vanished, held-at-date
+    had nothing to ask about a live $1,000,000 position, and `api/ledger.py`
+    carried a fallback so it would not drop out of every Fund I total. The
+    invented day only MATTERS when a measurement date falls inside the range —
+    that is the case where it decides the answer (INV-7). Both branches are
+    asserted here, because a rule that accepts everything passes the first."""
     sheet = _sheet("Fund II Holdings by Quarter", "X", {"25Q4": "1000"}, cost="1000")
-    mapped = map_workbooks([sheet], [_tranche("Fund", "1000", text="7/2020")], GENERATED_AT)
-    assert mapped.lots == []
-    assert [r.subject for r in mapped.refused("Lot.acquired_date")] == ["X lot 1 (7/2020)"]
+    outside = map_workbooks([sheet], [_tranche("Fund", "1000", text="7/2020")], GENERATED_AT)
+    assert [lot.acquired_date for lot in outside.lots] == [date(2020, 7, 1)]
+    assert [s.subject for s in outside.substituted("Lot.acquired_date")] == ["X lot 1"]
+
+    # `2020 / 2021 / 2023` spans 2020-01-01..2023-12-31, and FY2022 — a real
+    # Fund I measurement date — falls inside it. Here the day chosen decides
+    # whether the position was held at that date, so the lot is still refused
+    # and the refusal is still counted.
+    straddling = _sheet("Fund I Positions", "X", {"FY2022": "1000"}, cost="1000")
+    inside = map_workbooks(
+        [straddling],
+        [_tranche("Fund", "1000", text="2020 / 2021 / 2023", fund="Fund I")],
+        GENERATED_AT,
+    )
+    assert inside.lots == []
+    assert [r.subject for r in inside.refused("Lot.acquired_date")] == [
+        "X lot 1 (2020 / 2021 / 2023)"
+    ]
 
 
 def test_a_row_kind_the_reader_does_not_recognise_becomes_no_lot() -> None:
-    """`is_recognised` is false for `Indirect Fund`, and the contract layer has
-    no third state between investment and exit. The money leaves no trace, so the
-    drop is recorded rather than inferred from a count."""
+    """`is_recognised` has no third state between investment and exit, so an
+    unfamiliar kind becomes a finding rather than a guess. The money leaves no
+    trace, so the drop is recorded rather than inferred from a count.
+
+    `Indirect Fund` used to be the example and is now recognised — the word
+    `fund` appears and where it appears in the phrase was never the
+    distinction. A genuinely unfamiliar kind still refuses."""
     sheet = _sheet("Fund II Holdings by Quarter", "X", {"25Q4": "1000"})
-    mapped = map_workbooks([sheet], [_tranche("Indirect Fund", "1000000")], GENERATED_AT)
+    mapped = map_workbooks([sheet], [_tranche("Warrant Exercise", "1000000")], GENERATED_AT)
     assert mapped.lots == []
     assert "1,000,000 of stated investment" in mapped.refused("Lot")[0].detail
+
+
+def test_a_feeder_subscription_is_an_investment_wherever_the_word_sits() -> None:
+    """Jio's row kind is `Indirect Fund`, and `startswith("fund")` missed it.
+
+    A live $1,000,000 feeder position became no lot at all, held-at-date had
+    nothing to ask, and `api/ledger.py` carried a fallback so it would not drop
+    out of every Fund I total — as it had once before. Asserted without the
+    workbooks, because the real position that proves it is in the fund's
+    private material and a guard proved only there is not proved.
+    """
+    sheet = _sheet("Fund II Holdings by Quarter", "X", {"25Q4": "1000"}, cost="1000")
+    row = _tranche("Indirect Fund", "1000000", text="1/1/2020", price="10", count="100")
+    assert row.is_investment is True
+    assert row.is_recognised is True
+    m = map_workbooks([sheet], [row], GENERATED_AT)
+    assert [lot.cost.amount for lot in m.lots] == [Decimal(1000000)]
+    assert m.refused("Lot") == []
+    # An exit still wins, so a row naming both does not become a purchase.
+    assert _tranche("Exit — Fund", "1000").is_investment is False
+
+
+def test_a_recapitalisation_row_becomes_a_conversion_not_a_silent_reclass() -> None:
+    """Sway's recap changes which class the fund holds, at a date.
+
+    INV-17 compares the class HELD against the class PRICED, so a lot flattened
+    to one immutable class reads as cross-class forever — post-recap the two
+    are the same class and Sway is not. The exchange ratio is derived from the
+    two share counts the workbook states rather than read from a cell, because
+    no cell states it."""
+    sheet = _sheet("Fund II Holdings by Quarter", "X", {"25Q4": "1000"}, cost="1000")
+    lot = _tranche("Fund", "2000000", text="10/18/2023", price="2.5", count="800000")
+    notes = [
+        SheetNote(
+            company="X",
+            fund="Fund II",
+            text="Post-Recap",
+            source_sheet="X",
+            ordinal=1,
+            cells=("Post-Recap", None, "$10M", 0.4, 875000, "9/30/2025"),
+        ),
+        SheetNote(
+            company="X",
+            fund="Fund II",
+            text="X - Series A-3 Recapitalization - Pro Forma Cap Table (September 30, 2025)",
+            source_sheet="X",
+            ordinal=2,
+            cells=(),
+        ),
+    ]
+    m = map_workbooks([sheet], [lot], GENERATED_AT, notes)
+    assert len(m.conversions) == 1
+    conversion = m.conversions[0]
+    assert conversion.to_security_class == "series_a3"
+    assert conversion.to_shares == Decimal(875000)
+    # 800,000 x 1.09375 = 875,000 exactly. A ratio producing a fractional share
+    # count fails rather than rounding into a plausible number (V13).
+    assert conversion.exchange_ratio == Decimal("1.09375")
+    assert conversion.exchange_ratio * Decimal(800000) == Decimal(875000)
 
 
 def test_a_holding_with_no_assessments_is_unsupported_rather_than_clean() -> None:
@@ -115,13 +205,18 @@ def test_all_fourteen_positions_and_twelve_fund_periods_map() -> None:
 
 
 @needs_workbooks
-def test_sixteen_of_the_eighteen_tranches_become_lots() -> None:
-    """Two do not, for different reasons. Jackpocket's Exit row is proceeds, not
-    a purchase, and correctly becomes a realisation date rather than a lot. Jio's
-    `Indirect Fund` row becomes nothing at all."""
+def test_seventeen_of_the_eighteen_tranches_become_lots() -> None:
+    """One does not, and correctly: Jackpocket's Exit row is proceeds, not a
+    purchase, so it becomes a realisation date rather than a lot.
+
+    It was two. Jio's `Indirect Fund` row became nothing at all, because
+    `Tranche.is_investment` matched `startswith("fund")` — so a live $1,000,000
+    feeder position reached the ledger with no lot, held-at-date had nothing to
+    ask, and `api/ledger.py` carried a fallback to stop it vanishing from every
+    Fund I total, as it had once before."""
     m = _mapped()
     assert len(read_master_breakdown(MASTER)) == 18
-    assert len(m.lots) == 16
+    assert len(m.lots) == 17
     assert [lot.id for lot in m.lots if lot.realized_date] == ["fund_ii_jackpocket_1"]
     assert [lot.realized_date for lot in m.lots if lot.realized_date] == [date(2024, 5, 20)]
 
@@ -131,22 +226,26 @@ def test_jio_joins_on_the_company_the_label_names_not_on_the_label() -> None:
     """The tracker calls it `Jio (Indirect)`; the master breakdown sheet is
     `Jio`. The raw strings never met, so 1,000,000 of stated investment reached
     no holding at all and was reported from both ends of a join that had simply
-    missed. `company_key` joins them, and what is left is the one true statement:
-    the row's kind is `Indirect Fund`, which the reader does not recognise, so it
-    becomes no lot and the money leaves no trace in the contract layer.
+    missed. `company_key` joins them.
 
-    The tracker's own words are kept on the holding. `(Indirect)` is the only
-    signal in either workbook that this is a feeder rather than a direct
-    position, so the key normalises and the label does not."""
+    The tracker's own words are kept on the holding. `(Indirect)` is one of the
+    two signals in either workbook that this is a feeder rather than a direct
+    position, so the key normalises and the label does not — and the position
+    type is read off the `Type` cell, which says `Indirect Fund`.
+
+    Its lot used to be refused twice over: once because `Indirect Fund` did not
+    match `startswith("fund")`, once because `7/2020` names a month rather than
+    a day. So a live $1,000,000 feeder position reached the ledger with no lot
+    at all. Both are read now, and the money leaves a trace."""
     m = _mapped()
     assert m.refused("Holding") == []
-    kinds = m.refused("Lot")
-    assert [r.subject for r in kinds] == ["Jio (Indirect) · Indirect Fund"]
-    assert "1,000,000 of stated investment" in kinds[0].detail
-    # It still reaches the packet — as a mark with no cost, no class and no date.
+    assert m.refused("Lot") == []
     jio = next(h for h in m.holdings if h.id == "fund_i_jio_indirect")
     assert jio.company_name == "Jio (Indirect)"
-    assert [lot for lot in m.lots if lot.holding_id == jio.id] == []
+    assert jio.position_type.value == "indirect_feeder"
+    assert [
+        (lot.security_class, lot.cost.amount) for lot in m.lots if lot.holding_id == jio.id
+    ] == [("lp_interest", Decimal(1000000))]
     assert len([mk for mk in m.marks if mk.holding_id == jio.id]) == 5
 
 
@@ -209,7 +308,9 @@ def test_a_position_acquired_after_the_measurement_date_is_not_held_at_it() -> N
     later. The row's kind is what the reader does not understand; its Date cell
     is the same column it reads everywhere else."""
     sheet = _sheet("Fund II Holdings by Quarter", "X", {"25Q4": "1000"})
-    m = map_workbooks([sheet], [_tranche("Indirect Fund", "1000", text="1/1/2026")], GENERATED_AT)
+    m = map_workbooks(
+        [sheet], [_tranche("Warrant Exercise", "1000", text="1/1/2026")], GENERATED_AT
+    )
     assert m.lots == []
     assert [row.held_at_date for row in m.packets[0].rows] == [False]
     assert m.packets[0].totals().amount.amount == Decimal(0)
@@ -230,7 +331,7 @@ def test_a_lot_dropped_for_naming_a_month_still_answers_held_at_date() -> None:
         _tranche("Fund", "1000", text="1/1/2026", price="10", count="100"),
     ]
     m = map_workbooks([sheet], lots, GENERATED_AT)
-    assert [lot.acquired_date for lot in m.lots] == [date(2026, 1, 1)]
+    assert [lot.acquired_date for lot in m.lots] == [date(2020, 7, 1), date(2026, 1, 1)]
     assert [row.held_at_date for row in m.packets[0].rows] == [True]
     assert m.packets[0].totals().amount.amount == Decimal("1000")
 
@@ -311,18 +412,16 @@ def test_held_at_date_is_read_from_the_source_rows_not_from_the_surviving_lots()
     lot carrying that date was dropped for naming a month. Both put a false
     figure in a fund total.
 
-    Jio is the corpus case and it is why this looks like a no-op: its only master
-    row is `Indirect Fund` dated `7/2020`, so no lot survives — but the row's
-    date cell answers the question perfectly well, and the answer is the same one
-    the substitution used to guess. Nothing is substituted now, because nothing
-    is being guessed."""
+    Jio was the corpus case: its only master row is `Indirect Fund` dated
+    `7/2020`, and neither survived to become a lot. Both are read now, so the
+    two sets finally agree — but the rule stays source-based, because agreement
+    on this corpus is not the same as the rule being right."""
     m = _mapped()
     assert m.substituted("HoldingRow.held_at_date") == []
     assert m.refused("HoldingRow.held_at_date") == []
     assert all(row.held_at_date for p in m.packets for row in p.rows)
-    # The lot-based rule would have said False here, and dropped the position.
     jio = next(h for h in m.holdings if h.company_name == "Jio (Indirect)")
-    assert [lot for lot in m.lots if lot.holding_id == jio.id] == []
+    assert [lot.acquired_date for lot in m.lots if lot.holding_id == jio.id] == [date(2020, 7, 1)]
 
 
 @needs_workbooks
@@ -356,24 +455,80 @@ def test_every_figure_in_the_packet_is_denominated_by_the_mapper() -> None:
 
 
 @needs_workbooks
-def test_every_lot_lands_in_one_invented_security_class() -> None:
-    """`Lot.security_class` is required and no master-breakdown row states one.
-    Every lot therefore carries the same sentinel — which means INV-17's
-    cross-class rule can never fire on ingested data, because ingested data has
-    exactly one class."""
+def test_the_security_class_is_read_from_the_line_that_names_it() -> None:
+    """Fifteen of seventeen lots get their real class from the workbook.
+
+    Every lot used to carry the same sentinel, which meant INV-17's cross-class
+    rule could never fire on ingested data — ingested data had exactly one
+    class. The classes were in the breakdown's prose the whole time, in lines
+    the tranche reader dropped because they carry no number.
+
+    The one that remains is the finding, not the residue: **Anthropic's class is
+    stated nowhere in the corpus** — not in either workbook, and not in the one
+    document the fund holds, which is a press article.
+
+    Dream was here too, on the rule "never read a class off a cap table". A
+    cross-family review found that too coarse. Dream's table has a section
+    headed "Series A-1 Preferred — Holders of Record" listing `7GC Fund II,
+    L.P.` at 625,000 shares — the PRICED class is Series B at $8.00, and the
+    HOLDERS-OF-RECORD section is what the fund owns. Reading the first as the
+    held class collapses INV-17; reading the second is what INV-17 needs."""
     m = _mapped()
-    assert len(m.substituted("Lot.security_class")) == 16
-    assert {lot.security_class for lot in m.lots} == {ASSUMED_SECURITY_CLASS}
+    unstated = {lot.id for lot in m.lots if lot.security_class == ASSUMED_SECURITY_CLASS}
+    assert unstated == {"fund_ii_anthropic_1"}
+    assert len(m.substituted("Lot.security_class")) == 1
+    assert {lot.security_class for lot in m.lots} == {
+        "series_b1",
+        "fund_interest",
+        "series_a",
+        ASSUMED_SECURITY_CLASS,
+        "series_a1",
+        "series_b",
+        "series_a2",
+        "conv_note",
+        "series_e",
+        "lp_interest",
+        "series_c",
+        "common",
+    }
+    assert next(x.security_class for x in m.lots if x.id == "fund_ii_dream_1") == "series_a1"
 
 
 @needs_workbooks
-def test_every_position_is_typed_direct_equity_including_the_ones_that_are_not() -> None:
-    """`PositionType` is closed and required; the workbooks classify nothing. The
-    tracker's own row label says `Jio (Indirect)`, so at least one of these 14 is
-    demonstrably wrong from the source itself."""
+def test_the_recapitalisation_becomes_a_conversion_event() -> None:
+    """Sway's `Post-Recap` row states 875,000 shares effective 9/30/2025.
+
+    Recorded as an event rather than as an edit to the lot, so class-at-date
+    stays derivable: post-recap the held class equals the class the recap cap
+    table prices, and Sway is therefore NOT cross-class. A lot flattened to one
+    immutable class cannot say that. The exchange ratio is derived from the two
+    share counts the workbook states — 800,000 into 875,000 is 1.09375 exactly,
+    which is what V13 asserts."""
     m = _mapped()
-    assert len(m.substituted("HoldingRow.position_type")) == 14
-    assert {h.position_type for h in m.holdings} == {m.holdings[0].position_type}
+    assert len(m.conversions) == 1
+    conversion = m.conversions[0]
+    assert conversion.lot_id == "fund_ii_sway_1"
+    assert conversion.to_security_class == "series_a3"
+    assert conversion.to_shares == Decimal(875000)
+    assert conversion.exchange_ratio == Decimal("1.09375")
+
+
+@needs_workbooks
+def test_the_three_positions_that_are_not_direct_equity_are_read_as_such() -> None:
+    """All fourteen used to be `direct_equity`, and three demonstrably were not.
+
+    That is not a cosmetic mislabel: the sufficiency matrix is keyed on position
+    type, so Banzai's market quote, Jio's administrator statement and Moonfare's
+    FX memo had no cell at all and the policy layer refused all three. The
+    signals are in the workbook — a `Type` cell reading `Indirect Fund`, a
+    `De-SPAC` row, a note about a EUR-denominated interest."""
+    m = _mapped()
+    typed = {h.id: h.position_type.value for h in m.holdings}
+    assert typed["fund_i_jio_indirect"] == "indirect_feeder"
+    assert typed["fund_i_banzai"] == "public_listed"
+    assert typed["fund_ii_moonfare"] == "fx_denominated_interest"
+    assert len(m.substituted("HoldingRow.position_type")) == 11
+
     assert any(h.company_name == "Jio (Indirect)" for h in m.holdings)
 
 

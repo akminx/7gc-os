@@ -248,6 +248,28 @@ td.num {
   font-style: italic;
 }
 
+/* No mark at this date. Deliberately NOT the muted treatment above: a missing
+   mark is a finding, and a grey italic in a column of amounts is the blank this
+   is here to avoid. */
+.no-mark {
+  display: inline-block;
+  border: 1px dashed var(--v-not_applicable);
+  border-radius: 4px;
+  padding: 0.05rem 0.4rem;
+  color: var(--v-not_applicable);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+td.cell--no-mark {
+  text-align: center;
+}
+
+.figure--no-mark {
+  border-style: dashed;
+  border-color: var(--v-not_applicable);
+}
+
 .sub {
   display: block;
   color: var(--muted);
@@ -454,7 +476,7 @@ td.num {
 /* The evidence surface. The quote is the product; it gets the most contrast on
    the page and is never truncated, wrapped in an ellipsis or highlighted. */
 .claim-list,
-.citation-list {
+.fact-list {
   list-style: none;
   margin: 0.5rem 0 0;
   padding: 0;
@@ -463,16 +485,48 @@ td.num {
   gap: 0.7rem;
 }
 
+/* One extracted figure. The field name leads and is the only bold thing in the
+   block, because "which citation supports which number" is the question the
+   whole surface answers. */
+.fact-entry,
+.fact {
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+
+.fact-entry .fact {
+  border-top: none;
+  padding-top: 0;
+}
+
+.fact__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: baseline;
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+}
+
+.fact__field {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.fact__value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.fact__numeric {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .claim {
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   border-radius: 8px;
   padding: 0.7rem 0.85rem;
-}
-
-.citation {
-  border-top: 1px solid var(--line);
-  padding-top: 0.5rem;
 }
 
 .citation__quote {

@@ -65,6 +65,20 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
     "fund_entry_price_per_share": re.compile(
         r"7GC Fund II, L\.P\.\s+[\d,]+\s+(?P<value>\$[\d.]+)\s+[\d.]+%"
     ),
+    # The section heading under which the 7GC row sits. This is what makes the
+    # held class a CITED FACT rather than a constant in this file: the document
+    # states "Series A-1 Preferred — Holders of Record", and 7GC Fund II, L.P.
+    # appears in that table. A cross-family review found the class asserted in
+    # `HELD_CLASS` above while nothing in the ledger recorded it, so the lot
+    # reached the policy layer as `unstated` and the document naming it was
+    # never consulted.
+    #
+    # Distinct from `series_b_price_per_share` below, and the distinction is the
+    # whole INV-17 story: a cap table's PRICED class is the round being raised,
+    # its HOLDERS-OF-RECORD section is what the fund owns. Reading the first as
+    # the held class collapses the invariant; reading the second is what it
+    # needs.
+    "fund_held_security_class": re.compile(r"(?P<value>Series A-1 Preferred) — Holders of Record"),
     "series_b_price_per_share": re.compile(
         r"Series B Preferred Stock issued at (?P<value>\$[\d.]+) per share"
     ),

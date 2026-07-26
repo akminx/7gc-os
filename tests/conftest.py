@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
 import psycopg
 import pytest
@@ -100,3 +101,62 @@ def seed(conn: Conn) -> dict[str, str]:
     for sql, params in stmts:
         conn.execute(sql, params)
     return i
+
+
+@pytest.fixture(scope="session")
+def policy_ledger() -> Iterator[object]:
+    """The real corpus, loaded into a live schema, read back as policy inputs.
+
+    Built here rather than read from whatever a developer last loaded into
+    `demo`: a gate that depends on someone having run a loader is a gate that
+    passes because it could not fail. Everything is written inside one
+    transaction and rolled back.
+
+    Session-scoped because it parses twenty PDFs — and `psycopg`'s OUTERMOST
+    `transaction()` block COMMITS on exit, so the rollback is explicit rather
+    than left to the context manager's default, which does the opposite.
+    """
+    import psycopg
+
+    from ingest import policy_seed
+    from ingest.documents.load import ingest
+    from ingest.load import persist
+    from ingest.trackers.read import (
+        read_master_breakdown,
+        read_master_notes,
+        read_valuation_tracker,
+    )
+    from ingest.trackers.to_contracts import map_workbooks
+    from policy.from_ledger import load as load_policy
+    from tests.tracker_helpers import MASTER, VALUATION
+
+    if DSN is None:
+        pytest.skip("no MIGRATION_DATABASE_URL")
+    if not (VALUATION.exists() and MASTER.exists()):
+        pytest.skip("case-study workbooks are not in the repository")
+
+    connection = psycopg.connect(DSN, connect_timeout=30)
+    try:
+        with connection.transaction() as outer:
+            mapped = map_workbooks(
+                read_valuation_tracker(VALUATION),
+                read_master_breakdown(MASTER),
+                datetime(2026, 7, 25, 12, 0, tzinfo=UTC),
+                read_master_notes(MASTER),
+            )
+            _, refused = persist(connection, mapped)
+            assert not refused, f"the workbooks did not load: {refused[:3]}"
+            outcomes = ingest(connection)
+            failed = [o for o in outcomes if o.error]
+            assert not failed, (
+                f"documents did not parse: {[(o.path.name, o.error) for o in failed]}"
+            )
+            policy_seed.seed_claim_requirements(connection)
+            policy_seed.seed_document_gaps(connection, read_master_notes(MASTER))
+            policy_seed.seed_components(connection)
+            connection.execute("set constraints all immediate")
+            yield load_policy(connection)
+            raise psycopg.Rollback(outer)
+    finally:
+        connection.rollback()
+        connection.close()

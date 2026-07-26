@@ -323,8 +323,8 @@ def test_findings_are_marked_packet_scope_or_lineage_only() -> None:
     from ingest.trackers.snapshot import build
 
     shape = build()
-    assert shape["packet_scope_findings"] == 20
-    assert shape["lineage_only_findings"] == 16
+    assert shape["packet_scope_findings"] == 17
+    assert shape["lineage_only_findings"] == 14
     found = cast(list[dict[str, str]], shape["findings"])
     periods = {f["subject"].split(" · ")[1] for f in found if f["scope"] == "packet"}
     # Exactly the dates Harwell & Kent asked about, and no others. Equality,
@@ -333,10 +333,14 @@ def test_findings_are_marked_packet_scope_or_lineage_only() -> None:
     assert periods == {"23Q4", "24Q4", "25Q4", "FY2023", "FY2024", "FY2025"}
     # Nothing that names a single period may go unscoped.
     unscoped = {f["subject"] for f in found if f["scope"] is None}
+    # One, not three. The two Jio findings were both artefacts of its row never
+    # becoming a lot — an unrecognised tranche kind and a cost basis that could
+    # not be compared — and both disappeared once `Indirect Fund` was read as
+    # the subscription it is. Seven false findings went with them, five of them
+    # marks "never compared" for a position the reader could compare perfectly
+    # well.
     assert unscoped == {
         "Fund II Holdings by Quarter · cost basis",  # a column, not a period
-        "Jio · 7/2020",  # a tranche row
-        "Jio (Indirect)",  # a company
     }
 
 

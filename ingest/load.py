@@ -49,6 +49,11 @@ INSERTS: tuple[tuple[str, str], ...] = (
         " cost_currency, acquired_date, realized_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
     ),
     (
+        "lot_conversion",
+        "insert into lot_conversion (lot_id, effective_date, to_security_class, to_shares,"
+        " exchange_ratio) values (%s, %s, %s, %s, %s)",
+    ),
+    (
         "mark",
         "insert into mark (holding_id, period_id, revision, reported_amount, reported_currency,"
         " derivation_status, derivation_reason) values (%s, %s, %s, %s, %s, %s, %s)",
@@ -85,6 +90,16 @@ def rows(m: Mapped) -> dict[str, list[tuple[object, ...]]]:
                 lot.realized_date,
             )
             for lot in m.lots
+        ],
+        "lot_conversion": [
+            (
+                c.lot_id,
+                c.effective_date,
+                c.to_security_class,
+                c.to_shares,
+                c.exchange_ratio,
+            )
+            for c in m.conversions
         ],
         "mark": [
             (
@@ -149,7 +164,11 @@ def main(argv: list[str] | None = None) -> int:
     from pathlib import Path
 
     from api.config import dsn, ledger_schema
-    from ingest.trackers.read import read_master_breakdown, read_valuation_tracker
+    from ingest.trackers.read import (
+        read_master_breakdown,
+        read_master_notes,
+        read_valuation_tracker,
+    )
     from ingest.trackers.to_contracts import map_workbooks
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -185,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         read_valuation_tracker(valuation),
         read_master_breakdown(master),
         datetime(2026, 7, 25, 12, 0, tzinfo=UTC),
+        read_master_notes(master),
     )
     # psycopg's OUTERMOST `transaction()` block COMMITS on exit; only a nested
     # one is a savepoint. `ingest()` opens one per document, so without an outer

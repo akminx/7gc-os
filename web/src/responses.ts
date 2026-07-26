@@ -1,4 +1,4 @@
-import type { Citation, Claim, Packet, PacketTotals } from "./contracts";
+import type { Claim, Packet, PacketTotals, SourceFact } from "./contracts";
 
 /**
  * What the four read ROUTES return, as opposed to what the models contain.
@@ -58,11 +58,17 @@ export interface TotalsResponse extends PacketTotals {
 }
 
 /**
- * A claim with the passages it cites. `citations` is added by the route around
- * `Claim`; it is not a field of the model.
+ * A claim with the labelled figures extracted from it. `facts` is added by the
+ * route around `Claim`; it is not a field of the model.
+ *
+ * Facts, not a detached list of quotes. SPEC §6 models the chain as
+ * `claim → source_fact → citation`, and sending only its two ends leaves an
+ * auditor with passages and no way to say which figure each one supports. Every
+ * fact names the field it fills, the value as the document states it, and the
+ * one passage that states it.
  */
 export interface EvidenceClaim extends Claim {
-  citations: Citation[];
+  facts: SourceFact[];
 }
 
 /**

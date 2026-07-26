@@ -2,18 +2,15 @@
   "positions": 14,
   "tranches": 18,
   "fund_periods": 12,
-  "finding_count": 39,
-  "packet_scope_findings": 20,
-  "lineage_only_findings": 16,
+  "finding_count": 32,
+  "packet_scope_findings": 17,
+  "lineage_only_findings": 14,
   "by_kind": {
-    "cost_basis_never_compared": 1,
     "cost_total_disagrees_with_cells": 1,
     "mark_at_cost_disagrees_with_purchase_prices": 2,
     "mark_basis_assumes_an_unstated_treatment": 5,
     "mark_basis_not_in_workbooks": 23,
-    "mark_never_compared": 5,
-    "stated_total_disagrees_with_cells": 1,
-    "unrecognised_tranche_kind": 1
+    "stated_total_disagrees_with_cells": 1
   },
   "findings": [
     {
@@ -31,62 +28,6 @@
       "stated": "14000000",
       "computed": "16000000",
       "detail": "the column sums to 16,000,000 but the sheet states 14,000,000"
-    },
-    {
-      "kind": "unrecognised_tranche_kind",
-      "subject": "Jio \u00b7 7/2020",
-      "scope": null,
-      "stated": null,
-      "computed": null,
-      "detail": "row type 'Indirect Fund' is neither an investment nor an exit; its 1,000,000 has been left out of every total"
-    },
-    {
-      "kind": "cost_basis_never_compared",
-      "subject": "Jio (Indirect)",
-      "scope": null,
-      "stated": "1000000",
-      "computed": null,
-      "detail": "the valuation tracker states 1,000,000 but no master-breakdown sheet matched this company, so the two were never compared"
-    },
-    {
-      "kind": "mark_never_compared",
-      "subject": "Jio (Indirect) \u00b7 FY2021",
-      "scope": "lineage_only",
-      "stated": null,
-      "computed": null,
-      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
-    },
-    {
-      "kind": "mark_never_compared",
-      "subject": "Jio (Indirect) \u00b7 FY2022",
-      "scope": "lineage_only",
-      "stated": null,
-      "computed": null,
-      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
-    },
-    {
-      "kind": "mark_never_compared",
-      "subject": "Jio (Indirect) \u00b7 FY2023",
-      "scope": "packet",
-      "stated": null,
-      "computed": null,
-      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
-    },
-    {
-      "kind": "mark_never_compared",
-      "subject": "Jio (Indirect) \u00b7 FY2024",
-      "scope": "packet",
-      "stated": null,
-      "computed": null,
-      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
-    },
-    {
-      "kind": "mark_never_compared",
-      "subject": "Jio (Indirect) \u00b7 FY2025",
-      "scope": "packet",
-      "stated": null,
-      "computed": null,
-      "detail": "the valuation tracker states a figure but every master-breakdown row for this company is of a type this reader does not recognise as an investment, so the mark was never compared against any purchase"
     },
     {
       "kind": "mark_at_cost_disagrees_with_purchase_prices",

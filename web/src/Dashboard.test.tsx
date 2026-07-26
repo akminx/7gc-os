@@ -5,7 +5,14 @@ import type { HoldingRow } from "./contracts";
 import { Dashboard } from "./Dashboard";
 import { FIXTURE_ROW } from "./fixture";
 import type { PacketResponse } from "./responses";
-import { POOLSIDE_ROW, SWAY_ROW, THREE_ROW_PACKET, THREE_ROW_TOTALS } from "./testdata";
+import {
+  FOUR_ROW_PACKET,
+  POOLSIDE_ROW,
+  REALISED_ROW,
+  SWAY_ROW,
+  THREE_ROW_PACKET,
+  THREE_ROW_TOTALS,
+} from "./testdata";
 
 afterEach(cleanup);
 
@@ -90,6 +97,62 @@ describe("holding rows", () => {
   it("renders a validated amount when the mark carries one", () => {
     show();
     expect(screen.getByText("1,234,567.8900 USD")).toBeDefined();
+  });
+
+  /**
+   * A realised position has no mark at all — `evals/oracle/derived.json` states
+   * Jackpocket at 2024-12-31 as `reported_amount: null`. The row still belongs
+   * in the packet, and its two money columns say the mark is absent rather than
+   * going blank: read down a column of amounts, a blank cell is a zero.
+   */
+  it("states that a row with no mark has none, in place of both money columns", () => {
+    const { container } = show(FOUR_ROW_PACKET);
+    const cells = [...container.querySelectorAll("tbody tr")].map((tr) => ({
+      company: tr.querySelector("th button")?.textContent,
+      mark: tr.querySelector(".cell--no-mark")?.textContent,
+      span: tr.querySelector(".cell--no-mark")?.getAttribute("colspan"),
+      amounts: [...tr.querySelectorAll("td.num")].map((td) => td.textContent),
+    }));
+    expect(cells).toEqual([
+      {
+        company: "Dream",
+        mark: undefined,
+        span: undefined,
+        amounts: ["5,000,000 USD", "none · NO_PRICE_FOR_CLASS:series_a1"],
+      },
+      {
+        company: "Sway",
+        mark: undefined,
+        span: undefined,
+        amounts: ["2,500,000 USD", "1,234,567.8900 USD"],
+      },
+      {
+        company: "Poolside",
+        mark: undefined,
+        span: undefined,
+        amounts: ["2,500,000 USD", "2,500,000 USD"],
+      },
+      { company: "Jackpocket", mark: "no mark at this date", span: "2", amounts: [] },
+    ]);
+  });
+
+  /**
+   * The row still counts. A markless row is a packet gap and is not an input to
+   * the held-at-date total, so the two money figures do not move and the two
+   * gap counts do — all four supplied by the API, none of them computed here.
+   */
+  it("keeps a markless row out of the total and inside the gap counts", () => {
+    const { container } = show(FOUR_ROW_PACKET);
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(4);
+    const counts = [...container.querySelectorAll(".totals .meta > div")].map(
+      (item) => item.querySelector("dd")?.textContent,
+    );
+    expect(counts).toEqual(["1", "3", "2"]);
+    const figures = [...container.querySelectorAll(".totals__figures .figure__amount")].map(
+      (figure) => figure.textContent,
+    );
+    expect(figures).toEqual(["7,500,000 USD", "5,000,000 USD"]);
+    expect(REALISED_ROW.mark).toBeNull();
   });
 
   it("distinguishes a row held at the date from one that is not", () => {

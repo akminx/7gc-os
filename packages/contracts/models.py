@@ -247,15 +247,6 @@ class RequirementAssessment(Contract):
             raise ValueError(f"verdict {self.verdict} must carry at least one reason code")
         return self
 
-    @model_validator(mode="after")
-    def _always_applicable_codes_are_never_inapplicable(self) -> RequirementAssessment:
-        """SPEC 7.1 · R1 and R2 apply to every holding at every date."""
-        if self.requirement in ALWAYS_APPLICABLE and not self.applicable:
-            raise ValueError(
-                f"{self.requirement} is always applicable and cannot be not_applicable"
-            )
-        return self
-
 
 class GapObservation(Contract):
     """INV-12 · why a document is absent, and what has been done about it.
@@ -406,6 +397,38 @@ class HoldingRow(Contract):
     assessments: list[RequirementAssessment] = Field(default_factory=list)
     gaps: list[GapObservation] = Field(default_factory=list)
     approval: Approval | None = None
+
+    @model_validator(mode="after")
+    def _always_applicable_codes_apply_while_the_position_is_held(self) -> HoldingRow:
+        """SPEC §7.1 · R1 and R2 apply to every holding **held at this date**.
+
+        This lived on `RequirementAssessment`, which cannot see whether the
+        position was held — so it read §7.1's "always" literally and refused the
+        one case the audit letter distinguishes. The letter asks for existence
+        and cost "for each portfolio investment held during the periods under
+        audit" (¶1) and for realisation support separately (¶4). Jackpocket at
+        12/31/2024 is the second, not the first: it was sold in May, so there is
+        no position whose existence and cost can be evidenced at the measurement
+        date, and `evals/oracle/derived.json` states both as `not_applicable`.
+
+        Moving the check here also closes the hole the old placement left: an
+        assessment could read `sufficient` on a row that was not held at all,
+        and nothing compared the two, because the validator that cared about
+        applicability could not see `held_at_date`.
+        """
+        if not self.held_at_date:
+            return self
+        wrong = sorted(
+            a.requirement
+            for a in self.assessments
+            if a.requirement in ALWAYS_APPLICABLE and not a.applicable
+        )
+        if wrong:
+            raise ValueError(
+                f"{self.holding_id} is held at this date, so "
+                f"{', '.join(c.value for c in wrong)} cannot be not_applicable"
+            )
+        return self
 
     @property
     def unsupported_reasons(self) -> dict[RequirementCode, str]:

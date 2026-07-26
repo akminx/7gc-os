@@ -105,10 +105,13 @@ def test_the_unpriced_instruments_are_the_only_difference() -> None:
     exactly the instruments with no share price: Moonfare's 1,000,000 and The
     Mom Project's 250,000 note.
 
-    Jio's 1,000,000 is in neither. Its row kind is `Indirect Fund`, which the
-    reader does not recognise as an investment and reports rather than bucketing
-    — writing 2,250,000 here, counting Jio, is the mistake this test caught on
-    its first run, in the test rather than the code.
+    Jio's 1,000,000 is the third. Its row kind is `Indirect Fund` — a
+    subscription into a feeder, with no share price, so it belongs in exactly
+    the same bucket as the other two. It used not to be parsed at all, because
+    `is_investment` matched `startswith("fund")`, and this figure was 1,250,000.
+    That absence is what made the reconciler report seven findings about Jio
+    that were all artefacts of the miss: a cost basis never compared and five
+    marks never compared, for a position it could have compared perfectly well.
     """
     oracle = json.loads(ORACLE.read_text())
     parsed = sum(
@@ -117,7 +120,7 @@ def test_the_unpriced_instruments_are_the_only_difference() -> None:
     transcribed = sum(
         (Decimal(str(e["stated"])) for e in oracle["entry_costs"] if e.get("stated")), Decimal(0)
     )
-    assert parsed - transcribed == Decimal("1250000")
+    assert parsed - transcribed == Decimal("2250000")
 
 
 @needs_workbooks

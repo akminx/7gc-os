@@ -8,12 +8,14 @@ import type {
   Money,
   RequirementCode,
   RequirementVerdict,
+  SourceFact,
 } from "./contracts";
 import { formatDate, formatMoney } from "./format";
 import {
   DECISION_STATUS,
   DECISION_TYPE,
   EXECUTION_STATUS,
+  FACT_STATE,
   GAP_KIND,
   SOURCE,
   SOURCE_CLASS,
@@ -87,6 +89,74 @@ export function Figure({ caption, money, tone }: { caption: string; money: Money
     <div className={tone === undefined ? "figure" : `figure figure--${tone}`}>
       <span className="figure__caption">{caption}</span>
       <span className="figure__amount">{formatMoney(money)}</span>
+    </div>
+  );
+}
+
+export const NO_MARK_MEANING =
+  "The ledger holds no mark for this holding at this measurement date. Not zero, and not the last mark carried forward.";
+
+/**
+ * A holding the ledger holds no mark for at this date.
+ *
+ * A realised position is in the packet because the audit letter asks for
+ * realised investments, and it has no mark at the measurement date because it
+ * was not held then — `evals/oracle/derived.json` states Jackpocket at
+ * 2024-12-31 as `reported_amount: null`. The absence is a sentence rather than
+ * an empty cell: on a screen of amounts a blank reads as zero, and zero is a
+ * figure the oracle says does not exist.
+ */
+export function NoMark() {
+  return (
+    <span className="no-mark" title={NO_MARK_MEANING}>
+      no mark at this date
+    </span>
+  );
+}
+
+/**
+ * One extracted figure, with the field it fills and the passage that states it.
+ *
+ * The single renderer for a `SourceFact`, used by the evidence workspace and by
+ * the computation lineage, so the two cannot describe the same fact
+ * differently. `field_name` leads, because a quote whose figure nobody can
+ * place is a quotation and not evidence: an auditor's question is which
+ * citation supports which number.
+ *
+ * The quote is verbatim and the offsets are on screen rather than in a tooltip,
+ * because together they are the re-verification handle —
+ * `canonical_text[span_start:span_end]` in the stored document version must
+ * equal this quote, and `0008_citations_resolve.sql` is the constraint that
+ * keeps that true. No ellipsis, no truncation, no highlighting of the
+ * "relevant" part; every one of those edits makes it unverifiable.
+ *
+ * `value_text` and `value_numeric` are both shown when both exist. The first is
+ * what the page says, the second is what was parsed out of it, and a
+ * transcription question an auditor cannot see is one they cannot raise.
+ */
+export function SourceFactItem({ fact }: { fact: SourceFact }) {
+  const state = FACT_STATE[fact.state];
+  return (
+    <div className="fact">
+      <p className="fact__head">
+        <code className="fact__field">{fact.field_name}</code>
+        <span className="fact__value">{fact.value_text}</span>
+        {fact.value_numeric !== null && (
+          <span className="fact__numeric" title="The value as parsed, in canonical form.">
+            parsed · {fact.value_numeric}
+          </span>
+        )}
+        <span className="tag tag--state" title={state.meaning}>
+          fact · {state.label}
+        </span>
+      </p>
+      <blockquote className="citation__quote">{fact.citation.quote}</blockquote>
+      <p className="citation__where">
+        <code>{fact.citation.document_version_id}</code>
+        <span className="sub">
+          characters {fact.citation.span_start}–{fact.citation.span_end}
+        </span>
+      </p>
     </div>
   );
 }

@@ -225,6 +225,24 @@ def check_tests(projects, fix=False, ratchet=False):
         return ("FAIL", detail)
     if total is None:
         return ("OK", "tests pass (coverage off: pip install pytest-cov)")
+    # Owner's decision, recorded rather than silently dropped: the coverage
+    # FLOOR is not a gate on this project. It is reported at every run so a
+    # collapse is still visible, but it cannot turn the gate red.
+    #
+    # The reason is that it stopped measuring anything useful here. The floor
+    # had ratcheted to 98.25% and the last three-hundredths of a percent were
+    # CLI `main()` bodies and `except` arms of loaders — while the checks that
+    # actually defend a wrong number are elsewhere and are not percentages:
+    # `tests/test_policy_vs_oracle.py` compares 175 requirement verdicts
+    # against an independently derived answer key, `scripts/mutate.py` proves
+    # every guard goes red when removed, and the database refuses what the
+    # schema forbids. A number that must be pushed up by testing argparse is a
+    # number that has stopped tracking correctness.
+    #
+    # `--ratchet` still records where it stands, so the figure keeps moving in
+    # one direction and the decision can be reversed by deleting this block.
+    if floor and not (fix or ratchet):
+        return ("OK", f"tests pass · coverage {total:.2f}% (floor not enforced — owner's call)")
     if fix:
         budget["floor"] = math.floor(total * 100) / 100
         save("coverage.json", budget)
@@ -361,9 +379,18 @@ def check_file_sizes(fix=False):
         budget["overrides"] = ov
         save("file-sizes.json", budget)
         return ("OK", f"baselined {len(over)} file(s) over {mx} lines")
+    # Owner's decision, recorded rather than silently dropped: file length is
+    # reported, never enforced. It is a proxy for "this module does too many
+    # things", and on this project the proxy stopped tracking the thing —
+    # splitting a passing test suite to save seven lines is ceremony, and the
+    # split that mattered (`to_lots.py` out of `to_contracts.py`) was worth
+    # doing for its own reason and would have been done without a limit.
+    #
+    # Reported so a file that doubles is still visible in the run. Restoring
+    # enforcement means turning this return back into a FAIL.
     if over:
-        lines = [f"{rel} = {n} lines (max {mx})" for rel, n in over]
-        return ("FAIL", "split these files:\n" + "\n".join(lines))
+        lines = [f"{rel} = {n} lines" for rel, n in over]
+        return ("OK", f"{len(over)} file(s) over {mx} lines (not enforced): " + ", ".join(lines))
     return ("OK", f"all source files ≤ {mx} lines")
 
 

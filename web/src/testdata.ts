@@ -6,7 +6,7 @@ import type {
   HoldingRow,
   RequirementAssessment,
 } from "./contracts";
-import { FIXTURE_PACKET, FIXTURE_ROW } from "./fixture";
+import { FIXTURE_MARK, FIXTURE_PACKET, FIXTURE_ROW } from "./fixture";
 import type { EvidenceClaim, HoldingResponse, PacketResponse } from "./responses";
 
 /**
@@ -159,7 +159,7 @@ export const SWAY_ROW: HoldingRow = {
   position_type: "public_listed",
   held_at_date: false,
   mark: {
-    ...FIXTURE_ROW.mark,
+    ...FIXTURE_MARK,
     id: 2,
     holding_id: "sway",
     reported: { amount: "2500000", currency: "USD" },
@@ -207,7 +207,7 @@ export const POOLSIDE_ROW: HoldingRow = {
   company_name: "Poolside",
   held_at_date: true,
   mark: {
-    ...FIXTURE_ROW.mark,
+    ...FIXTURE_MARK,
     id: 3,
     holding_id: "poolside",
     reported: { amount: "2500000", currency: "USD" },
@@ -260,6 +260,55 @@ export const THREE_ROW_PACKET: PacketResponse = {
 };
 
 /**
+ * A realised position: in the packet, and carrying NO mark.
+ *
+ * `HoldingRow.mark` became `Mark | None` for exactly this row. A position
+ * realised during the period is what the audit letter's fourth request asks for
+ * by name, and it has no mark at the measurement date because it was not held
+ * then — `evals/oracle/derived.json` states Jackpocket at 2024-12-31 as
+ * `held_at_date: false` with `reported_amount: null`. Carrying the last known
+ * mark forward would put a stale figure where the oracle says there is none, so
+ * the surfaces have to render the absence itself.
+ *
+ * `supported`, `unsupported_reasons` and `approved` below are the values
+ * `api/serialize.py` returns for the equivalent Python row — a row with no
+ * assessments at all, which the API reports as R1 and R2 never assessed.
+ */
+export const REALISED_ROW: HoldingRow = {
+  holding_id: "jackpocket",
+  company_name: "Jackpocket",
+  position_type: "direct_equity",
+  held_at_date: false,
+  mark: null,
+  assessments: [],
+  gaps: [],
+  approval: null,
+  supported: false,
+  unsupported_reasons: { R1: "not assessed", R2: "not assessed" },
+  approved: false,
+};
+
+/**
+ * The three rows plus the realised one.
+ *
+ * The totals are the three-row totals with two counts moved, which is what
+ * `Packet.totals()` returns for the added row: it is unsupported, so it is a
+ * packet gap; it is not held at the date, so it is neither an input to `amount`
+ * nor an `unsupported_position`. `packet_gap_positions` 2 → 3 and
+ * `unheld_gap_positions` 1 → 2; the two money figures do not move at all, which
+ * is the point — a row with no mark cannot change a sum of marks.
+ */
+export const FOUR_ROW_PACKET: PacketResponse = {
+  ...THREE_ROW_PACKET,
+  rows: [FIXTURE_ROW, SWAY_ROW, POOLSIDE_ROW, REALISED_ROW],
+  totals: {
+    ...THREE_ROW_PACKET.totals,
+    packet_gap_positions: 3,
+    unheld_gap_positions: 2,
+  },
+};
+
+/**
  * Not hand-written. These are the figures `api/serialize.py` returns for the
  * three rows above, obtained by constructing the equivalent packet through the
  * Python contract models and reading the result — the same reason `fixture.ts`
@@ -274,13 +323,20 @@ export const THREE_ROW_PACKET: PacketResponse = {
 export const THREE_ROW_TOTALS = THREE_ROW_PACKET.totals;
 
 /**
- * A claim whose citation resolves to a passage — the state the evidence surface
+ * A claim whose facts resolve to passages — the state the evidence surface
  * exists to render, and the one no live holding is in yet, because the document
  * extractors are still being written.
  *
- * The quote and its offsets are what an auditor re-verifies:
+ * Two facts rather than two loose quotes: `field_name` is what says which
+ * citation supports which number, and it is the whole reason `api/routes.py`
+ * sends `facts` instead of the detached citation list it used to. The quote and
+ * its offsets are what an auditor re-verifies —
  * `canonical_text[span_start:span_end]` in the stored document version must
  * equal `quote`, which `0008_citations_resolve.sql` enforces.
+ *
+ * One fact carries a `value_numeric` and one does not, because both are real:
+ * a share count parses and a narrative phrase does not, and a surface that only
+ * ever meets the first renders `null` as a blank the first time it meets it.
  */
 export const CITED_CLAIM: EvidenceClaim = {
   ...SUBSEQUENT_EVIDENCE.claim,
@@ -290,29 +346,45 @@ export const CITED_CLAIM: EvidenceClaim = {
   claim_key: "poolside/series_b_price",
   source_class: "executed_transaction_doc",
   execution_status: "executed",
-  citations: [
+  facts: [
     {
-      document_version_id: "dv_poolside_spa",
-      quote: "the Purchase Price shall be $2.50 per share of Series B Preferred Stock",
-      span_start: 4821,
-      span_end: 4891,
+      id: 21,
+      claim_id: "poolside_spa_price",
+      field_name: "price_per_share",
+      value_text: "$2.50",
+      value_numeric: "2.500000",
+      state: "canonical",
+      citation: {
+        document_version_id: "dv_poolside_spa",
+        quote: "the Purchase Price shall be $2.50 per share of Series B Preferred Stock",
+        span_start: 4821,
+        span_end: 4891,
+      },
     },
     {
-      document_version_id: "dv_poolside_spa",
-      quote: "1,000,000 shares of Series B Preferred Stock",
-      span_start: 5102,
-      span_end: 5146,
+      id: 22,
+      claim_id: "poolside_spa_price",
+      field_name: "security_class",
+      value_text: "Series B Preferred Stock",
+      value_numeric: null,
+      state: "candidate",
+      citation: {
+        document_version_id: "dv_poolside_spa",
+        quote: "1,000,000 shares of Series B Preferred Stock",
+        span_start: 5102,
+        span_end: 5146,
+      },
     },
   ],
 };
 
-/** A claim on file with no passage attached: recorded, not yet pinned to text. */
+/** A claim on file with no fact attached: recorded, not yet pinned to text. */
 export const UNCITED_CLAIM: EvidenceClaim = {
   ...CITED_CLAIM,
   id: "poolside_board_deck",
   source_class: "company_communication",
   execution_status: "non_binding",
-  citations: [],
+  facts: [],
 };
 
 export const HOLDING_WITH_EVIDENCE: HoldingResponse = {

@@ -23,35 +23,22 @@ than reading clean.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 
+from ingest.trackers import classify
 from ingest.trackers.findings import _fund_of, _period_end, _period_scope
-from ingest.trackers.read import TrackerSheet, Tranche, company_key, position_held_at
-from packages.contracts.enums import AuditScope, DerivationStatus, PositionType
-from packages.contracts.models import (
-    HoldingRow,
-    Lot,
-    Mark,
-    Money,
-    Packet,
-    Period,
+from ingest.trackers.read import SheetNote, TrackerSheet, Tranche, company_key, position_held_at
+from ingest.trackers.records import Holding, Mapped, Refusal, Substitution
+from ingest.trackers.to_lots import (
+    ASSUMED_CURRENCY,
+    add_lots,
 )
+from packages.contracts.enums import AuditScope, DerivationStatus, PositionType
+from packages.contracts.models import HoldingRow, Mark, Money, Packet, Period
 
-#: The workbooks name no currency in any cell, header or footer. `Money` cannot
-#: be built without one (INV-11), so every figure in the packet is denominated
-#: by this module rather than by the source.
-ASSUMED_CURRENCY = "USD"
-
-#: `Lot.security_class` is a required non-null string and the master breakdown
-#: states no class on any of its 18 rows. A sentinel is used rather than a
-#: plausible guess: inventing `series_a` would make INV-17's cross-class rule
-#: read as satisfied, which is the one failure it exists to catch.
-ASSUMED_SECURITY_CLASS = "unstated"
-
-#: The workbooks distinguish a feeder ("Jio (Indirect)") and a listed holding
-#: only in prose. `HoldingRow.position_type` is required and closed.
+#: Only where no line signals otherwise. `classify.position_type` reads the
+#: feeder, the listing and the foreign denomination off the sheet.
 ASSUMED_POSITION_TYPE = PositionType.DIRECT_EQUITY
 
 #: NOT an assumption any more. SPEC 2 closes the packet date set at six
@@ -73,175 +60,12 @@ NO_DERIVATION = "TRACKER_FIGURE_ONLY:workbooks_state_no_derivation"
 _EMPTY_NOTES = frozenset({"", "—", "-", "–"})
 
 
-@dataclass(frozen=True)
-class Substitution:
-    """A value the contract required and the workbooks do not state."""
-
-    subject: str
-    field_path: str
-    value: str
-    because: str
-
-
-@dataclass(frozen=True)
-class Refusal:
-    """Something the source states that the contract cannot hold."""
-
-    subject: str
-    field_path: str
-    detail: str
-
-
-@dataclass(frozen=True)
-class Holding:
-    """The identity row a packet row implies but does not carry.
-
-    `HoldingRow` names a holding and a company and stops there; the fund, the
-    currency and the company's own identity live only in the database. They are
-    materialised here so the persistence step has something to write.
-    """
-
-    id: str
-    fund_id: str
-    company_id: str
-    company_name: str
-    position_type: PositionType
-    currency: str
-
-
-@dataclass(frozen=True)
-class Mapped:
-    """Everything the workbooks became, and everything they could not."""
-
-    holdings: list[Holding] = field(default_factory=list)
-    lots: list[Lot] = field(default_factory=list)
-    periods: list[Period] = field(default_factory=list)
-    marks: list[Mark] = field(default_factory=list)
-    packets: list[Packet] = field(default_factory=list)
-    substitutions: list[Substitution] = field(default_factory=list)
-    refusals: list[Refusal] = field(default_factory=list)
-
-    def packet(self, fund_id: str, label: str) -> Packet:
-        """One fund-period, by the label the tracker itself prints."""
-        return next(p for p in self.packets if p.fund_id == fund_id and p.period.label == label)
-
-    def substituted(self, field_path: str) -> list[Substitution]:
-        return [s for s in self.substitutions if s.field_path == field_path]
-
-    def refused(self, field_path: str) -> list[Refusal]:
-        return [r for r in self.refusals if r.field_path == field_path]
-
-
 def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
 def _usd(amount: Decimal) -> Money:
     return Money(amount=amount, currency=ASSUMED_CURRENCY)
-
-
-def _realised_date(
-    company: str, purchases: list[Tranche], exits: list[Tranche], out: Mapped
-) -> date | None:
-    """The date these lots stopped being held, when the source forces one.
-
-    `check_realisations_are_allocatable` already reports that the workbooks name
-    no allocation method. The same silence lands harder here: `Lot.realized_date`
-    is what `Lot.held_at` reads, so an unallocatable exit leaves every lot
-    reading as still held — the position is sold and the ledger says otherwise.
-    """
-    if not exits:
-        return None
-    sold = sum((e.share_count or Decimal(0) for e in exits), Decimal(0))
-    held = sum((p.share_count or Decimal(0) for p in purchases), Decimal(0))
-    when = exits[0].acquired
-    # One sale of the WHOLE position leaves nothing to allocate, however many
-    # lots it consumed: every lot is realised, so no choice between FIFO,
-    # specific identification and pro-rata is being made. Requiring a single
-    # purchase lot as well made this refuse the ordinary shape — one exit
-    # against two tranches — and every lot then reached the ledger with
-    # `realized_date` null, reading as still held. `Packet.totals()` then
-    # carried the position at every later measurement date, and
-    # `check_realisations_are_allocatable` stays silent on a full exit because
-    # the allocation genuinely is invariant. A sold position, reported as held,
-    # with nothing anywhere saying so.
-    if len(exits) == 1 and sold >= held and held > 0 and when is not None:
-        out.substitutions.append(
-            Substitution(
-                company,
-                "Lot.realized_date",
-                when.isoformat(),
-                "the workbooks name no lot-allocation method for a realisation; here one "
-                "exit sells the position's entire share count, so every lot is realised and "
-                "the allocation is forced rather than chosen",
-            )
-        )
-        return when
-    out.refusals.append(
-        Refusal(
-            company,
-            "Lot.realized_date",
-            f"{sold:,} share(s) realised across {len(exits)} exit row(s) against "
-            f"{len(purchases)} purchase lot(s), and the workbooks name no allocation "
-            "method, so no lot can be marked realised and every lot reads as still held",
-        )
-    )
-    return None
-
-
-def _add_lots(holding: Holding, company: str, own: list[Tranche], out: Mapped) -> list[Lot]:
-    mine: list[Lot] = []
-    purchases = [t for t in own if t.is_investment]
-    exits = [t for t in own if t.is_exit]
-    for t in own:
-        if t.is_recognised:
-            continue
-        out.refusals.append(
-            Refusal(
-                f"{company} · {t.kind}",
-                "Lot",
-                f"row kind {t.kind!r} is neither an investment nor an exit, so it becomes "
-                f"no lot at all and {t.investment:,} of stated investment leaves no trace "
-                "in the contract layer",
-            )
-        )
-    realized = _realised_date(company, purchases, exits, out)
-    for n, t in enumerate(purchases, 1):
-        subject = f"{company} lot {n}"
-        if t.acquired is None:
-            out.refusals.append(
-                Refusal(
-                    f"{subject} ({t.acquired_text})",
-                    "Lot.acquired_date",
-                    "the Date cell names a range rather than a day, and `Lot.acquired_date` "
-                    "is a required `date`; the reader deliberately preserves the range, and "
-                    "the contract has nowhere to put it, so the lot is dropped",
-                )
-            )
-            continue
-        out.substitutions.append(
-            Substitution(
-                subject,
-                "Lot.security_class",
-                ASSUMED_SECURITY_CLASS,
-                "the master breakdown states no security class on any row, and "
-                "`Lot.security_class` is required",
-            )
-        )
-        mine.append(
-            Lot(
-                id=f"{holding.id}_{n}",
-                holding_id=holding.id,
-                security_class=ASSUMED_SECURITY_CLASS,
-                shares=t.share_count,
-                entry_pps=t.share_price,
-                cost=_usd(t.investment),
-                acquired_date=t.acquired,
-                realized_date=realized,
-            )
-        )
-    out.lots.extend(mine)
-    return mine
 
 
 def _add_periods(sheet: TrackerSheet, fund_id: str, out: Mapped) -> dict[str, Period]:
@@ -270,24 +94,32 @@ def _add_periods(sheet: TrackerSheet, fund_id: str, out: Mapped) -> dict[str, Pe
     return periods
 
 
-def _add_holding(sheet: TrackerSheet, fund_id: str, company: str, out: Mapped) -> Holding:
+def _add_holding(
+    sheet: TrackerSheet,
+    fund_id: str,
+    company: str,
+    out: Mapped,
+    notes: list[SheetNote],
+    own: list[Tranche],
+) -> Holding:
+    read = classify.position_type(notes, own)
     holding = Holding(
         id=f"{fund_id}_{_slug(company)}",
         fund_id=fund_id,
         company_id=_slug(company),
         company_name=company,
-        position_type=ASSUMED_POSITION_TYPE,
+        position_type=PositionType(read.value),
         currency=ASSUMED_CURRENCY,
     )
-    out.substitutions.append(
-        Substitution(
-            company,
-            "HoldingRow.position_type",
-            ASSUMED_POSITION_TYPE.value,
-            "the workbooks classify no position; the tracker's own label for this row is "
-            "the only signal and it is prose",
+    if holding.position_type is ASSUMED_POSITION_TYPE:
+        out.substitutions.append(
+            Substitution(
+                company,
+                "HoldingRow.position_type",
+                ASSUMED_POSITION_TYPE.value,
+                f"{read.source_text}, so the position is read as direct equity",
+            )
         )
-    )
     out.substitutions.append(
         Substitution(
             company,
@@ -394,13 +226,25 @@ def _add_marks(
 
 
 def map_workbooks(
-    sheets: list[TrackerSheet], tranches: list[Tranche], generated_at: datetime
+    sheets: list[TrackerSheet],
+    tranches: list[Tranche],
+    generated_at: datetime,
+    notes: list[SheetNote] | None = None,
 ) -> Mapped:
-    """The two workbooks, as far into the contract layer as they reach."""
+    """The two workbooks, as far into the contract layer as they reach.
+
+    `notes` are the breakdown's prose lines. They default to empty so a caller
+    that has not been updated still maps — every position then reads as direct
+    equity with an unstated class, which is where this started and is recorded
+    as a substitution rather than passing silently.
+    """
     out = Mapped()
     by_position: dict[tuple[str | None, str], list[Tranche]] = {}
     for t in tranches:
         by_position.setdefault((_fund_of(t.fund), company_key(t.company)), []).append(t)
+    notes_by_company: dict[str, list[SheetNote]] = {}
+    for note in notes or []:
+        notes_by_company.setdefault(company_key(note.company), []).append(note)
 
     # The same collision, on the other side of the same join. `company_key` is
     # applied to the master workbook's TAB NAME at read time, so `Acme (US)` and
@@ -422,6 +266,7 @@ def map_workbooks(
         fund_id = _slug(fund_key or sheet.fund_label)
         periods = _add_periods(sheet, fund_id, out)
         by_period: dict[str, list[HoldingRow]] = {label: [] for label in periods}
+        measured = [p.period_date for p in periods.values()]
         # Both sides join on the company the label NAMES, not on the label. The
         # tracker writes `Jio (Indirect)` and the master breakdown's sheet is
         # `Jio`; the raw strings never met, and the miss cost Fund I its whole
@@ -434,7 +279,6 @@ def map_workbooks(
         }
 
         for company in sheet.companies:
-            holding = _add_holding(sheet, fund_id, company, out)
             key = company_key(company)
             if key in shared:
                 # Attributing one company's tranches to two tracker rows would
@@ -483,7 +327,14 @@ def map_workbooks(
                         "no acquisition date",
                     )
                 )
-            _add_lots(holding, company, own, out)
+            # The holding is built AFTER its tranches are resolved: the sheet's
+            # own prose is what says whether this is a feeder, a listed position
+            # or a foreign-denominated interest, and the `Type` cells are half
+            # of that signal. Building it first meant classifying a position
+            # without having read the rows that describe it.
+            mine = notes_by_company.get(key, [])
+            holding = _add_holding(sheet, fund_id, company, out, mine, own)
+            add_lots(holding, company, own, out, mine, measured)
             for label, row in _add_marks(sheet, holding, company, periods, own, out).items():
                 by_period[label].append(row)
 
