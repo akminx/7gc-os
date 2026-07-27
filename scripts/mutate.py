@@ -211,20 +211,38 @@ MUTATIONS: list[Mutation] = [
     Mutation(
         "R1: a signed agreement answers for settlement of funds too",
         REQS,
-        "        if outcome is _SUFFICIENT and not _settled(covering):",
+        "        if outcome is _SUFFICIENT and (gaps := _acquisition_gaps(covering, lot)):",
         "        if False:",
     ),
     Mutation(
         "R1: settlement anywhere on the holding clears every lot",
         REQS,
-        "not _settled(covering)",
-        "not _settled(claims)",
+        "_acquisition_gaps(covering, lot)",
+        "_acquisition_gaps(claims, lot)",
+    ),
+    Mutation(
+        "R1: only settlement is required, not the share terms beside it",
+        REQS,
+        "applicable = _ACQUISITION_FIGURES if lot.shares",
+        "applicable = _ACQUISITION_FIGURES[-1:] or _ACQUISITION_FIGURES if lot.shares",
+    ),
+    Mutation(
+        "R1: a fund interest is asked for a price per share it cannot have",
+        REQS,
+        "if lot.shares is not None else _ACQUISITION_FIGURES[-1:]",
+        "if True else _ACQUISITION_FIGURES[-1:]",
+    ),
+    Mutation(
+        "R4: no figures at all reads as partial rather than insufficient",
+        REQS,
+        "_INSUFFICIENT if len(absent) == len(_REALIZATION_FIGURES) else _PARTIAL",
+        "_PARTIAL",
     ),
     Mutation(
         "R1: a contribution of zero counts as money having moved",
         REQS,
-        "        (value := claim.facts.get(name)) is not None and value > 0",
-        "        name in claim.facts",
+        "        if value is not None and value > 0",
+        "        if True",
     ),
     Mutation(
         "R4: figures from any claim on the holding complete a lot",
@@ -240,8 +258,8 @@ MUTATIONS: list[Mutation] = [
     Mutation(
         "R4: a realisation notice answers on its letterhead alone",
         REQS,
-        "        for missing, needed in _REALIZATION_FIGURES:",
-        "        for missing, needed in _REALIZATION_FIGURES[:0]:",
+        "for missing, needed in _REALIZATION_FIGURES if not (needed & stated)",
+        "for missing, needed in _REALIZATION_FIGURES[:0] if not (needed & stated)",
     ),
     # ── what the evaluation page publishes to an auditor ─────────────────
     Mutation(

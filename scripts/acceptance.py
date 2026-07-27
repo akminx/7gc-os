@@ -250,7 +250,28 @@ PARA_1 = (
         "settlement of funds",
         "and settlement of funds",
         BY_POSITION,
-        fields=frozenset({"settlement_amount_received", "settlement_date", "settlement_reference"}),
+        # THE VOCABULARY OF THE DOCUMENT CLASS, not of the stock purchase
+        # agreement alone. Named `settlement_amount_received` only, this limb
+        # reported Jio as having no settlement evidence while its capital
+        # account statement states `contributed_capital` against an unfunded
+        # commitment of zero — the money having moved, said the way a fund
+        # interest says it.
+        #
+        # Worse than a wrong count: `policy/requirements.py::_SETTLEMENT_EVIDENCE`
+        # already accepted the wider set, so this report and the verdict layer
+        # gave DIFFERENT answers to the same question about the same holding,
+        # and both looked right. Two parts of one system disagreeing quietly is
+        # the defect this whole project is built to make impossible; it is not
+        # allowed to live in the file that measures the letter.
+        fields=frozenset(
+            {
+                "settlement_amount_received",
+                "settlement_date",
+                "settlement_reference",
+                "contributed_capital",
+                "acquisition_consideration_usd",
+            }
+        ),
     ),
 )
 
@@ -311,6 +332,20 @@ PARA_2 = (
 #: twelve-month calibration in the closing paragraph is a RECOMMENDATION. The
 #: letter separates them by verb — "please provide" against "we recommend" — so
 #: they are two rows and not one predicate serving both.
+#:
+#: ¶3(b) NAMES ITS OWN CONTENTS AND NOTHING HERE CHECKS THEM. The letter asks
+#: for management's assessment "(including consideration of company
+#: performance, market conditions, and any indicators of impairment)" — three
+#: things the assessment must contain, not merely that one exists.
+#:
+#: Not a limb, and deliberately not, because it cannot be one yet: 3b is already
+#: UNANSWERABLE — the ledger records `management_assessment` and no more, so it
+#: cannot tell this artefact from ¶2's basis memo or the closing calibration.
+#: The contents of a document cannot be checked while the document itself is
+#: indistinguishable from two others. Written down here so the clause is not
+#: mistaken for covered when the schema gains a `decision_type` per artefact and
+#: 3b becomes answerable — at which point this is the next thing to build, and
+#: it needs somewhere to record what an assessment considered.
 PARA_3 = (
     Limb(
         "3a",

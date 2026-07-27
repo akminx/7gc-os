@@ -805,9 +805,16 @@ def test_r4_caps_at_partial_when_a_figure_the_letter_names_is_absent(
 
 def test_r4_names_every_missing_figure_rather_than_the_first() -> None:
     """A notice stating none of the three owes three answers, and a report that
-    named one of them would send someone back twice."""
+    named one of them would send someone back twice.
+
+    `insufficient` rather than `partial`, on the owner's ruling: a document of
+    exactly the right class stating not one of proceeds, per-share
+    consideration or share count supports no part of what ¶4 asks for, and
+    `partial` would report that it supports some of it. One or two present is
+    partial; none is insufficient.
+    """
     got = r4(_realized_ledger(), "h", date(2025, 12, 31))
-    assert got.verdict is RequirementVerdict.PARTIAL
+    assert got.verdict is RequirementVerdict.INSUFFICIENT
     assert {
         "NO_PROCEEDS_STATED",
         "NO_PER_SHARE_CONSIDERATION_STATED",
@@ -827,8 +834,18 @@ def test_r4_accepts_net_payment_as_proceeds_when_gross_is_not_stated() -> None:
 # ── R1 · ¶1 asks for settlement of funds, not just a signed agreement ────
 
 
+#: ¶1's other two figures, so a test about ONE limb is not silently also a test
+#: about the other two. Every case below starts from a document that states the
+#: share count and the price, and removes only the thing under test.
+_R1_SHARE_TERMS: dict[str, Decimal] = {
+    "fund_shares": Decimal(100),
+    "fund_price_per_share": Decimal(1),
+}
+
+
 def _acquired_ledger(**facts: Decimal) -> Ledger:
-    """One held lot with an executed SPA covering it."""
+    """One held lot with an executed SPA covering it, stating the share terms."""
+    facts = {**_R1_SHARE_TERMS, **facts}
     return _ledger(
         claims=(
             _claim(
@@ -853,7 +870,7 @@ def test_r1_needs_evidence_the_money_moved_not_only_that_a_deal_was_signed() -> 
     got = r1(_acquired_ledger(), "h", date(2025, 12, 31))
     assert got.verdict is RequirementVerdict.PARTIAL
     assert "SETTLEMENT_OF_FUNDS_NOT_EVIDENCED" in got.reasons
-    assert "REQUEST_SETTLEMENT_CONFIRMATION" in got.next_actions
+    assert "REQUEST_ACQUISITION_FIGURES" in got.next_actions
 
 
 @pytest.mark.parametrize(
@@ -975,5 +992,83 @@ def test_realisation_figures_on_another_class_do_not_complete_this_lot() -> None
         claims=ledger.claims,
     )
     got = r4(realised, "h", date(2025, 12, 31))
-    assert got.verdict is RequirementVerdict.PARTIAL
+    # None of the three reaches this lot, so `insufficient` — the off-class
+    # claim states all three and covers nothing here.
+    assert got.verdict is RequirementVerdict.INSUFFICIENT
     assert "NO_PROCEEDS_STATED" in got.reasons
+
+
+@pytest.mark.parametrize(
+    ("drop", "reason"),
+    [
+        ("fund_shares", "NO_SHARE_COUNT_STATED"),
+        ("fund_price_per_share", "NO_ACQUISITION_PRICE_STATED"),
+    ],
+)
+def test_r1_needs_the_other_two_figures_the_letter_names(drop: str, reason: str) -> None:
+    """¶1 names three things and means three.
+
+    Settlement was required first and the other two were left to the document
+    class — the same shortcut one clause apart. "Executed transaction documents
+    …, including share counts, price per share, and settlement of funds": an
+    agreement that states none of them is the right kind of document and does
+    not answer the request.
+    """
+    figures = {k: v for k, v in _R1_SHARE_TERMS.items() if k != drop}
+    got = r1(
+        _ledger(
+            claims=(
+                _claim(
+                    "spa",
+                    None,
+                    None,
+                    requirements=frozenset({RequirementCode.R1}),
+                    source_class=SourceClass.EXECUTED_TRANSACTION_DOC,
+                    execution_status=ExecutionStatus.EXECUTED,
+                    facts={**figures, "settlement_amount_received": Decimal(1)},
+                ),
+            ),
+        ),
+        "h",
+        date(2025, 12, 31),
+    )
+    assert got.verdict is RequirementVerdict.PARTIAL
+    assert reason in got.reasons
+
+
+def test_a_lot_with_no_shares_is_not_short_of_a_share_count() -> None:
+    """Jio's LP interest, The Mom Project's note and Moonfare's fund interest.
+
+    Each is bought as a commitment or principal rather than as shares, and
+    `v1_entry_cost` already answers `not_applicable, NO_SHARE_COUNT` for them
+    rather than failing them — "each one's cost is a real number that
+    reconciles to nothing per-share".
+
+    Requiring a price per share of those three reports a gap the fund can never
+    close, because the document that would close it cannot exist. That is the
+    same error as naming only the stock-purchase vocabulary for settlement,
+    which this file already carries a guard against; asking a fund interest for
+    a share price is the same mistake wearing ¶1's other clause.
+    """
+    unshared = Lot("l", "h", "fund_interest", None, None, Decimal(100), "USD", date(2020, 1, 1))
+    got = r1(
+        _ledger(
+            lots=(unshared,),
+            claims=(
+                _claim(
+                    "statement",
+                    None,
+                    None,
+                    requirements=frozenset({RequirementCode.R1}),
+                    source_class=SourceClass.EXECUTED_TRANSACTION_DOC,
+                    execution_status=ExecutionStatus.EXECUTED,
+                    facts={"contributed_capital": Decimal(1000)},
+                ),
+            ),
+        ),
+        "h",
+        date(2025, 12, 31),
+    )
+    assert got.verdict is RequirementVerdict.SUFFICIENT
+    assert "NO_SHARE_COUNT_STATED" not in got.reasons
+    assert "NO_ACQUISITION_PRICE_STATED" not in got.reasons

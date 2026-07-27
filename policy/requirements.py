@@ -128,22 +128,84 @@ _SETTLEMENT_EVIDENCE = frozenset(
     {"settlement_amount_received", "contributed_capital", "acquisition_consideration_usd"}
 )
 
+#: ¶1's THREE named figures, and the fields that can state each.
+#:
+#: "Executed transaction documents supporting the Fund's acquisition of each
+#: position …, INCLUDING share counts, price per share, and settlement of
+#: funds." Settlement was required first and the other two were left to the
+#: document class, which is the same shortcut one clause apart — the owner's
+#: ruling is that the letter names three things and means three.
+#:
+#: Alternatives WITHIN a group, all three groups REQUIRED. A fund interest
+#: states its size in units of commitment rather than shares, so
+#: `capital_commitment` answers the share-count limb for one: the letter asks
+#: how much of the thing the fund owns, and every document class says that in
+#: its own words.
+_ACQUISITION_FIGURES: tuple[tuple[str, frozenset[str]], ...] = (
+    (
+        "NO_SHARE_COUNT_STATED",
+        frozenset(
+            {
+                "fund_shares",
+                "shares_held",
+                "position_shares",
+                "schedule_a_total_shares",
+                "fund_series_a_shares",
+                "fund_series_a2_shares",
+                "fund_a3_shares",
+                "capital_commitment",
+            }
+        ),
+    ),
+    (
+        "NO_ACQUISITION_PRICE_STATED",
+        frozenset(
+            {
+                "fund_price_per_share",
+                "round_price_per_share",
+                "original_purchase_pps",
+                "fund_entry_price_per_share",
+                "fund_series_a2_original_pps",
+            }
+        ),
+    ),
+    ("SETTLEMENT_OF_FUNDS_NOT_EVIDENCED", _SETTLEMENT_EVIDENCE),
+)
 
-def _settled(claims: Sequence[EvidenceClaim]) -> bool:
-    """Whether these claims evidence that money actually moved.
 
-    POSITIVE, not merely present. The first version asked only whether one of
-    the field names appeared, and a cross-family review passed it
+def _acquisition_gaps(claims: Sequence[EvidenceClaim], lot: Lot) -> list[str]:
+    """Which of ¶1's three figures these claims do not state, for THIS lot.
+
+    POSITIVE, not merely present. The first version of the settlement half asked
+    only whether a field NAME appeared, and a cross-family review passed it
     `contributed_capital = 0` — an investor who has committed and funded
-    nothing — which read as settled. A commitment of zero drawn is the clearest
-    possible evidence that the money has NOT moved, and it satisfied the check
-    designed to prove that it had.
+    nothing — which read as settled. A commitment drawn to zero is the clearest
+    evidence available that the money has NOT moved, and it satisfied the check
+    written to prove that it had. The same rule applies to all three: a share
+    count of zero is not a share count.
+
+    A LOT WITH NO SHARES IS NOT SHORT OF A SHARE COUNT. Jio's LP interest, The
+    Mom Project's convertible note and Moonfare's fund interest are bought as
+    commitments and principal, not as shares, and `v1_entry_cost` already says
+    so — it answers `not_applicable, NO_SHARE_COUNT` rather than failing them,
+    because "each one's cost is a real number that reconciles to nothing
+    per-share".
+
+    Demanding a price per share of them reports a gap the fund can never close
+    with a document that does not exist. That is the same error as naming only
+    the stock-purchase vocabulary for settlement, made twice in one file, and
+    the fix is the same: ask each position for cost in the terms its own
+    instrument has. What ¶1 wants of these three is what the fund paid, and the
+    settlement limb is where that lives.
     """
-    return any(
-        (value := claim.facts.get(name)) is not None and value > 0
+    stated = {
+        name
         for claim in claims
-        for name in _SETTLEMENT_EVIDENCE
-    )
+        for name, value in claim.facts.items()
+        if value is not None and value > 0
+    }
+    applicable = _ACQUISITION_FIGURES if lot.shares is not None else _ACQUISITION_FIGURES[-1:]
+    return [reason for reason, fields in applicable if not (fields & stated)]
 
 
 def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
@@ -187,7 +249,7 @@ def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
             reasons.add(gap_reason(None))
         outcome = best(candidates)
 
-        # SETTLEMENT IS PER LOT, and from the claims covering THAT lot.
+        # ¶1's THREE FIGURES, PER LOT, from the claims covering THAT lot.
         #
         # Written first as a holding-wide union over every R1 claim, which a
         # cross-family review broke twice in one pass. A claim priced for a
@@ -195,10 +257,10 @@ def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
         # absent from `relied_on` — still cleared settlement for it; and one
         # settlement cleared every acquisition the holding had. The scope of the
         # question is the lot, because that is the scope of the acquisition.
-        if outcome is _SUFFICIENT and not _settled(covering):
+        if outcome is _SUFFICIENT and (gaps := _acquisition_gaps(covering, lot)):
             outcome = _PARTIAL
-            reasons.add("SETTLEMENT_OF_FUNDS_NOT_EVIDENCED")
-            actions.add("REQUEST_SETTLEMENT_CONFIRMATION")
+            reasons.update(gaps)
+            actions.add("REQUEST_ACQUISITION_FIGURES")
         per_lot[lot.id] = outcome
 
     if not per_lot:
@@ -635,11 +697,15 @@ def r4(ledger: Ledger, holding_id: str, on: date) -> Outcome:
         # let one realisation's figures answer for another's.
         if outcome is _SUFFICIENT:
             stated = {name for c in covering for name in c.facts}
-            for missing, needed in _REALIZATION_FIGURES:
-                if not (needed & stated):
-                    outcome = _PARTIAL
-                    reasons.append(missing)
-                    actions.append("REQUEST_REALIZATION_FIGURES")
+            absent = [missing for missing, needed in _REALIZATION_FIGURES if not (needed & stated)]
+            if absent:
+                # SOME evidenced is partial; NONE is insufficient. A notice of
+                # exactly the right class stating not one of proceeds, per-share
+                # consideration or share count supports no part of what ¶4 asks
+                # for, and `partial` would report that it supports some of it.
+                outcome = _INSUFFICIENT if len(absent) == len(_REALIZATION_FIGURES) else _PARTIAL
+                reasons.extend(absent)
+                actions.append("REQUEST_REALIZATION_FIGURES")
         per_lot[lot.id] = outcome
 
     if not all(v is _SUFFICIENT for v in per_lot.values()):

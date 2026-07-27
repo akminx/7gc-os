@@ -135,10 +135,19 @@ def test_the_settlement_limb_is_unanswerable_before_the_ledger_can_record_it() -
         known_decisions=frozenset({"valuation"}),
         known_statuses=frozenset({"executed"}),
     )
+    # All five names the limb now accepts. The two contribution fields joined
+    # it when this report and `policy/requirements.py` were found to disagree
+    # about whether Jio's capital account statement evidences settlement — the
+    # policy layer accepted `contributed_capital`, this report did not, and both
+    # looked right.
     missing = acceptance.missing_vocabulary(LIMBS["1d"], before)
-    assert missing == ["settlement_amount_received", "settlement_date", "settlement_reference"], (
-        "the settlement limb read as answerable against a ledger that could not record it"
-    )
+    assert missing == [
+        "acquisition_consideration_usd",
+        "contributed_capital",
+        "settlement_amount_received",
+        "settlement_date",
+        "settlement_reference",
+    ], "the settlement limb read as answerable against a ledger that could not record it"
 
 
 def test_the_settlement_limb_is_answerable_once_the_ledger_records_it() -> None:
