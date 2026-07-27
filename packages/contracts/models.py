@@ -440,20 +440,50 @@ class HoldingRow(Contract):
         """
         by_code = {a.requirement: a for a in self.assessments}
         reasons: dict[RequirementCode, str] = {}
-        # R1 and R2 must each be present, applicable, and sufficient. Checking
-        # all three together is what the two earlier versions got wrong: one
-        # tested presence alone, the next skipped anything marked inapplicable.
-        for code in sorted(ALWAYS_APPLICABLE):
-            got = by_code.get(code)
-            if got is None:
-                reasons[code] = "not assessed"
-            elif got.verdict is not RequirementVerdict.SUFFICIENT:
-                # Covers not_applicable too: an always-applicable requirement
-                # marked N/A is not sufficient, so it lands here. A separate
-                # branch for it was redundant — mutation testing showed removing
-                # it changed nothing, which is the signal to delete rather than
-                # to write a test for it.
-                reasons[code] = got.verdict.value
+        # R1 and R2 must each be present, applicable, and sufficient — WHILE THE
+        # POSITION IS HELD. Checking presence-applicability-sufficiency together
+        # is what the two earlier versions got wrong: one tested presence alone,
+        # the next skipped anything marked inapplicable.
+        #
+        # The `held_at_date` gate is the same rule the validator above states,
+        # expressed a second time here because this is a second place that
+        # decides applicability — and an applicability rule written where
+        # `held_at_date` is not visible is exactly the defect that was already
+        # fixed once, on `RequirementAssessment`. Moving that validator did not
+        # move this: the contract went on demanding existence-and-cost evidence
+        # for Jackpocket at 2024-12-31, a position sold in May, where
+        # `derived.json` says `fully_supported: true` and both codes are
+        # `not_applicable`. The audit letter asks for existence and cost "for
+        # each portfolio investment held during the periods under audit" (¶1)
+        # and for realisation support separately (¶4); reporting an unheld row
+        # as an open gap collapses that split and sends the auditor after
+        # paperwork that cannot exist.
+        if self.held_at_date:
+            for code in sorted(ALWAYS_APPLICABLE):
+                got = by_code.get(code)
+                if got is None:
+                    reasons[code] = "not assessed"
+                elif got.verdict is not RequirementVerdict.SUFFICIENT:
+                    # Covers not_applicable too: an always-applicable
+                    # requirement marked N/A on a HELD row is not sufficient, so
+                    # it lands here. A separate branch for it was redundant —
+                    # mutation testing showed removing it changed nothing, which
+                    # is the signal to delete rather than to write a test for it.
+                    reasons[code] = got.verdict.value
+        # An unheld row is still judged, on what it is actually answerable for:
+        # the loop below covers R4 and R5. `supported` does not become vacuously
+        # true here — a realised position whose realisation evidence is short
+        # still reports a gap, which `test_contracts.py` pins so this gate
+        # cannot be over-applied into "unheld means clean".
+        elif not any(a.applicable for a in self.assessments):
+            # And an unheld row with NOTHING applicable is not "clean", it is
+            # unexamined. Without this branch, skipping the always-applicable
+            # loop makes an empty assessment set read as fully supported — the
+            # fix for the ¶1/¶4 collapse turning into a second, larger hole in
+            # the other direction. R4 is the key because an unheld position is
+            # in the packet on the letter's ¶4 (realised investments), so R4 is
+            # the question it exists to answer and the one nobody answered.
+            reasons[RequirementCode.R4] = "not assessed"
         for a in self.assessments:
             if a.applicable and a.verdict is not RequirementVerdict.SUFFICIENT:
                 reasons.setdefault(a.requirement, a.verdict.value)

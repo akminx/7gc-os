@@ -1,7 +1,7 @@
 import type { GapObservation } from "./contracts";
 import { GAP_KIND, GAP_KIND_ORDER } from "./labels";
 import type { PacketResponse } from "./responses";
-import { GapItem, Meta, Section, SourceBadge } from "./ui";
+import { GapItem, Meta, Section, SourceBadge, Why } from "./ui";
 
 /**
  * SPEC §12 · the gap inventory.
@@ -24,6 +24,9 @@ interface Entry {
   company: string;
 }
 
+const POSITIONS_NOT_OBSERVATIONS =
+  "A position can be unsupported with no gap observation recorded against it, and one position can carry several observations. The two units are not interchangeable and neither is derived from the other.";
+
 export function GapInventory({ packet }: { packet: PacketResponse }) {
   const entries: Entry[] = packet.rows.flatMap((row) =>
     row.gaps.map((gap) => ({ gap, company: row.company_name })),
@@ -32,7 +35,8 @@ export function GapInventory({ packet }: { packet: PacketResponse }) {
     <>
       <Section
         title="Gap inventory"
-        note="Every gap observation in the packet. The packet states its own gaps; that is what makes it an honest deliverable rather than a clean-looking one."
+        note="Every gap observation in the packet."
+        hint="The packet states its own gaps; that is what makes it an honest deliverable rather than a clean-looking one."
       >
         <p className="note">
           <SourceBadge source={packet.source} />
@@ -42,30 +46,35 @@ export function GapInventory({ packet }: { packet: PacketResponse }) {
             {
               label: "unsupported positions held at this date (API)",
               value: <strong>{packet.totals.unsupported_positions}</strong>,
+              hint: POSITIONS_NOT_OBSERVATIONS,
             },
             {
               label: "packet gap positions, held or not (API)",
               value: <strong>{packet.totals.packet_gap_positions}</strong>,
+              hint: POSITIONS_NOT_OBSERVATIONS,
             },
             {
               label: "unsupported but not held at this date (API)",
               value: <strong>{packet.totals.unheld_gap_positions}</strong>,
+              hint: POSITIONS_NOT_OBSERVATIONS,
             },
           ]}
         />
         <p className="note">
-          Those two counts are <em>positions</em>, supplied by the API. They are not a count of the
-          observations below: a position can be unsupported with no gap observation recorded against
-          it, and one position can carry several observations. The two units are not interchangeable
-          and neither is derived from the other here.
+          Three counts of <em>positions</em>, not a count of the observations below.{" "}
+          <Why text={POSITIONS_NOT_OBSERVATIONS} />
         </p>
       </Section>
 
       {GAP_KIND_ORDER.map((kind) => {
         const group = entries.filter((entry) => entry.gap.kind === kind);
         return (
-          <Section key={kind} title={GAP_KIND[kind].label} note={GAP_KIND[kind].meaning}>
-            <p className="note">Next action: {GAP_KIND[kind].next}</p>
+          <Section
+            key={kind}
+            title={GAP_KIND[kind].label}
+            note={`Next action: ${GAP_KIND[kind].next}`}
+            hint={GAP_KIND[kind].meaning}
+          >
             {group.length === 0 ? (
               <p className="note">No observation of this kind is recorded in this packet.</p>
             ) : (

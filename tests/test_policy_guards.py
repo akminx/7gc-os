@@ -509,3 +509,48 @@ def test_cross_class_is_symmetric_and_catches_the_held_minus_priced_direction() 
     )
     assert outcome.cross_class is True
     assert "CROSS_CLASS_POLICY_DECISION_REQUIRED" in outcome.reasons
+
+
+def test_expired_support_is_not_reported_as_never_having_existed(policy_ledger: Ledger) -> None:
+    """Two holdings read `R2 = missing` at 25Q4 and mean opposite things.
+
+    Because Market has no portfolio document of any kind. Moonfare has two, and
+    its FY2023 memo closes its own window in its own words — "should not be
+    relied upon for subsequent measurement dates without update" (INV-16).
+
+    Both rendered as `missing` with `REQUEST_FROM_COMPANY` beside them, which
+    tells an auditor to go and find something for a fund that already holds the
+    thing and needs it REFRESHED. The verdict is right in both cases and is not
+    what this pins: `missing` is correct because an expired memo is not weaker
+    support, it is no support. What must differ is the reason and the action,
+    because they are letters to different people.
+    """
+    on = date(2025, 12, 31)
+    moonfare = _r2(policy_ledger, "fund_ii_moonfare", on)
+    because = _r2(policy_ledger, "fund_ii_because_market", on)
+
+    assert moonfare.verdict is because.verdict is RequirementVerdict.MISSING
+
+    assert "SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW" in moonfare.reasons
+    assert "REQUEST_UPDATED_VALUATION" in moonfare.next_actions
+
+    assert "SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW" not in because.reasons
+    assert "REQUEST_UPDATED_VALUATION" not in because.next_actions
+    assert "REQUEST_FROM_COMPANY" in because.next_actions
+
+    # The distinction must be earned by the evidence, not by the holding's name.
+    assert any(
+        c.holding_id == "fund_ii_moonfare"
+        and RequirementCode.R2 in c.requirements
+        and c.applicable_to is not None
+        and c.applicable_to < on
+        for c in policy_ledger.claims
+    ), "Moonfare must actually hold expired R2 support for this test to mean anything"
+    assert not any(c.holding_id == "fund_ii_because_market" for c in policy_ledger.claims), (
+        "Because Market must actually hold no claims at all"
+    )
+
+
+def _r2(ledger: Ledger, holding_id: str, on: date) -> object:
+    outcome = assess_row(ledger, holding_id, on)
+    return next(o for code, o in outcome.outcomes.items() if code is RequirementCode.R2)

@@ -118,6 +118,24 @@ MATRIX: dict[PolicyKey, PolicyResult] = {
         reason_code="NON_BINDING_TERM_SHEET",
         next_actions=("REQUEST_EXECUTED_DOC",),
     ),
+    # A settlement confirmation: money received by the company from the fund, on
+    # a date, with a reference. The audit letter's paragraph 1 names this
+    # explicitly — the acquisition documents "including share counts, price per
+    # share, and settlement of funds".
+    #
+    # `partial`, because it evidences one limb of three. It proves the fund paid
+    # and says nothing about what the fund received: no share count, no price.
+    # On its own an auditor could not establish the position from it.
+    #
+    # R1 reduces per lot with `best()`, so where a stock purchase agreement is
+    # already `sufficient` this corroborates without downgrading, which is the
+    # correct behaviour and was verified before the cell was added.
+    (
+        _R1,
+        SourceClass.COMPANY_COMMUNICATION,
+        ExecutionStatus.NOT_APPLICABLE,
+        PositionType.DIRECT_EQUITY,
+    ): PolicyResult(verdict=_PARTIAL, reason_code="SETTLEMENT_WITHOUT_SHARE_TERMS"),
     # ── R2 · fair value support ──────────────────────────────────────────
     (
         _R2,
@@ -131,6 +149,27 @@ MATRIX: dict[PolicyKey, PolicyResult] = {
         ExecutionStatus.PRO_FORMA,
         PositionType.DIRECT_EQUITY,
     ): PolicyResult(verdict=_PARTIAL, reason_code="PRO_FORMA_PENDING_EXECUTION"),
+    # A cap table asserting a round CLOSED at a stated price, with the closing
+    # set stated to be elsewhere. Fluidstack's Series A-2: "The Series A-2
+    # tranche closed May 30, 2025 at $15.00 per share ($750,000,000
+    # post-money); executed documents on file with company counsel."
+    #
+    # Added because binding that claim to R2 made this tuple reachable for the
+    # first time and the matrix refused it — which is the fail-closed rule doing
+    # its job. The evidence was in the corpus, cited, and relied on for nothing,
+    # so the tuple had never been decided.
+    #
+    # `partial`, on the same reasoning as its two neighbours above and below: a
+    # third party asserts the round closed, and the documents that would prove
+    # it are not in the file. A cap table is not weaker than the CEO email that
+    # says the same thing, and it is not stronger — the missing closing set is
+    # the same absence in both.
+    (
+        _R2,
+        SourceClass.COMPANY_CAP_TABLE,
+        ExecutionStatus.UNEXECUTED_REFERENCED,
+        PositionType.DIRECT_EQUITY,
+    ): PolicyResult(verdict=_PARTIAL, reason_code="CLOSING_SET_PENDING"),
     (
         _R2,
         SourceClass.COMPANY_COMMUNICATION,

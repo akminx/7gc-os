@@ -29,9 +29,11 @@ export function ClaimCard({ claim }: { claim: EvidenceClaim }) {
     <li className="claim">
       <ClaimFacts claim={claim} />
       {claim.facts.length === 0 ? (
-        <p className="note claim__uncited">
-          No extracted fact is attached to this claim, so no figure here can be traced to a document
-          yet. The claim is recorded; the extraction that pins its figures to text is not.
+        <p
+          className="note claim__uncited"
+          title="The claim is recorded; the extraction that pins its figures to text is not."
+        >
+          No extracted fact is attached to this claim, so nothing here traces to a document yet.
         </p>
       ) : (
         <ul className="fact-list">
@@ -58,17 +60,18 @@ export function ClaimCard({ claim }: { claim: EvidenceClaim }) {
 export function EvidencePanel({ holding }: { holding: HoldingResponse }) {
   return (
     <Section
-      title="Evidence — the passages behind the mark"
-      note="Each claim is one assertion made by one document version. Under it is every figure extracted from it, each naming the field it fills beside the exact text that states it and the offsets an auditor re-verifies against."
+      title="Evidence"
+      hint="Each claim is one assertion made by one document version. Under it is every figure extracted from it, each naming the field it fills beside the exact text that states it and the offsets an auditor re-verifies against."
     >
       <p className="note">
         <SourceBadge source={holding.source} /> · holding <code>{holding.holding_id}</code>
       </p>
       {holding.evidence.length === 0 ? (
-        <p className="empty-evidence">
-          No evidence in the corpus for this holding. Nothing on file states this company's price,
-          share count or transaction terms, so the mark below rests on the tracker figure alone.
-          That is a finding, not a loading state.
+        <p
+          className="empty-evidence"
+          title="Nothing on file states this company's price, share count or transaction terms, so the mark below rests on the tracker figure alone."
+        >
+          No evidence in the corpus for this holding. That is a finding, not a loading state.
         </p>
       ) : (
         <ul className="claim-list">

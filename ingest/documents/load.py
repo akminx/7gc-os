@@ -235,7 +235,7 @@ def ingest(conn: Conn, sources: Sequence[Source] = SOURCES) -> list[Outcome]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from api.config import dsn, ledger_schema
+    from api.config import SchemaNameError, dsn, resolve_schema
 
     parser = argparse.ArgumentParser(description="Ingest the corpus into the ledger.")
     parser.add_argument("--commit", action="store_true", help="write; otherwise roll back")
@@ -260,12 +260,10 @@ def main(argv: list[str] | None = None) -> int:
     # This is the same trap `tests/test_real_data_ledger.py` documents in as many
     # words, and it arrived here by moving code out of the fixture that used to
     # supply the outer transaction. The rollback is therefore explicit.
-    # `is None`, not falsy: omitting the flag means "use the default", and
-    # passing it empty is a caller stating a schema it cannot have meant.
-    # Collapsing those let `--schema ""` run against the demo ledger.
-    schema = ledger_schema() if args.schema is None else args.schema
-    if not schema.replace("_", "").isalnum():
-        print(f"{schema!r} is not a plain identifier", file=sys.stderr)
+    try:
+        schema = resolve_schema(args.schema)
+    except SchemaNameError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
 
     with psycopg.connect(url, connect_timeout=30) as conn:

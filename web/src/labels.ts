@@ -113,6 +113,240 @@ export const REQUIREMENT: Record<RequirementCode, Term> = {
   },
 };
 
+/**
+ * Why a requirement is short, in words, and WHICH KIND of shortfall it is.
+ *
+ * `reason_codes` is `string[]` on the wire, not a closed union, because the
+ * policy owns the vocabulary and adds to it. So this map is deliberately
+ * partial and `reasonGloss` never invents a label: an unglossed code renders as
+ * the code, which is the API's own word for it, and says no gloss is recorded.
+ * The failure being avoided is the opposite one — a lookup with a friendly
+ * fallback turning an unrecognised finding into a reassuring blank.
+ *
+ * `origin` is the load-bearing field and the reason this map exists at all.
+ * Two codes carry the same verdict, `missing`, and mean opposite things:
+ *
+ * * `SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW` is `expired`. Evidence EXISTED:
+ *   the document is on file and the source's own stated window does not reach
+ *   this measurement date. The letter goes to the valuer who wrote it, asking
+ *   for a re-issue.
+ * * `NO_APPLICABLE_SUPPORT_*` is not that, and it is not one thing either. A
+ *   document searched for and not found is `never_located` and the letter goes
+ *   to the company; a document sitting with counsel is `held_elsewhere` and the
+ *   letter goes to counsel. Filing the second under "nothing ever existed" is
+ *   wrong on the facts and sends the wrong letter, so the two are separate.
+ *
+ * Same word on the chip, different letters to different people. Rendering them
+ * identically would put a request for an update in front of a company that was
+ * never asked for the document in the first place, so `origin` gives them
+ * separate treatments and the block that shows them states the distinction in
+ * the copy rather than relying on the reader knowing the codes.
+ */
+export type ShortfallOrigin =
+  | "expired"
+  | "never_located"
+  | "held_elsewhere"
+  | "insufficient_authority"
+  | "unresolved";
+
+export interface ReasonTerm extends Term {
+  origin: ShortfallOrigin;
+}
+
+export const SHORTFALL_ORIGIN: Record<ShortfallOrigin, Term> = {
+  expired: {
+    label: "support existed and expired",
+    meaning:
+      "A document on file once covered this. Its own stated reliance window does not reach this measurement date, so it is out of date rather than absent. The letter asks the valuer who wrote it to re-issue.",
+  },
+  never_located: {
+    label: "no support has been located anywhere",
+    meaning:
+      "It was searched for and not found, and no record says who holds it. There is nothing to re-date and nobody named to ask, so the letter goes to the company.",
+  },
+  held_elsewhere: {
+    label: "it exists, and the fund does not hold it",
+    meaning:
+      "A record names the document and it is outside the fund's repository. The letter goes to whoever holds it, which is a different letter from the one asking a company to produce a document nobody can find.",
+  },
+  insufficient_authority: {
+    label: "the document exists and cannot carry this",
+    meaning:
+      "Evidence is on file, and either whose word it is or whether it is signed falls short of what the requirement asks.",
+  },
+  unresolved: {
+    label: "a decision or a step is outstanding",
+    meaning: "The evidence is on file and something a human owes has not been recorded yet.",
+  },
+};
+
+export const REASON_CODE: Record<string, ReasonTerm> = {
+  SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW: {
+    label: "support is outside its own reliance window",
+    origin: "expired",
+    meaning:
+      "The source states the period it may be relied on for, and this measurement date is not in it. The evidence is on file and out of date.",
+  },
+  NO_APPLICABLE_SUPPORT_NOT_LOCATED: {
+    label: "no applicable support · the document was not located",
+    origin: "never_located",
+    meaning: "It was searched for in the fund's repository and not found.",
+  },
+  NO_APPLICABLE_SUPPORT_WITH_COUNSEL: {
+    label: "no applicable support · the document is with counsel",
+    origin: "held_elsewhere",
+    meaning: "It exists, outside the fund's repository, in counsel's hands.",
+  },
+  NO_APPLICABLE_SUPPORT_REFERENCED_LOCATION_UNSPECIFIED: {
+    label: "no applicable support · referenced, location unstated",
+    origin: "held_elsewhere",
+    meaning: "A record refers to the document and states nowhere it can be found.",
+  },
+  DOCUMENT_NOT_LOCATED: {
+    label: "the document was not located",
+    origin: "never_located",
+    meaning: "Searched for in the fund's repository and not found.",
+  },
+  DOCUMENT_WITH_COUNSEL: {
+    label: "the document is with counsel",
+    origin: "held_elsewhere",
+    meaning: "It exists and the fund does not hold it. Existence and cost is partial, not missing.",
+  },
+  DOCUMENT_LOCATION_UNSPECIFIED: {
+    label: "the document is referenced with no location",
+    origin: "held_elsewhere",
+    meaning: "Custody has to be established before anyone can request it.",
+  },
+  PRESS_CANNOT_SUPPORT_FAIR_VALUE: {
+    label: "press cannot support a fair value",
+    origin: "insufficient_authority",
+    meaning:
+      "A published report of a round is not evidence of this fund's position in it. The article may be entirely accurate and still cannot carry the mark.",
+  },
+  MANAGEMENT_ASSERTION_WITHOUT_PRIMARY_SOURCE: {
+    label: "a management assertion with no primary source",
+    origin: "insufficient_authority",
+    meaning: "The fund's own record of its own holding, with nothing outside it agreeing.",
+  },
+  NON_BINDING_TERM_SHEET: {
+    label: "a non-binding term sheet",
+    origin: "insufficient_authority",
+    meaning:
+      "Terms nobody is committed to. An unsigned document is different evidence from a signed one.",
+  },
+  PRO_FORMA_PENDING_EXECUTION: {
+    label: "pro forma, pending execution",
+    origin: "insufficient_authority",
+    meaning: "The figures assume a closing that the corpus does not show as executed.",
+  },
+  UNCOVERED_SECURITY_CLASS: {
+    label: "no evidence covers the class the fund holds",
+    origin: "never_located",
+    meaning:
+      "Something on file prices a class, and it is not this one. Priced class and held class are different facts.",
+  },
+  CROSS_CLASS_POLICY_DECISION_REQUIRED: {
+    label: "a cross-class inference needs a recorded policy decision",
+    origin: "unresolved",
+    meaning:
+      "Carrying a price from one security class to another is a valuation judgement, and no human has recorded it.",
+  },
+  CLOSING_SET_PENDING: {
+    label: "the closing set has not arrived",
+    origin: "unresolved",
+    meaning: "Executed documents are said to be coming and are not here yet.",
+  },
+  MARK_UNCHANGED_WITH_STALE_SUPPORT: {
+    label: "the mark did not move and its support is stale",
+    origin: "expired",
+    meaning:
+      "R3 · an unchanged carrying value needs a calibration statement once the evidence under it has aged.",
+  },
+};
+
+export function reasonGloss(code: string): ReasonTerm {
+  return (
+    REASON_CODE[code] ?? {
+      // Not the code again. It is already on screen beside this, and a label
+      // that repeats its own key reads as a translation that happened to be
+      // identical rather than as one that is absent.
+      label: "no gloss is recorded for this code",
+      origin: "unresolved",
+      meaning: "The policy states this code and this display carries no gloss for it.",
+    }
+  );
+}
+
+/**
+ * What the auditor does next, and WHO receives the letter.
+ *
+ * The recipient is a separate field because it is the half a reader acts on and
+ * the half two identically-worded verdicts disagree about: an expired valuation
+ * goes back to the valuer, an absent one goes to the company.
+ */
+export interface ActionTerm extends Term {
+  recipient: string;
+}
+
+export const NEXT_ACTION: Record<string, ActionTerm> = {
+  REQUEST_UPDATED_VALUATION: {
+    label: "request an updated valuation",
+    recipient: "the valuer who issued the memo on file",
+    meaning:
+      "The memo exists and its reliance window has closed. Ask for a re-issue as of this measurement date.",
+  },
+  REQUEST_FROM_COMPANY: {
+    label: "request from the company",
+    recipient: "the portfolio company",
+    meaning: "Nothing on file covers this. Ask the company for the underlying document.",
+  },
+  REQUEST_FROM_COUNSEL: {
+    label: "request from counsel",
+    recipient: "the company's outside counsel",
+    meaning: "The document exists and counsel holds it.",
+  },
+  REQUEST_WITH_LOCATION: {
+    label: "establish custody, then request",
+    recipient: "the fund's own records, first",
+    meaning: "A record refers to the document without saying where it is. Custody comes first.",
+  },
+  REQUEST_EXECUTED_DOC: {
+    label: "request the executed document",
+    recipient: "whoever holds the signed original",
+    meaning: "What is on file is unsigned. Signed and proposed are different evidence.",
+  },
+  REQUEST_PRIMARY_EVIDENCE: {
+    label: "request primary evidence",
+    recipient: "the company or its administrator",
+    meaning: "What is on file reports the event rather than being it.",
+  },
+  REQUEST_SUPPORT_FOR_CLASS: {
+    label: "request support for the class held",
+    recipient: "the portfolio company",
+    meaning: "Evidence on file prices a different security class than the one the fund holds.",
+  },
+  RECORD_VALUATION_POLICY_DECISION: {
+    label: "record a valuation policy decision",
+    recipient: "the fund's valuation committee",
+    meaning: "No letter goes out. A human owes a recorded judgement.",
+  },
+  DRAFT_MANAGEMENT_ASSESSMENT: {
+    label: "draft a management assessment",
+    recipient: "fund management",
+    meaning: "R3 · the unchanged mark needs a written calibration before it can close.",
+  },
+};
+
+export function actionGloss(code: string): ActionTerm {
+  return (
+    NEXT_ACTION[code] ?? {
+      label: "no gloss is recorded for this action",
+      recipient: "not stated by the policy",
+      meaning: "The policy states this action and this display carries no gloss for it.",
+    }
+  );
+}
+
 /** INV-12 · why a document is absent decides what the auditor does next. */
 export const GAP_KIND: Record<GapKind, Term & { next: string }> = {
   with_counsel: {

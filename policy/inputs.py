@@ -16,6 +16,7 @@ cross-class, and a lot flattened to one immutable class cannot say that.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -100,6 +101,39 @@ class EvidenceClaim:
     stated_amount: Decimal | None = None
     stated_currency: str | None = None
     supersedes_claim_id: str | None = None
+    #: The claim's CITED figures, `field_name` → value. Every entry is bound to
+    #: a passage of the document by `0008`/`0009` and by
+    #: `packages/contracts/citations.py`, so a number here is a number some
+    #: sentence states, not one a reader typed.
+    #:
+    #: The ledger held 237 of these and the policy layer could not see any of
+    #: them: `claim.stated_amount` is never written — `ClaimDraft` carries no
+    #: such field, and `ingest/documents/claims.py` says so in its own comment —
+    #: while `extracted_fact` was loaded by nothing. So the validators reported
+    #: `blocked_incomplete` for Moonfare's concluded fair value and Jio's net
+    #: asset value, five of seventeen cases, where the oracle derives an answer
+    #: from the same documents.
+    #:
+    #: Loading the facts rather than backfilling `stated_amount` is deliberate.
+    #: `stated_amount` is one unnamed number per claim; an administrator
+    #: statement carries a net asset value AND a capital-account balance, and
+    #: collapsing them into one column is INV-19 one level down — a figure that
+    #: does not say what it is a figure of. `field_name` is what keeps them
+    #: apart, and it is the same key the citation is bound under.
+    facts: Mapping[str, Decimal] = field(default_factory=dict)
+    #: The claim's cited DATE-valued figures, `field_name` → value. Parallel to
+    #: `facts` and keyed the same way, because a cited date is a cited fact —
+    #: `facts` cannot hold one only because its values are `Decimal`.
+    #:
+    #: Separate rather than widened to `Decimal | date`: every existing reader
+    #: of `facts` does arithmetic on what it finds, and a union would put a
+    #: value they cannot compute with behind the same key they already trust.
+    #:
+    #: V7 is the reason this exists. "The rate was observed AT the measurement
+    #: date" is a question only the rate's own cited effective date can answer,
+    #: and answering it from the claim's reliance window instead is the INV-6
+    #: carry-forward this system exists to refuse.
+    fact_dates: Mapping[str, date] = field(default_factory=dict)
 
     @property
     def effective_date(self) -> date:

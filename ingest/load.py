@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     from datetime import UTC, datetime
     from pathlib import Path
 
-    from api.config import dsn, ledger_schema
+    from api.config import SchemaNameError, dsn, resolve_schema
     from ingest.trackers.read import (
         read_master_breakdown,
         read_master_notes,
@@ -217,12 +217,10 @@ def main(argv: list[str] | None = None) -> int:
     # supply the outer transaction. The rollback is therefore explicit.
     landed: dict[str, int] = {}
     refused: list[str] = []
-    # `is None`, not falsy: omitting the flag means "use the default", and
-    # passing it empty is a caller stating a schema it cannot have meant.
-    # Collapsing those let `--schema ""` run against the demo ledger.
-    schema = ledger_schema() if args.schema is None else args.schema
-    if not schema.replace("_", "").isalnum():
-        print(f"{schema!r} is not a plain identifier", file=sys.stderr)
+    try:
+        schema = resolve_schema(args.schema)
+    except SchemaNameError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
 
     with psycopg.connect(url, connect_timeout=30) as conn:

@@ -1,5 +1,13 @@
+import type { Approval } from "./contracts";
 import { FIXTURE_FUNDS, FIXTURE_HOLDING, FIXTURE_PACKET } from "./fixture";
-import type { FundsResponse, HoldingResponse, PacketResponse } from "./responses";
+import type {
+  DecisionRequest,
+  DocumentResponse,
+  ExportResponse,
+  FundsResponse,
+  HoldingResponse,
+  PacketResponse,
+} from "./responses";
 
 /**
  * The one seam between "where the data came from" and "what the screen does
@@ -87,6 +95,135 @@ export async function loadHolding(holdingId: string): Promise<HoldingResponse> {
   if (API === "") return fixtureHolding(holdingId);
   const url = `${API}/holdings/${holdingId}`;
   return (await fetchJson(url, HOLDING_KEYS, "holding")) as HoldingResponse;
+}
+
+const DOCUMENT_KEYS = [
+  "source",
+  "document_version_id",
+  "filename",
+  "extractor",
+  "text_hash",
+  "page_count",
+  "text_length",
+  "text",
+];
+const EXPORT_KEYS = [
+  "source",
+  "fund_id",
+  "period_id",
+  "packet_id",
+  "root",
+  "manifest_hash",
+  "file_count",
+  "files",
+  "recorded_in_ledger",
+];
+
+/**
+ * The text one citation points into.
+ *
+ * There is no fixture branch. `data.ts` falls back to the bundled Dream stub for
+ * the packet routes because a hand-written packet is checked by the oracle; no
+ * document text is bundled, and inventing one would put a passage on screen that
+ * an auditor could not find in any stored document — which is the single thing
+ * this surface exists not to do. With no API configured the request states that
+ * rather than answering with prose nobody can trace.
+ */
+export async function loadDocument(documentVersionId: string): Promise<DocumentResponse> {
+  if (API === "")
+    throw new Error(
+      "No API is configured, so this browser is showing the bundled fixture, which carries no document text. The passage below is the stored quote alone.",
+    );
+  const url = `${API}/documents/${documentVersionId}`;
+  return (await fetchJson(url, DOCUMENT_KEYS, "document")) as DocumentResponse;
+}
+
+/**
+ * Generate the auditor packet for one fund-period.
+ *
+ * A GET, because SPEC §3.1 keeps the public surface read-only and what it is
+ * read-only about is the LEDGER: the exporter records nothing and supersedes
+ * nothing. What it writes is a build artefact on the API host, which is why the
+ * response says where it landed and says that no ledger row was created.
+ *
+ * The API's refusal is rendered verbatim for the same reason a decision refusal
+ * is: `export_packet` refuses a packet whose citation does not resolve or whose
+ * approved position is unsupported, and names which one. "Export failed" throws
+ * away the finding and keeps the failure.
+ */
+export async function exportPacket(fundId: string, periodId: string): Promise<ExportResponse> {
+  if (API === "")
+    throw new Error(
+      "No API is configured, so this browser is showing the bundled fixture. There is no ledger to export a packet from.",
+    );
+  const response = await fetch(`${API}/funds/${fundId}/periods/${periodId}/export`);
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(refusalDetail(body, response.status));
+  assertKeys(body, EXPORT_KEYS, "export");
+  return body as ExportResponse;
+}
+
+/**
+ * SPEC §3.1 · who may record a decision here, and therefore whether this build
+ * offers the control at all.
+ *
+ * Empty is the public deployment, and empty is the default — the read-only
+ * surface renders exactly what it rendered before, with no approve or reject
+ * anywhere in the tree. A non-empty list is the private demo, where §3.1 says
+ * decisions are made by named actors.
+ *
+ * Empty too when no API is configured, whatever the build declares: the read
+ * surfaces may honestly fall back to the bundled Dream fixture, but a decision
+ * has nothing to fall back to, and a button that cannot record anything is
+ * worse than no button. The API refuses the same request for the same reason —
+ * this is the browser declining to ask, not the browser deciding.
+ */
+export function namedActors(): string[] {
+  if (API === "") return [];
+  const declared: string = import.meta.env.VITE_DECISION_ACTORS ?? "";
+  return declared
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => name !== "");
+}
+
+/**
+ * The API's own sentence about why it refused, or a statement that it sent none.
+ *
+ * This is the load-bearing half of the whole write path. When the ledger blocks
+ * a valuation approval — Anthropic's $8,000,000 resting on a press article — the
+ * refusal text names the invariant, the trigger and the requirement that is
+ * short. Discarding it and showing a status code would turn the one moment this
+ * product exists for into "something went wrong".
+ */
+function refusalDetail(body: unknown, status: number): string {
+  const detail =
+    typeof body === "object" && body !== null ? (body as { detail?: unknown }).detail : undefined;
+  if (typeof detail === "string") return detail;
+  if (detail !== undefined) return JSON.stringify(detail);
+  return `the ledger refused this decision with status ${status} and stated no reason`;
+}
+
+/**
+ * Record one typed decision. SPEC §6.3 · the caller names the decision type.
+ *
+ * Never optimistic: nothing is reported as recorded until the API says the row
+ * committed, because the prerequisites are enforced by the database and a
+ * browser that assumed success would show an approval that does not exist.
+ */
+export async function recordDecision(request: DecisionRequest, actorId: string): Promise<Approval> {
+  if (API === "")
+    throw new Error(
+      "No API is configured, so this browser is showing the bundled fixture. A decision recorded against a fixture exists nowhere.",
+    );
+  const response = await fetch(`${API}/decisions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-actor-id": actorId },
+    body: JSON.stringify(request),
+  });
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(refusalDetail(body, response.status));
+  return body as Approval;
 }
 
 /** What a surface has: nothing yet, the thing, or a stated reason it has neither. */

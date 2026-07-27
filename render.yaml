@@ -12,6 +12,32 @@ services:
     name: 7gc-os-api
     runtime: python
     plan: free
+    # `oregon`, and the database is `aws-0-us-east-1` — a deliberate mismatch
+    # now rather than an unexamined one, so the reasoning is here instead of in
+    # someone's memory.
+    #
+    # Every query in the deployed app crosses the continent. Measured from a
+    # client at ~40 ms round trip to that database: responses under 1 KB cost a
+    # stable 42 ms; responses of 10-50 KB cost anywhere from 47 ms to 2.4
+    # seconds, which is TCP slow-start and congestion rather than query time.
+    # Server-side execution of the heaviest retrieval query is 15 ms, and a
+    # plain 28-row join is 0.10 ms. The database is never the cost; distance
+    # multiplied by round trips is.
+    #
+    # `us-east` was considered and NOT taken. The reason it is unnecessary is
+    # that the round trips came down instead: `GET .../packet` made 60 of them
+    # and took 11.5 s, and after batching the N+1 in `api/ledger.py:claims_for`
+    # it makes 19 — roughly two seconds deployed, which is the budget the owner
+    # set. Moving regions would buy about 1.5 s more.
+    #
+    # If that stops being enough, the move is real work and not a config edit:
+    # RENDER REGIONS ARE IMMUTABLE. Changing this line does not move the running
+    # service, it declares a different one with a different URL, and the
+    # frontend's `VITE_API_BASE_URL` has to follow it. Stand the new service up
+    # ALONGSIDE the old, verify `/ready` AND that the page shows real figures —
+    # `web/src/data.ts` falls back to the one-holding fixture when that variable
+    # is unset, so a misconfigured deploy looks like a working app serving the
+    # wrong data — and only then retire the old one.
     region: oregon
     branch: main
     buildCommand: pip install -e .

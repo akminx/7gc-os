@@ -1,7 +1,14 @@
-import type { Claim, Packet, PacketTotals, SourceFact } from "./contracts";
+import type {
+  Claim,
+  DecisionStatus,
+  DecisionType,
+  Packet,
+  PacketTotals,
+  SourceFact,
+} from "./contracts";
 
 /**
- * What the four read ROUTES return, as opposed to what the models contain.
+ * What the ROUTES return, as opposed to what the models contain.
  *
  * `contracts.ts` mirrors `packages/contracts/models.py`. This file mirrors
  * `api/routes.py` and `api/serialize.py` — the envelope each route wraps around
@@ -84,4 +91,80 @@ export interface HoldingResponse {
   holding_id: string;
   company_name: string;
   evidence: EvidenceClaim[];
+}
+
+/**
+ * `GET /documents/{document_version_id}` — the text a citation points into.
+ *
+ * The whole canonical text, not a window around the span. A citation is a quote
+ * plus `[span_start, span_end)`, and `0008_citations_resolve.sql` enforces that
+ * `substring(canonical_text, span)` equals the quote — a constraint nobody can
+ * check from a screen that shows only the quote. With the text here the reader
+ * sees the passage in its surroundings and the offsets stop being debug output.
+ *
+ * `extractor` travels because offsets are only meaningful against a named
+ * extraction: the same PDF through two extractors gives two canonical texts and
+ * therefore two different spans (SPEC §8).
+ *
+ * `text_length` is supplied rather than measured, so a screen can say a span
+ * falls outside the document without taking `.length` of the text and treating
+ * the result as a figure.
+ */
+export interface DocumentResponse {
+  source: Source;
+  document_version_id: string;
+  filename: string;
+  extractor: string;
+  text_hash: string;
+  page_count: number;
+  text_length: number;
+  text: string;
+}
+
+/**
+ * `GET /funds/{fund}/periods/{period}/export` — what the exporter wrote.
+ *
+ * A GET that writes, which is stated rather than hidden. It writes no LEDGER
+ * row: `recorded_in_ledger` is on the wire and is false, because "a packet was
+ * generated" and "a packet version was registered" are different facts and a
+ * screen that reported one as the other would be claiming a record exists.
+ *
+ * `file_count` is the API's count. `files.length` would agree with it today and
+ * is an aggregate over rows either way (SPEC §5.3).
+ */
+export interface ExportResponse {
+  source: Source;
+  fund_id: string;
+  period_id: string;
+  packet_id: string;
+  root: string;
+  manifest_hash: string;
+  schema_version: string;
+  policy_version: string;
+  file_count: number;
+  files: string[];
+  recorded_in_ledger: boolean;
+}
+
+/**
+ * `POST /decisions` — the one write the application accepts.
+ *
+ * SPEC §6.3 · four typed decisions, none implying another, so `decision_type`
+ * is required and has no default: a UI action names what it is deciding. The
+ * subject is ONE field whose meaning that type fixes (a mark id for a valuation
+ * or a management assessment, a source fact for a transcription, a packet
+ * version for a packet approval), so a caller cannot name two subjects and
+ * leave the API to guess which machine it meant.
+ *
+ * `reason` is required by the API when `status` is `rejected` — a rejection
+ * with no stated reason records that a human said no and nothing about what
+ * would change the answer. The response is an `Approval`, the same shape a
+ * packet row already carries.
+ */
+export interface DecisionRequest {
+  decision_type: DecisionType;
+  status: DecisionStatus;
+  subject_id: string;
+  policy_version: string | null;
+  reason: string | null;
 }

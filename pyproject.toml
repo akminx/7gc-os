@@ -46,24 +46,45 @@ exclude = "^evals/oracle/"
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "evals"]
-# Wall clock here is round-trips to a remote database, not computation, so the
-# workers spend their time waiting rather than competing. Set in addopts rather
-# than passed by hand so the gate, the pre-commit hook and CI all get it — a
-# speed-up only one caller knows about is one the other two keep paying for.
+# SERIAL. Not a performance preference — the parallel setting made this gate
+# report failures that were not there, which is the one thing a gate may never
+# do.
 #
-# `loadfile`, not the default `load`: every test in a file goes to one worker.
-# `test_real_data_ledger.py` seeds FIXED ids (`fund_ii_dream`, `fund_ii_23q4`)
-# rather than uuid-suffixed ones, so splitting that file across workers had two
-# transactions inserting the same rows at once — one aborted, and the sum it
-# read back afterwards was NULL. The failure surfaced as a Decimal conversion
-# error three assertions later, which is exactly how a parallelism bug hides.
+# It was `-n 4 --dist loadfile`, on the reasoning that wall clock here is
+# round-trips to a remote database rather than computation, so workers wait
+# rather than compete. The reasoning was sound and the measurement did not
+# support it. Same tree, back to back:
 #
-# A fixed 4, not `auto`. Supabase's pooler allows 15 session-mode clients, and
-# `auto` gave 10 workers each holding a session connection plus whatever their
-# fixtures opened — the run died on EMAXCONNSESSION rather than on anything to
-# do with the code. The ceiling is the database's, so the worker count has to be
-# a number we choose rather than a property of whatever machine runs it.
-addopts = "-n 4 --dist loadfile"
+#     -n 4 --dist loadfile    3 failed, 746 passed    21:11
+#     -n 0                    749 passed              22:01
+#
+# Fifty seconds, for three failures that did not exist. The mechanism: several
+# files seed the same FIXED ids (`fund_i`, `fund_ii`, `fund_ii_dream`) into one
+# schema, so two workers insert the same row, one blocks, and Supabase's
+# `statement_timeout` CANCELS the blocked insert — after which every dependent
+# insert fails its foreign key. One cancelled statement became 124 errors in
+# `test_document_load.py`.
+#
+# `tests/conftest.py` names this in writing: the advisory lock there serialised
+# the corpus fixture against itself and "did nothing about
+# `test_document_load.py` and `test_real_data_ledger.py`, which seed the same
+# ids through the shared `conn` fixture". Both of those files are still in that
+# state. The gap was known and its cost was not.
+#
+# `--dist loadgroup` with the colliding files grouped would keep the
+# parallelism. It was not taken because it requires an accurate list of which
+# files seed shared ids, and that list has already been got wrong once — the
+# advisory lock covered one fixture and missed two files, which is precisely
+# how today's failure happened. Serial removes the failure mode; grouping
+# manages it, and the management drifts the next time someone seeds `fund_i`.
+#
+# The cost is ~4% of one gate run. The benefit is that a red gate means
+# something, and nobody learns to re-run it until it turns green — which is
+# bypassing the gate, in the one disguise that does not feel like bypassing.
+#
+# Set here rather than passed by hand so the gate, the pre-commit hook and CI
+# all get it; the CI parity check enforces that they agree.
+addopts = "-n 0"
 
 [tool.coverage.run]
 omit = ["evals/oracle/*"]

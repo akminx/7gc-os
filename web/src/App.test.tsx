@@ -107,11 +107,19 @@ describe("App", () => {
     });
   });
 
-  it("states that the surface is read-only and computes nothing", async () => {
-    await mount("");
+  /**
+   * The claim itself is unchanged; it is one hover away rather than three lines
+   * under the masthead. What a partner reads first is the fund, not a note about
+   * where the arithmetic happened.
+   */
+  it("states that the surface is read-only, and where the figures come from", async () => {
+    const { container } = await mount("");
     await waitFor(() => {
-      expect(screen.getByText(/computes nothing/)).toBeDefined();
+      expect(screen.getByText(/Audit support, read-only/)).toBeDefined();
     });
+    expect(container.querySelector(".masthead .why")?.getAttribute("title")).toMatch(
+      /computes nothing/,
+    );
   });
 
   /**
@@ -148,7 +156,7 @@ describe("App", () => {
     });
     screen.getByRole("button", { name: "Company evidence" }).click();
     await waitFor(() => {
-      expect(screen.getByText("The mark — three facts, not one")).toBeDefined();
+      expect(screen.getByText("The mark", { selector: "h2" })).toBeDefined();
     });
     screen.getByRole("button", { name: "Dashboard" }).click();
     await waitFor(() => {

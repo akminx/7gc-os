@@ -35,6 +35,10 @@ DERIVED: dict[str, Any] = json.loads((ROOT / "evals/oracle/derived.json").read_t
 #: report that the data shrank.
 EXPECTED_COMPARISONS = 175
 
+#: 35 oracle rows minus the seven holding-dates the packet does not carry a row
+#: for at all. Asserted so the comparison cannot quietly shrink its denominator.
+EXPECTED_ROWS_IN_PACKETS = 35
+
 
 def compare_row(ledger: Ledger, row: dict[str, Any]) -> tuple[list[str], int]:
     """Every published field of one oracle row against the policy layer."""
@@ -205,7 +209,13 @@ def test_the_product_does_not_import_its_own_answer_key() -> None:
     """
     offenders = []
     for path in sorted(ROOT.glob("[apolicyngest]*/**/*.py")):
-        if "__pycache__" in path.parts or path.parts[0] in {"tests", "evals", "scripts"}:
+        # RELATIVE parts. `ROOT.glob` yields absolute paths, so `path.parts[0]`
+        # was "/" and this skip never excluded anything. It went unnoticed
+        # because the old check only looked for `import evals`, which the
+        # oracle's own modules do not do — they import `model` directly. The
+        # broken filter became visible the moment the check grew teeth.
+        rel = path.relative_to(ROOT)
+        if "__pycache__" in rel.parts or rel.parts[0] in {"tests", "evals", "scripts"}:
             continue
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
@@ -218,4 +228,148 @@ def test_the_product_does_not_import_its_own_answer_key() -> None:
             for name in names:
                 if name.split(".")[0] == "evals":
                     offenders.append(f"{path.relative_to(ROOT)}:{node.lineno} imports {name}")
-    assert not offenders, "the product imports its own answer key:\n" + "\n".join(offenders)
+        offenders += _answer_key_paths(tree, path)
+    assert not offenders, "the product reaches its own answer key:\n" + "\n".join(offenders)
+
+
+def test_the_packet_rows_agree_with_the_oracle_about_which_are_supported(
+    policy_packets: dict[tuple[str, str], Any],
+) -> None:
+    """The check whose ABSENCE was the finding.
+
+    175 requirement comparisons and 92 mutation guards all passed while the
+    deployed API reported `packet_gap_positions: 6` against the oracle's 5.
+    Nothing was wrong with the verdicts: R1 and R2 read `not_applicable` for
+    Jackpocket at 2024-12-31 on both sides, so every comparison above agreed.
+    The disagreement was created AFTERWARDS, by
+    `HoldingRow.unsupported_reasons` deriving `supported` from those verdicts
+    with a rule the oracle does not share — it demanded R1 and R2 be sufficient
+    on a position that was sold in May and did not exist at the measurement
+    date.
+
+    So this compares the assembled contract object, not the policy layer that
+    feeds it. Both halves reproduced the oracle individually; the seam between
+    them did not, and only a comparison that spans the seam can say so.
+    """
+    by_period = {
+        ("fund_i", "2023-12-31"): "fund_i_fy2023",
+        ("fund_i", "2024-12-31"): "fund_i_fy2024",
+        ("fund_i", "2025-12-31"): "fund_i_fy2025",
+        ("fund_ii", "2023-12-31"): "fund_ii_23q4",
+        ("fund_ii", "2024-12-31"): "fund_ii_24q4",
+        ("fund_ii", "2025-12-31"): "fund_ii_25q4",
+    }
+    want = {(HOLDING[r["holding"]], r["date"]): bool(r["fully_supported"]) for r in DERIVED["rows"]}
+
+    problems: list[str] = []
+    checked = 0
+    for (fund_id, on), period_id in by_period.items():
+        built = policy_packets[(fund_id, period_id)]
+        assert built is not None, f"no packet for {fund_id}/{period_id}"
+        for row in built.rows:
+            key = (row.holding_id, on)
+            if key not in want:
+                continue
+            checked += 1
+            if row.supported is not want[key]:
+                problems.append(
+                    f"{row.company_name}@{on}: contract supported={row.supported}, "
+                    f"oracle fully_supported={want[key]}, "
+                    f"reasons={ {c.value: r for c, r in row.unsupported_reasons.items()} }"
+                )
+
+    assert checked == EXPECTED_ROWS_IN_PACKETS, (
+        f"compared {checked} rows, expected {EXPECTED_ROWS_IN_PACKETS}. A shrinking "
+        f"denominator is how this check stops checking without going red."
+    )
+    assert not problems, "the packet disagrees with the oracle about support:\n" + "\n".join(
+        problems
+    )
+
+
+def test_the_packet_gap_counts_agree_with_the_oracle(
+    policy_packets: dict[tuple[str, str], Any],
+) -> None:
+    """One level up: the row flags roll into the number a partner reads.
+
+    `unsupported_positions` counts HELD rows short of support — the inputs to
+    the total beside it. `packet_gap_positions` is the superset over every row.
+    Both come from the oracle's own totals rather than from a literal, so the
+    two counts cannot be brought back into agreement with each other while
+    drifting away from the answer key.
+    """
+    by_period = {
+        ("fund_i", "2023-12-31"): "fund_i_fy2023",
+        ("fund_i", "2024-12-31"): "fund_i_fy2024",
+        ("fund_i", "2025-12-31"): "fund_i_fy2025",
+        ("fund_ii", "2023-12-31"): "fund_ii_23q4",
+        ("fund_ii", "2024-12-31"): "fund_ii_24q4",
+        ("fund_ii", "2025-12-31"): "fund_ii_25q4",
+    }
+    oracle = {(t["fund"], t["date"]): t for t in DERIVED["totals"]}
+
+    problems: list[str] = []
+    for (fund_id, on), period_id in by_period.items():
+        built = policy_packets[(fund_id, period_id)]
+        assert built is not None
+        got, expected = built.totals(), oracle[(fund_id, on)]
+        if got.unsupported_positions != expected["unsupported_row_count"]:
+            problems.append(
+                f"{fund_id}@{on}: unsupported {got.unsupported_positions} != "
+                f"{expected['unsupported_row_count']}"
+            )
+        if got.packet_gap_positions != expected["packet_gap_row_count"]:
+            problems.append(
+                f"{fund_id}@{on}: packet gaps {got.packet_gap_positions} != "
+                f"{expected['packet_gap_row_count']}"
+            )
+    assert not problems, "packet totals disagree with the oracle:\n" + "\n".join(problems)
+
+
+#: Any string that would let product code READ the answer key rather than
+#: import it.
+_ANSWER_KEY = ("derived.json", "evals/oracle", "evals.oracle", "primitives.yaml")
+
+
+def _answer_key_paths(tree: ast.Module, path: Path) -> list[str]:
+    """String literals naming the answer key, excluding docstrings.
+
+    The import check above was described as making G7 unbypassable. It is not:
+    it walks `Import` and `ImportFrom` nodes, so
+    `Path("evals/oracle/derived.json").read_text()` is a file read, not an
+    import, and satisfies every fixed-corpus comparison in this file while
+    reading the answers straight off disk. A cross-family review found it.
+
+    Docstrings are exempt and that exemption is the whole reason this is done
+    in the syntax tree rather than by searching the text. The product explains
+    the oracle constantly — it is how a reader learns why a rule is what it is,
+    and several of those explanations name `derived.json` by path. Flagging
+    prose would make the guard unbearable, and the obvious repair (reword the
+    comment) puts it at the mercy of how the next person phrases a sentence.
+
+    Comments never reach the AST at all, so they need no exemption. What is
+    left is a string literal, in executable position, naming the answer key —
+    which has no innocent reading.
+    """
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef)
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    }
+    hits = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        if id(node) in docstrings:
+            continue
+        for needle in _ANSWER_KEY:
+            if needle in node.value:
+                hits.append(
+                    f"{path.relative_to(ROOT)}:{node.lineno} names the answer key "
+                    f"({needle!r}) in executable code; the product must not read it"
+                )
+    return hits

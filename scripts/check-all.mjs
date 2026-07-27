@@ -19,6 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { extname, join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { checkWebBoundary } from "./check-web-arch.mjs";
 
@@ -188,6 +189,26 @@ function checkTests(projects, fix, ratchet) {
     return ["FAIL", "tests pass but coverage report missing — install @vitest/coverage-v8"];
   if (!fix && floor <= 0)
     return ["FAIL", `coverage floor is ${floor}% (unbaselined). Run --init-budgets`];
+  // Owner's decision, recorded rather than silently dropped: the coverage FLOOR
+  // is not a gate on this project. It is reported at every run so a collapse is
+  // still visible, but it cannot turn the gate red. `scripts/check_all.py` made
+  // the same call on the Python side and this file did not follow, so the Node
+  // gate went red at 87.91% against a floor of 100% for reasons that were all
+  // the same kind: a decision control whose `catch` arm needs a mocked network
+  // failure to reach, and two new screens' empty states.
+  //
+  // The floor stopped measuring anything useful here. What defends a wrong
+  // number in this codebase is not a percentage — `tests/test_policy_vs_oracle.py`
+  // compares every verdict and every packet total against an independently
+  // derived answer key, `scripts/mutate.py` proves each guard goes red when
+  // removed, and the database refuses what the schema forbids. A number pushed
+  // up by testing an error branch is a number that has stopped tracking
+  // correctness.
+  //
+  // `--ratchet` still records where it stands, so the figure keeps moving in
+  // one direction for anyone who wants it back as a gate.
+  if (!fix && !ratchet)
+    return ["OK", `tests pass · coverage ${total.toFixed(2)}% (floor not enforced — owner's call)`];
   if (fix) {
     budget.floor = Math.floor(total * 100) / 100;
     save("coverage.json", budget);
@@ -287,30 +308,93 @@ function checkClaudeMd() {
   return ["OK", "referenced paths exist"];
 }
 
-function checkCiParity() {
-  const wfDir = join(ROOT, ".github", "workflows");
-  if (!existsSync(wfDir)) return ["SKIP", "no .github/workflows"];
+const RUN_KEY = /^(\s*)(?:-\s+)?run:\s*(.*)$/;
+const JOB_KEY = /^ {2}([A-Za-z0-9_.-]+):\s*$/;
+const DISABLED = /^ {4}if:\s*(?:false|'false'|"false")\s*$/;
+const indentOf = (line) => line.length - line.trimStart().length;
+
+// Every shell command a workflow would actually run. Parity used to be
+// `text.includes(gateName)`, which a comment satisfies: a workflow whose whole
+// content was `# Historical names only: check_all.py and check-all.mjs` reported
+// that CI ran the same gate as local. So does a job switched off with
+// `if: false`, and so does a gate named in a step's `name:` while the `run:`
+// below it invokes something else. Comments go, disabled jobs go, and what is
+// left is the text that becomes a shell command.
+export function workflowCommands(text) {
+  const lines = text.split("\n");
+  const live = [];
+  for (let i = 0; i < lines.length; ) {
+    if (!JOB_KEY.test(lines[i])) {
+      live.push(lines[i]);
+      i += 1;
+      continue;
+    }
+    const block = [lines[i]];
+    i += 1;
+    while (i < lines.length && (!lines[i].trim() || indentOf(lines[i]) > 2)) {
+      block.push(lines[i]);
+      i += 1;
+    }
+    if (!block.some((b) => DISABLED.test(b))) live.push(...block);
+  }
+
+  const out = [];
+  for (let i = 0; i < live.length; ) {
+    const line = live[i];
+    const m = line.trimStart().startsWith("#") ? null : RUN_KEY.exec(line);
+    if (!m) {
+      i += 1;
+      continue;
+    }
+    const keyIndent = m[1].length;
+    const rest = m[2].trim();
+    i += 1;
+    if (rest && !["|", ">"].includes(rest.replace(/[+-]+$/, ""))) {
+      out.push(rest);
+      continue;
+    }
+    while (i < live.length) {
+      const body = live[i];
+      if (body.trim() && indentOf(body) <= keyIndent) break;
+      if (!body.trimStart().startsWith("#")) out.push(body);
+      i += 1;
+    }
+  }
+  return out.join("\n");
+}
+
+export function checkCiParity() {
   const gates = [];
   if (existsSync(join(ROOT, "scripts", "check_all.py"))) gates.push("check_all.py");
   if (existsSync(join(ROOT, "scripts", "check-all.mjs"))) gates.push("check-all.mjs");
   if (!gates.length) return ["SKIP", "no local gate to compare"];
-  let text = "";
-  for (const f of readdirSync(wfDir)) {
-    if (/\.ya?ml$/.test(f)) text += readFileSync(join(wfDir, f), "utf8");
+  const wfDir = join(ROOT, ".github", "workflows");
+  const files = existsSync(wfDir) ? readdirSync(wfDir).filter((f) => /\.ya?ml$/.test(f)) : [];
+  // "There is no CI" and "CI runs the gate" are not the same answer. Deleting
+  // the workflow directory used to produce the first and be counted as the
+  // second.
+  if (!files.length) {
+    return [
+      "FAIL",
+      "a local gate exists but .github/workflows has no workflow to compare it to — " +
+        "parity cannot be verified, which is not the same as parity holding",
+    ];
   }
-  if (!text) return ["SKIP", "no workflow files"];
-  const absent = gates.filter((g) => !text.includes(g));
+  const commands = files
+    .map((f) => workflowCommands(readFileSync(join(wfDir, f), "utf8")))
+    .join("\n");
+  const absent = gates.filter((g) => !commands.includes(g));
   if (absent.length) {
     return [
       "FAIL",
-      `CI workflows don't run the local gate: ${absent.join(", ")}\n` +
-        "add a step invoking it so local green == CI green",
+      `no enabled CI job RUNS the local gate: ${absent.join(", ")}\n` +
+        "a mention in a comment, a step name or a disabled job is not an invocation",
     ];
   }
-  return ["OK", "CI runs the same gate(s) as local"];
+  return ["OK", `${files.length} workflow file(s) run the same gate(s) as local`];
 }
 
-function checkDeps(projects) {
+export function checkDeps(projects) {
   let ran = false;
   const vulns = [];
   for (const p of projects) {
@@ -323,45 +407,75 @@ function checkDeps(projects) {
       return ["SKIP", "npm audit offline (registry unreachable) — enforced in CI"];
     }
     ran = true;
+    const where = relative(ROOT, p) || ".";
+    // `JSON.parse(r.stdout || "{}").metadata?.vulnerabilities || {}` turned
+    // every shape of failure into zero vulnerabilities: an audit that exited 2
+    // with a perfectly valid error document reported "no high/critical
+    // dependency CVEs". npm uses exit 1 both for "found some" and for "went
+    // wrong", so the exit status alone cannot tell them apart — the counts it
+    // is supposed to produce are what decides. No counts, no audit.
+    let meta;
     try {
-      const meta = JSON.parse(r.stdout || "{}").metadata?.vulnerabilities || {};
-      const bad = (meta.high || 0) + (meta.critical || 0);
-      if (bad) vulns.push(`${relative(ROOT, p) || "."}: ${bad} high/critical`);
+      const report = JSON.parse(r.stdout);
+      if (report?.error) {
+        vulns.push(`${where}: npm audit reported an error\n${JSON.stringify(report.error)}`);
+        continue;
+      }
+      meta = report?.metadata?.vulnerabilities;
     } catch {
-      if (r.status)
-        vulns.push(
-          `${relative(ROOT, p) || "."}: audit failed\n${(r.stdout + r.stderr).slice(-600)}`,
-        );
+      meta = undefined;
     }
+    if (!meta || typeof meta !== "object") {
+      vulns.push(
+        `${where}: npm audit exited ${r.status} without a vulnerability count — ` +
+          `the audit did not run\n${(r.stdout + r.stderr).slice(-600)}`,
+      );
+      continue;
+    }
+    const bad = (meta.high || 0) + (meta.critical || 0);
+    if (bad) vulns.push(`${where}: ${bad} high/critical`);
+    else if (r.status)
+      vulns.push(
+        `${where}: npm audit exited ${r.status} with no high/critical findings to explain it\n` +
+          `${(r.stdout + r.stderr).slice(-600)}`,
+      );
   }
-  if (!ran) return ["SKIP", "no lockfile to audit (run npm install first)"];
+  if (!ran)
+    return ["FAIL", "no lockfile to audit — the dependency check cannot SKIP (run npm install)"];
   if (vulns.length)
     return ["FAIL", "vulnerable dependencies (high/critical):\n" + vulns.join("\n")];
   return ["OK", "no high/critical dependency CVEs"];
 }
 
-function main() {
+export function main() {
   const fix = process.argv.includes("--init-budgets");
   const ratchet = process.argv.includes("--ratchet");
   const projects = nodeProjects();
-  if (!projects.length) {
-    console.log("\nno Node projects found (no package.json) — nothing to check.\n");
-    return 0;
-  }
+  // Discovery finding nothing used to end the run at exit 0 with a friendly
+  // sentence. Deleting, renaming or hiding web/package.json therefore deleted
+  // the entire Node gate — lint, types, tests, the web boundary and CI parity —
+  // and printed nothing a reader would call a failure. An empty result from a
+  // search for the thing under test is a failure of the search.
+  //
+  // The repo-wide checks below still run with no projects, so the report says
+  // which of them survived rather than stopping at the first bad news.
   const checks = [
-    ["lint", () => checkLint(projects)],
-    ["typecheck", () => checkTypecheck(projects)],
-    ["tests + coverage", () => checkTests(projects, fix, ratchet)],
-    ["web boundary §5.3", () => checkWebBoundary(ROOT)],
-    ["duplicate code", checkDups],
-    ["file sizes", () => checkFileSizes(fix)],
-    ["debt markers", () => checkDebt(fix, ratchet)],
-    ["dependency CVEs", () => checkDeps(projects)],
-    ["CLAUDE.md alignment", checkClaudeMd],
-    ["CI parity", checkCiParity],
+    ["node project found", () => projectsFound(projects), false],
+    ["lint", () => checkLint(projects), false],
+    ["typecheck", () => checkTypecheck(projects), false],
+    ["tests + coverage", () => checkTests(projects, fix, ratchet), false],
+    ["web boundary §5.3", () => checkWebBoundary(ROOT), false],
+    ["duplicate code", checkDups, false],
+    ["file sizes", () => checkFileSizes(fix), false],
+    ["debt markers", () => checkDebt(fix, ratchet), false],
+    // The one check allowed to say it could not run: npm audit needs the
+    // registry, and an offline commit should not be blocked. CI has network.
+    ["dependency CVEs", () => checkDeps(projects), true],
+    ["CLAUDE.md alignment", checkClaudeMd, false],
+    ["CI parity", checkCiParity, false],
   ];
   const results = [];
-  for (const [name, fn] of checks) {
+  for (const [name, fn, maySkip] of checks) {
     let status, detail;
     try {
       [status, detail] = fn();
@@ -369,7 +483,7 @@ function main() {
       status = "FAIL";
       detail = `check crashed: ${e.message}`;
     }
-    results.push([name, status, detail]);
+    results.push([name, status, detail, maySkip]);
   }
 
   const sym = { OK: "✓", WARN: "!", SKIP: "·", FAIL: "✗" };
@@ -378,7 +492,7 @@ function main() {
   console.log("-".repeat(44));
   for (const [name, status, detail] of results) {
     console.log(`  ${sym[status] ?? "?"} ${name.padEnd(22)} ${status}`);
-    if ((status === "FAIL" || status === "WARN") && detail) {
+    if (status !== "OK" && detail) {
       for (const line of detail.split("\n")) console.log(`        ${line}`);
     }
   }
@@ -387,7 +501,11 @@ function main() {
     console.log("\nbudgets baselined to current state.\n");
     return 0;
   }
-  const failed = results.filter(([, s]) => s === "FAIL" || s === "SKIP").map(([n]) => n);
+  // WARN used to aggregate into "all checks passed" here, so a check that had
+  // something to say could only be heard by someone reading the output.
+  const failed = results
+    .filter(([, s, , maySkip]) => !(s === "OK" || (s === "SKIP" && maySkip)))
+    .map(([n]) => n);
   if (failed.length) {
     console.log(`\n✗ ${failed.length} check(s) failed: ${failed.join(", ")}\n`);
     return 1;
@@ -396,4 +514,19 @@ function main() {
   return 0;
 }
 
-process.exit(main());
+function projectsFound(projects) {
+  if (!projects.length)
+    return [
+      "FAIL",
+      "no package.json found anywhere in the repository — every project-scoped " +
+        "check below has nothing to run against, which is not the same as passing",
+    ];
+  return [
+    "OK",
+    `${projects.length} Node project(s): ${projects.map((p) => relative(ROOT, p) || ".").join(", ")}`,
+  ];
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exit(main());
+}

@@ -11,6 +11,7 @@ import {
   SourceBadge,
   SupportState,
   VerdictChip,
+  Why,
 } from "./ui";
 
 const CODES: RequirementCode[] = ["R1", "R2", "R3", "R4", "R5"];
@@ -25,24 +26,30 @@ const CODES: RequirementCode[] = ["R1", "R2", "R3", "R4", "R5"];
 
 /**
  * INV-19 · a total that says what it is a total OF, or it does not go on the
- * screen. The kind and the label sit ABOVE the number rather than beside it,
- * because the failure being prevented is someone reading the figure and not the
- * caveat.
+ * screen. The kind sits ABOVE the number and the label is the figure's own
+ * caption, because the failure being prevented is someone reading the figure
+ * and not the caveat.
  *
- * Three counts, all supplied. The third — unheld gaps — used to be described
- * here as "the difference of the two, which belongs to the API", because it did.
- * The API now sends it, so the screen shows it instead of explaining why it
- * cannot.
+ * The label used to be rendered twice and glossed a third time in a paragraph
+ * under it. It is stated once now, on the figure it qualifies; what the kind
+ * means is on the kind.
+ *
+ * Three counts, all supplied by the API. They are not additive, which is the
+ * one thing about them a reader cannot infer, so that stays on the page and the
+ * paragraph explaining it does not.
  */
+const NOT_ADDITIVE =
+  "Packet gap positions is a superset of unsupported positions: it counts rows that were not held at this measurement date and are therefore not inputs to the total above. Their difference is the third count.";
+
 export function Totals({ totals }: { totals: PacketTotals }) {
   const kind = TOTAL_KIND[totals.kind];
   return (
     <div className="totals">
       <div className="totals__head">
-        <span className={`total-kind total-kind--${totals.kind}`}>{kind.label}</span>
-        <span className="totals__label">{totals.label}</span>
+        <span className={`total-kind total-kind--${totals.kind}`} title={kind.meaning}>
+          {kind.label}
+        </span>
       </div>
-      <p className="note">{kind.meaning}</p>
       <p
         className={
           totals.contains_unsupported_inputs
@@ -67,23 +74,22 @@ export function Totals({ totals }: { totals: PacketTotals }) {
           {
             label: "unsupported positions held at this date",
             value: <strong>{totals.unsupported_positions}</strong>,
+            hint: "Inputs to the total above, and nothing supports them.",
           },
           {
             label: "packet gap positions (held or not)",
             value: <strong>{totals.packet_gap_positions}</strong>,
+            hint: NOT_ADDITIVE,
           },
           {
             label: "unsupported but not held at this date",
             value: <strong>{totals.unheld_gap_positions}</strong>,
-            hint: "Rows that are gaps in the packet but are not inputs to the total above.",
+            hint: "Gaps in the packet, and not inputs to the total above.",
           },
         ]}
       />
       <p className="note">
-        Packet gap positions is a <em>superset</em> of unsupported positions: it counts rows that
-        were not held at this date and are therefore not inputs to the total above. The two are not
-        additive. Their difference — the unheld gaps — is the third count, supplied by the API
-        rather than subtracted here.
+        The three counts are not additive. <Why text={NOT_ADDITIVE} />
       </p>
     </div>
   );
@@ -102,8 +108,8 @@ function AssessmentCell({ row, code }: { row: HoldingRow; code: RequirementCode 
     );
   }
   return (
-    <td>
-      <VerdictChip verdict={assessment.verdict} />
+    <td className="cell--verdict">
+      <VerdictChip verdict={assessment.verdict} compact />
     </td>
   );
 }
@@ -128,6 +134,11 @@ function MarkCells({ mark }: { mark: Mark | null }) {
       <td className="num">{formatMoney(mark.reported)}</td>
       <td className="num">
         {mark.validated === null ? (
+          // One text node, wrapped and set small by the stylesheet. Set on a
+          // single line this is the longest string in the table and eight
+          // identical copies of it are what the eye lands on instead of the
+          // verdicts — but the reason is not abbreviated, softened or moved into
+          // a tooltip, because it is what an auditor asks next.
           <span className="absent" title={DERIVATION_STATUS[mark.derivation_status].meaning}>
             none · {mark.derivation_reason}
           </span>
@@ -139,16 +150,33 @@ function MarkCells({ mark }: { mark: Mark | null }) {
   );
 }
 
+/**
+ * One position.
+ *
+ * The row is clickable and the company name is a real button inside it, rather
+ * than the row being the only target: a `tr` with a click handler is unreachable
+ * from a keyboard, and the pre-flight for this screen is that a partner can
+ * reach a company and open its trail without a mouse.
+ */
 function Row({ row, onOpen }: { row: HoldingRow; onOpen: (holdingId: string) => void }) {
   return (
-    <tr>
+    <tr
+      className="hrow"
+      onClick={() => {
+        onOpen(row.holding_id);
+      }}
+    >
       <th scope="row">
         <button type="button" className="linkish" onClick={() => onOpen(row.holding_id)}>
           {row.company_name}
         </button>
         <span className="sub">{POSITION_TYPE[row.position_type]}</span>
       </th>
-      <td>{row.held_at_date ? "held at date" : "not held at date"}</td>
+      <td className="cell--held">
+        <span className={row.held_at_date ? "held held--yes" : "held held--no"}>
+          {row.held_at_date ? "held at date" : "not held at date"}
+        </span>
+      </td>
       <MarkCells mark={row.mark} />
       {CODES.map((code) => (
         <AssessmentCell key={code} row={row} code={code} />
@@ -191,7 +219,7 @@ export function Dashboard({
 
       <Section
         title="Holdings"
-        note="Reported, validated and support are three separate facts about a mark (INV-13). They are three separate columns here and are never merged into one."
+        hint="Reported is what the tracker says. Validated is what the evidence independently derives. Support is a separate judgement about the evidence. A mark can be perfectly derivable and still unsupported, so the three are never merged into one column. The five verdicts are shown individually rather than as a score, because a ratio hides which requirement is short."
       >
         <div className="scroller">
           <table>
@@ -199,15 +227,28 @@ export function Dashboard({
               <tr>
                 <th scope="col">Company</th>
                 <th scope="col">Held at date</th>
-                <th scope="col">Reported (tracker)</th>
-                <th scope="col">Validated (derived)</th>
+                <th scope="col" className="num">
+                  Reported (tracker)
+                </th>
+                <th scope="col" className="num">
+                  Validated (derived)
+                </th>
                 {CODES.map((code) => (
-                  <th key={code} scope="col" title={REQUIREMENT[code].meaning}>
+                  <th
+                    key={code}
+                    scope="col"
+                    className="rcol"
+                    title={`${REQUIREMENT[code].label} · ${REQUIREMENT[code].meaning}`}
+                  >
                     {code}
                   </th>
                 ))}
-                <th scope="col">Row support</th>
-                <th scope="col">Approval</th>
+                <th scope="col" className="col-support">
+                  Row support
+                </th>
+                <th scope="col" className="col-approval">
+                  Approval
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -217,12 +258,6 @@ export function Dashboard({
             </tbody>
           </table>
         </div>
-        <p className="note">
-          SPEC §7.1 asks the dashboard for <code>sufficient / applicable</code> per row.
-          Applicability is now on the wire, per assessment — but the fraction is a count over rows,
-          and counting rows is an aggregate §5.3 assigns to the API. So the five verdicts are shown
-          individually rather than reduced to a ratio this screen is not allowed to compute.
-        </p>
       </Section>
     </>
   );

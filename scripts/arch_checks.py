@@ -18,23 +18,73 @@ Two entry points, both registered in check_all.py:
 Discipline: see INVARIANTS.md. A guard must be able to FAIL, or it's just prose.
 """
 
+import ast
 import json
+import os
 import re
+from collections.abc import Container, Iterable, Iterator, Sequence
 from pathlib import Path
 
+#: Directories that hold Python but are not the product: the answer key, the
+#: negative cases, and the tooling. Everything else is a producer and is
+#: scanned. Named as exclusions rather than as an allowlist so that adding a
+#: package cannot silently opt it out of a rule.
+#:
+#: An exclusion is only honest while the excluded directory really is not the
+#: product, so `_excluded_but_imported` below turns the other half into a check:
+#: a directory in here that product code imports is a producer wearing an
+#: exemption, and it fails.
+NOT_PRODUCERS = frozenset({"tests", "evals", "scripts", "web", "supabase", "docs"})
 
-def _iter_src(root, skip_dirs, subdirs, suffixes):
+
+def _producer_packages(root: Path) -> tuple[str, ...]:
+    """Every top-level product directory, discovered rather than listed.
+
+    A directory counts if it contains Python at all. The first version required
+    an `__init__.py`, which was a proxy for "importable by the application" and
+    a wrong one: PEP 420 namespace packages import perfectly well without it, so
+    deleting one file took a whole directory out of every rule below, silently.
+    Nothing else in this repo depends on the file being there either.
+    """
+    return tuple(
+        sorted(
+            d.name
+            for d in root.iterdir()
+            if d.is_dir()
+            and not d.name.startswith(".")
+            and d.name not in NOT_PRODUCERS
+            and any(d.rglob("*.py"))
+        )
+    )
+
+
+def _iter_src(
+    root: Path, skip_dirs: Container[str], subdirs: Sequence[str], suffixes: Container[str]
+) -> Iterator[Path]:
     """Yield working-tree source files under the given repo-relative subdirs,
     pruning vendored/build dirs. Working-tree (not git-tracked) so staged files
-    are covered pre-commit and violations surface before they're committed."""
-    import os
-    from pathlib import Path
+    are covered pre-commit and violations surface before they're committed.
 
+    Symlinked subdirectories are followed. `os.walk` does not follow them by
+    default, so a directory reachable and importable through a symlink inside a
+    scanned package was not scanned — the rule was one `ln -s` away from being
+    optional. Real paths are remembered so a cycle terminates.
+    """
+    seen: set[str] = set()
     for sub in subdirs:
         base = root / sub
         if not base.exists():
             continue
-        for dp, dns, fns in os.walk(base):
+        if base.is_file():
+            if base.suffix in suffixes:
+                yield base
+            continue
+        for dp, dns, fns in os.walk(base, followlinks=True):
+            real = os.path.realpath(dp)
+            if real in seen:
+                dns[:] = []
+                continue
+            seen.add(real)
             dns[:] = [d for d in dns if d not in skip_dirs]
             for fn in fns:
                 p = Path(dp) / fn
@@ -42,8 +92,60 @@ def _iter_src(root, skip_dirs, subdirs, suffixes):
                     yield p
 
 
+def _producer_sources(root: Path, skip_dirs: Container[str]) -> Iterator[Path]:
+    """Every product `.py` file: the top-level packages, and the modules that
+    sit at the repository root beside them.
+
+    Root modules were outside every scope this file defines, so moving a file
+    up one directory removed it from the rule.
+    """
+    subdirs = list(_producer_packages(root))
+    subdirs += [f.name for f in sorted(root.glob("*.py")) if not f.name.startswith(".")]
+    yield from _iter_src(root, skip_dirs, subdirs, {".py"})
+
+
 #: The two fields that must never be typed by a human. INV-8.
 _SPAN_FIELDS = {"span_start", "span_end"}
+
+#: The one file allowed to state a span, because it is where a span is computed.
+#:
+#: A FULL repo-relative path, not a basename. The exemption used to compare
+#: `p.name == "citations.py"`, so any file anywhere called `citations.py` was
+#: outside the rule — an extractor could opt out of INV-8 by choosing a
+#: filename, which is not a decision anyone would notice being made.
+SANCTIONED_SPAN_PRODUCER = Path("packages/contracts/citations.py")
+
+
+def _excluded_but_imported(root: Path, sources: Iterable[Path]) -> list[str]:
+    """A directory excluded from the producer scan that the product imports.
+
+    `NOT_PRODUCERS` is a claim about what those directories are, and the claim
+    is what makes excluding them safe. Nothing checked it, so the cheapest way
+    to leave a rule was to put the code somewhere the rule does not look. This
+    is that claim as a check: if product code imports it, it is product code.
+    """
+    hits: list[str] = []
+    for path in sources:
+        try:
+            tree = ast.parse(path.read_text(errors="ignore"))
+        except SyntaxError:
+            continue  # reported by _hand_written_spans, which parses the same file
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                modules = [node.module]
+            else:
+                continue
+            for module in modules:
+                top = module.split(".")[0]
+                if top in NOT_PRODUCERS and (root / top).is_dir():
+                    hits.append(
+                        f"{path.relative_to(root)}:{node.lineno} imports `{top}`, which is "
+                        "excluded from the producer scan — a directory the product imports "
+                        "is a producer, so either the import or the exclusion is wrong (INV-8)"
+                    )
+    return hits
 
 
 def _hand_written_spans(path: Path, root: Path) -> list[str]:
@@ -54,8 +156,6 @@ def _hand_written_spans(path: Path, root: Path) -> list[str]:
     which is the same assertion wearing a different hat and is how the rule
     would otherwise be walked around without anyone intending to.
     """
-    import ast
-
     try:
         tree = ast.parse(path.read_text(errors="ignore"))
     except SyntaxError as exc:
@@ -85,11 +185,11 @@ def _hand_written_spans(path: Path, root: Path) -> list[str]:
     return hits
 
 
-def check_architecture(root, skip_dirs):
+def check_architecture(root: Path, skip_dirs: Container[str]) -> tuple[str, str]:
     """Repo-specific structural invariants (INVARIANTS.md). Add rules below.
     Ships empty so it passes out of the box and never false-positives before you
     have anything to enforce."""
-    v = []
+    v: list[str] = []
 
     # INV-8 · a citation's span is COMPUTED from the text, never asserted beside
     # the quote.
@@ -109,10 +209,32 @@ def check_architecture(root, skip_dirs):
     # explanation of itself, and the obvious repair — rewording the prose — puts
     # the guard at the mercy of how the next person phrases a docstring. The
     # syntax tree only ever sees `span_start=` where it is actually an argument.
-    for p in _iter_src(root, skip_dirs, ("ingest", "packages", "api", "evals"), {".py"}):
-        if p.name in ("citations.py",):  # the sanctioned producer
+    #
+    # The tuple is a HARDCODED LIST OF DIRECTORIES, which means a new producer
+    # package escapes the rule by existing. That is what happened: `evidence/`
+    # and `packet/` were both written after this line, and `evidence/` is the
+    # one directory in the repo where a *model* proposes a quote — precisely
+    # where an unchecked span would matter most. Neither was scanned, and
+    # nothing went red, because the rule's scope is a list rather than a
+    # question about what a directory does.
+    #
+    # Derived instead: every top-level package that is not a test, a script, or
+    # the answer key. A directory added tomorrow is covered on the day it is
+    # created, which is the difference between a guard and a note.
+    #
+    # Deriving it once was not enough. A verification pass put four kinds of
+    # file back outside the scope — a namespace package with no `__init__.py`, a
+    # module at the repository root, a directory reached through a symlink, and
+    # any file named `citations.py` — and every one of them reported OK while
+    # stating a span. Each is closed where it is caused: in
+    # `_producer_packages`, in `_producer_sources`, in `_iter_src`, and in the
+    # full-path comparison below.
+    sources = list(_producer_sources(root, skip_dirs))
+    for p in sources:
+        if p.relative_to(root) == SANCTIONED_SPAN_PRODUCER:
             continue
         v.extend(_hand_written_spans(p, root))
+    v.extend(_excluded_but_imported(root, sources))
 
     # ── Add a rule each time you name an invariant that types/tests can't span.
     # Copy a block, scope it to the right dirs/suffixes, and cite the INV id.
@@ -159,15 +281,34 @@ def check_architecture(root, skip_dirs):
 _rule_count = True
 
 
-def check_ignore_budget(root, tracked_files, budget_dir, fix=False, ratchet=False):
+def check_ignore_budget(
+    root: Path,
+    tracked_files: Iterable[Path],
+    budget_dir: Path,
+    fix: bool = False,
+    ratchet: bool = False,
+) -> tuple[str, str]:
     """Gate-gaming ratchet: type-ignore and lint-suppression comments are a
     ceiling that only falls, so no one can quietly silence the type or lint
     checks to go green. Split patterns so this file doesn't match itself."""
     bf = budget_dir / "ignore-budget.json"
     budget = json.loads(bf.read_text()) if bf.exists() else {"max_ignores": 0}
     cap = budget.get("max_ignores", 0)
-    pat = re.compile(r"# *ty" + r"pe: *ignore|# *no" + r"qa")
-    hits = []
+    # Per-line suppressions were the whole pattern, and the file-level form is
+    # strictly stronger: two lines at the top of a file —
+    #   (mypy directive) ignore-errors
+    #   (ruff directive) noqa
+    # — turn both checkers off for everything below them, and the ceiling still
+    # read zero, because neither line contains the per-line spelling. A file
+    # containing an undefined name passed mypy and Ruff with both at exit 0.
+    #
+    # Literals split so this file does not count itself.
+    pat = re.compile(
+        r"# *ty" + r"pe: *ignore"
+        r"|# *no" + r"qa"
+        r"|# *(?:my" + r"py|ru" + r"ff|fla" + r"ke8) *:"
+    )
+    hits: list[str] = []
     for f in tracked_files:
         if f.suffix == ".py" and f.is_file():
             for i, line in enumerate(f.read_text(errors="ignore").splitlines(), 1):

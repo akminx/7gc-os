@@ -416,9 +416,40 @@ def moonfare_fx_claim(
         issued_date=MOONFARE_FY2024,
         as_of_date=MOONFARE_FY2024,
         applicable_from=MOONFARE_FY2024,
-        # The memo states the interest "will be re-measured at the closing rate
-        # at each future measurement date", so this translation is this date's.
-        # Reusing it at 12/31/2025 is the carry-forward INV-6 refuses.
+        # CLOSED, on the sentence's grammatical subject.
+        #
+        # This window was opened, then reopened wrongly, and the deciding
+        # question is what "The interest will be re-measured at the closing rate
+        # at each future measurement date" is a statement ABOUT. The subject is
+        # *the interest*; the closing rate is the instrument of re-measurement,
+        # not the thing being scoped. So it is not INV-6 speaking about a rate
+        # while leaving reliance open — it is a whole-document INV-16 clause in
+        # the same family as Capsule's memo and Moonfare's own FY2023 one, and
+        # it says this memo does not speak to any future measurement date.
+        #
+        # Reading it as rate-scoped moved R2 at FY2025 from `missing` /
+        # `SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW` /
+        # `REQUEST_UPDATED_VALUATION` to `insufficient` /
+        # `MANAGEMENT_ASSERTION_WITHOUT_PRIMARY_SOURCE` /
+        # `REQUEST_PRIMARY_EVIDENCE`: a weaker gap statement on the letter's ¶2,
+        # supplied by the very document whose stale figure the gap exists to
+        # flag. "Go and get an updated valuation" became "go and get primary
+        # evidence for the thing we already have".
+        #
+        # This is NOT a return to the bandage a cross-family review named. That
+        # bandage was this window standing in for two defects one layer down,
+        # and both are now fixed where they live: `derive_mark` returns
+        # `MANAGEMENT_CARRYING_VALUE` for a `fund_internal_record`, so no
+        # carry-forward can happen, and V7 decides from the rate's own cited
+        # effective date rather than from whatever this window happens to say.
+        # Neither depends on this field any more, which is what makes it free to
+        # state what the source states.
+        #
+        # The memo does carry two assertions with different natural lifetimes —
+        # the EUR basis and the rate — and one `applicable_to` cannot express
+        # both. Splitting it is a real improvement and belongs in its own step:
+        # here both expire on the same date, so the split would record something
+        # true and change no verdict.
         applicable_to=MOONFARE_FY2024,
         facts=moonfare_fx_facts(document_version_id, parsed),
     )

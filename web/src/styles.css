@@ -1,85 +1,326 @@
-/* Seven verdicts, seven treatments. The palette exists to keep `missing` and
-   `not_applicable` from ever reading as the same finding. */
+/* ══ 7GC OS · the evidence workspace ═══════════════════════════════════════
+   A workpaper, not a dashboard. The reference points are a well-set financial
+   statement and a good diff: dense, quiet, and spending all of its visual
+   intensity on one moment — the highlight where a figure meets the sentence
+   that states it.
+
+   Two rules govern everything below.
+
+   ELEVATION IS DECLARED ONCE. A panel has a border and no shadow. The two
+   surfaces that float — the sticky table head and the document page — have a
+   shadow and no border. A 1px border under a wide soft shadow is the ghost
+   card and it is nowhere in this file.
+
+   NOTHING NESTS. Sections are the only cards. Everything inside one is
+   separated by rules and space, never by a second box: a bordered total inside
+   a bordered section inside a bordered page reads as three claims about
+   importance when there is one.
+
+   The seven verdict hues are the fund's own vocabulary (INV-2) and are not
+   re-picked here. `missing` and `not_applicable` mean opposite things to an
+   auditor, so they never share a treatment: one is a filled chip, the other is
+   the quietest mark on the page. */
 
 :root {
-  --bg: #fbfaf8;
-  --panel: #ffffff;
-  --ink: #16181d;
-  --muted: #5d6470;
-  --line: #dcd8d0;
+  --bg: #f6f4f0;
+  --panel: #fffefb;
+  /* Cream, and clearly not the panel it sits on. A page on a desk is a
+     different material from the desk; a document surface tinted one step off
+     white reads as UI, and the whole point of this pane is that it does not. */
+  --paper: #f7f2e6;
+  --ink: #17191d;
+  --muted: #5b616c;
+  --line: #ded9d0;
+  --rule: #ebe6dd;
   --accent: #1b4d8f;
+  --accent-soft: #e8eef7;
+  --focus: #1b4d8f;
+
+  /* The one loud moment in the application. */
+  --hi: #ffe8a1;
+  --hi-edge: #a97d06;
+  --hi-ink: #17191d;
+
   --v-not_assessed: #6b7280;
   --v-not_applicable: #3f6b8c;
-  --v-missing: #b4232a;
-  --v-insufficient: #b4541b;
-  --v-partial: #8a6d10;
+  --v-missing: #b02128;
+  --v-insufficient: #a34d17;
+  --v-partial: #7d6210;
   --v-conflicting: #6d2ea0;
-  --v-sufficient: #1c6b3f;
+  --v-sufficient: #1a6339;
+
+  /* Offset and blur, tinted from the surface hue. Never a zero-offset halo. */
+  --shadow-lift: 0 1px 1px rgba(60, 48, 30, 0.05), 0 10px 24px -14px rgba(60, 48, 30, 0.28);
+  --shadow-head: 0 1px 0 var(--line), 0 6px 10px -10px rgba(60, 48, 30, 0.5);
+
+  --sans: ui-sans-serif, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --r-card: 12px;
+  --r-control: 6px;
+  --r-chip: 4px;
+
+  /* A page, not a card. The document surface keeps square-ish corners on
+     purpose: a 12px radius on the passage makes the fund's own paperwork look
+     like a SaaS panel, which is the one thing this pane must not do. */
+  --r-page: 2px;
+
+  --z-head: 2;
+  --z-bar: 3;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #14161a;
-    --panel: #1b1e24;
-    --ink: #eceef2;
-    --muted: #a2aab8;
-    --line: #333944;
-    --accent: #7fb0ee;
+    --bg: #121418;
+    --panel: #191c21;
+    --paper: #10131a;
+    --ink: #e9ecf1;
+    --muted: #a3abb8;
+    --line: #2f353f;
+    --rule: #242a33;
+    --accent: #86b4ef;
+    --accent-soft: #1c2836;
+    --focus: #86b4ef;
+
+    --hi: #55420c;
+    --hi-edge: #d3a63c;
+    --hi-ink: #ffeec0;
+
     --v-not_assessed: #9aa3b2;
     --v-not_applicable: #79aed6;
-    --v-missing: #f0797f;
+    --v-missing: #f4868c;
     --v-insufficient: #e79a5c;
     --v-partial: #ddc061;
-    --v-conflicting: #bb8ef0;
+    --v-conflicting: #bd93f0;
     --v-sufficient: #6cc48f;
+
+    --shadow-lift: 0 1px 1px rgba(0, 0, 0, 0.5), 0 12px 28px -16px rgba(0, 0, 0, 0.8);
+    --shadow-head: 0 1px 0 var(--line), 0 6px 10px -10px rgba(0, 0, 0, 0.9);
   }
+}
+
+/* The explicit override wins in both directions, so a reader can pin the page
+   against what the machine says. Duplicated rather than factored: a `light`
+   block that only reset half the tokens would leave a dark highlight on a light
+   page, which is exactly the bug a reviewer cannot see on their own machine. */
+:root[data-theme="light"] {
+  --bg: #f6f4f0;
+  --panel: #fffefb;
+  --paper: #f7f2e6;
+  --ink: #17191d;
+  --muted: #5b616c;
+  --line: #ded9d0;
+  --rule: #ebe6dd;
+  --accent: #1b4d8f;
+  --accent-soft: #e8eef7;
+  --focus: #1b4d8f;
+  --hi: #ffe8a1;
+  --hi-edge: #a97d06;
+  --hi-ink: #17191d;
+  --v-not_assessed: #6b7280;
+  --v-not_applicable: #3f6b8c;
+  --v-missing: #b02128;
+  --v-insufficient: #a34d17;
+  --v-partial: #7d6210;
+  --v-conflicting: #6d2ea0;
+  --v-sufficient: #1a6339;
+  --shadow-lift: 0 1px 1px rgba(60, 48, 30, 0.05), 0 10px 24px -14px rgba(60, 48, 30, 0.28);
+  --shadow-head: 0 1px 0 var(--line), 0 6px 10px -10px rgba(60, 48, 30, 0.5);
+}
+
+:root[data-theme="dark"] {
+  --bg: #121418;
+  --panel: #191c21;
+  --paper: #10131a;
+  --ink: #e9ecf1;
+  --muted: #a3abb8;
+  --line: #2f353f;
+  --rule: #242a33;
+  --accent: #86b4ef;
+  --accent-soft: #1c2836;
+  --focus: #86b4ef;
+  --hi: #55420c;
+  --hi-edge: #d3a63c;
+  --hi-ink: #ffeec0;
+  --v-not_assessed: #9aa3b2;
+  --v-not_applicable: #79aed6;
+  --v-missing: #f4868c;
+  --v-insufficient: #e79a5c;
+  --v-partial: #ddc061;
+  --v-conflicting: #bd93f0;
+  --v-sufficient: #6cc48f;
+  --shadow-lift: 0 1px 1px rgba(0, 0, 0, 0.5), 0 12px 28px -16px rgba(0, 0, 0, 0.8);
+  --shadow-head: 0 1px 0 var(--line), 0 6px 10px -10px rgba(0, 0, 0, 0.9);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  line-height: 1.55;
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
 }
 
 main {
-  max-width: 78rem;
+  max-width: 84rem;
   margin: 0 auto;
-  padding: 2rem 1.25rem 5rem;
+  padding: 1.75rem 1.5rem 6rem;
 }
 
 code,
 .num,
-.figure__amount {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+.figure__amount,
+.offsets {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* Screen-reader-only. Used where a glyph carries the meaning visually and the
+   word still has to be announced — the compact verdict chips and the coverage
+   matrix cells. */
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+:where(a, button, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-chip);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Masthead and the fund-period bar ──────────────────────────────────── */
+
+.masthead {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1.25rem;
+}
+
+.masthead__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .masthead h1 {
-  font-size: 1.3rem;
-  letter-spacing: 0.01em;
-  margin: 0 0 0.25rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.theme {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  min-inline-size: 0;
+}
+
+.theme__opt {
+  appearance: none;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.7rem;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.theme__opt:last-child {
+  border-right: none;
+}
+
+.theme__opt:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.theme__opt--on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.theme__opt:focus-visible {
+  outline-offset: -2px;
+  border-radius: 0;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .note {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
   margin: 0.4rem 0;
-  max-width: 62rem;
+  max-width: 68ch;
 }
 
 .error {
   color: var(--v-missing);
   font-weight: 600;
+  font-size: 0.875rem;
+  max-width: 72ch;
 }
+
+/* ── Surface tabs ──────────────────────────────────────────────────────── */
 
 .tabs {
   display: flex;
-  gap: 0.4rem;
+  gap: 0.25rem;
   margin: 1.5rem 0 1rem;
   border-bottom: 1px solid var(--line);
 }
@@ -87,61 +328,124 @@ code,
 .tab {
   appearance: none;
   background: none;
-  border: 1px solid transparent;
-  border-bottom: none;
+  border: none;
+  border-bottom: 2px solid transparent;
   color: var(--muted);
   cursor: pointer;
   font: inherit;
-  font-size: 0.88rem;
-  padding: 0.5rem 0.9rem;
-  border-radius: 6px 6px 0 0;
+  font-size: 0.875rem;
+  padding: 0.45rem 0.2rem;
+  margin-right: 1.1rem;
+  transition: color 180ms ease, border-color 180ms ease;
+}
+
+.tab:hover {
+  color: var(--ink);
+  border-bottom-color: var(--line);
+}
+
+.tab:active {
+  transform: translateY(1px);
 }
 
 .tab--on {
-  background: var(--panel);
-  border-color: var(--line);
   color: var(--ink);
+  border-bottom-color: var(--accent);
   font-weight: 600;
 }
+
+.tab:focus-visible {
+  outline-offset: 3px;
+}
+
+/* ── Sections: the only cards on the page ──────────────────────────────── */
 
 .section {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 1.1rem 1.25rem;
+  border-radius: var(--r-card);
+  padding: 1.25rem 1.35rem 1.4rem;
   margin: 0 0 1rem;
 }
 
-.section > h2 {
-  font-size: 0.95rem;
-  margin: 0 0 0.5rem;
-  letter-spacing: 0.02em;
+.section__head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.35rem;
+}
+
+.section h2 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+/* More space above a heading than below it. */
+.section > * + .section__head,
+.section > * + h3 {
+  margin-top: 1.6rem;
+}
+
+/* ── The paragraph that left the reading path ──────────────────────────────
+   A mark, not a control: it opens nothing and changes nothing, it carries the
+   reasoning behind the line it sits on. Sized to the eyebrow text around it so
+   a screen of headings does not read as a screen of buttons. */
+
+.why {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  vertical-align: 0.08em;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.why:hover {
+  color: var(--ink);
+  border-color: var(--muted);
 }
 
 .meta {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 0.4rem 1.2rem;
-  margin: 0.6rem 0;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.5rem 1.5rem;
+  margin: 0.9rem 0 0;
 }
 
 .meta dt {
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
+  font-weight: 600;
 }
 
 .meta dd {
-  margin: 0;
-  font-size: 0.86rem;
+  margin: 0.1rem 0 0;
+  font-size: 0.8375rem;
 }
 
+/* ── Totals · INV-19, a figure that says what it is a figure OF ────────── */
+/* Not a box inside a box. A rule above it and space around it separate it from
+   the meta grid; a bordered card here would be the third nested container on
+   the screen and would claim more than the numbers do. */
+
 .totals {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.9rem 1rem;
-  margin-top: 0.8rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+  margin-top: 1.4rem;
 }
 
 .totals__head {
@@ -151,95 +455,188 @@ code,
   flex-wrap: wrap;
 }
 
-.totals__label {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
 .totals__figures,
 .triptych {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: 0.75rem;
-  margin: 0.75rem 0;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1.25rem 2rem;
+  margin: 1rem 0 0.4rem;
 }
 
 .total-kind {
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  border: 1px solid var(--accent);
+  font-weight: 600;
   color: var(--accent);
-  border-radius: 4px;
-  padding: 0.1rem 0.4rem;
+  background: var(--accent-soft);
+  border-radius: var(--r-chip);
+  padding: 0.15rem 0.45rem;
 }
 
+/* A figure carries its tone in a swatch beside its caption, never in a coloured
+   stripe down its side. */
 .figure {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--muted);
-  border-radius: 6px;
-  padding: 0.6rem 0.75rem;
+  --tone: var(--muted);
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
 }
 
 .figure--unsupported {
-  border-left-color: var(--v-missing);
+  --tone: var(--v-missing);
 }
 
 .figure--reported {
-  border-left-color: var(--accent);
+  --tone: var(--accent);
 }
 
 .figure--validated {
-  border-left-color: var(--v-not_applicable);
+  --tone: var(--v-not_applicable);
 }
 
 .figure--support {
-  border-left-color: var(--v-partial);
+  --tone: var(--v-partial);
+}
+
+.figure--no-mark {
+  --tone: var(--v-not_applicable);
 }
 
 .figure__caption {
-  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
+  font-weight: 600;
   color: var(--muted);
 }
 
+.figure__caption::before {
+  content: "";
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 2px;
+  background: var(--tone);
+}
+
 .figure__amount {
-  font-size: 1.15rem;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.qualified {
+  font-size: 0.8125rem;
+  margin: 0.5rem 0 0;
   font-weight: 600;
 }
 
+.qualified--yes {
+  color: var(--v-missing);
+}
+
+.qualified--no {
+  color: var(--v-sufficient);
+}
+
+/* ── The holdings table: the two-second scan ───────────────────────────── */
+
 .scroller {
   overflow-x: auto;
+  margin-top: 0.9rem;
 }
 
 table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.83rem;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
 }
 
 th,
 td {
-  border-bottom: 1px solid var(--line);
-  padding: 0.5rem 0.6rem;
+  padding: 0.55rem 0.7rem;
   text-align: left;
   vertical-align: top;
 }
 
+tbody th,
+tbody td {
+  border-bottom: 1px solid var(--rule);
+}
+
 thead th {
-  font-size: 0.68rem;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-head);
+  background: var(--panel);
+  font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
+  font-weight: 600;
   color: var(--muted);
+  white-space: nowrap;
+  box-shadow: var(--shadow-head);
+}
+
+/* Money right, tabular, never wrapped. A column of figures that does not line
+   up is the fastest way to look amateur in front of a fund. */
+td.num,
+th.num {
+  text-align: right;
   white-space: nowrap;
 }
 
-td.num {
+/* The five requirement columns read as one strip rather than five cells, so
+   colour does the scanning. */
+th.rcol,
+td.cell--verdict,
+td.cell--absent {
+  text-align: center;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+  width: 2.75rem;
+}
+
+th.rcol:first-of-type,
+tbody tr > td.cell--verdict:nth-of-type(4),
+tbody tr > td.cell--absent:nth-of-type(4) {
+  border-left: 1px solid var(--rule);
+}
+
+.hrow {
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.hrow:hover {
+  background: var(--accent-soft);
+}
+
+tbody th[scope="row"] {
+  font-weight: 500;
+  min-width: 10rem;
+}
+
+.held {
+  font-size: 0.75rem;
   white-space: nowrap;
+}
+
+.held--yes {
+  color: var(--muted);
+}
+
+/* Not held at the date is a fact about the total, not a failure. It is stated
+   plainly and never given an adverse colour. */
+.held--no {
+  color: var(--v-not_applicable);
+  font-weight: 600;
 }
 
 .cell--absent,
@@ -248,16 +645,40 @@ td.num {
   font-style: italic;
 }
 
+/* An absent validated amount states its reason, and states it under the word
+   rather than beside it: on one line it is the longest string in the table and
+   eight copies of it out-shout the verdicts the row is read for. */
+/* Left-aligned inside a right-aligned cell: the reason is a machine token with
+   no spaces to break at, so a ragged left edge under a column of amounts reads
+   as a second column of figures that failed to line up. */
+td.num .absent {
+  display: inline-block;
+  max-width: 11rem;
+  white-space: normal;
+  text-align: left;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+th.col-support {
+  width: 11rem;
+}
+
+th.col-approval {
+  width: 11rem;
+}
+
 /* No mark at this date. Deliberately NOT the muted treatment above: a missing
    mark is a finding, and a grey italic in a column of amounts is the blank this
    is here to avoid. */
 .no-mark {
   display: inline-block;
   border: 1px dashed var(--v-not_applicable);
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   padding: 0.05rem 0.4rem;
   color: var(--v-not_applicable);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
@@ -265,15 +686,11 @@ td.cell--no-mark {
   text-align: center;
 }
 
-.figure--no-mark {
-  border-style: dashed;
-  border-color: var(--v-not_applicable);
-}
-
 .sub {
   display: block;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
+  font-weight: 400;
 }
 
 .linkish {
@@ -281,22 +698,43 @@ td.cell--no-mark {
   background: none;
   border: none;
   padding: 0;
-  color: var(--accent);
+  color: var(--ink);
   cursor: pointer;
   font: inherit;
   font-weight: 600;
   text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
 }
+
+.linkish:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+
+/* ── Verdict chips · INV-2, seven findings, seven treatments ───────────── */
 
 .verdict {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   white-space: nowrap;
   padding: 0.1rem 0.45rem;
-  border-radius: 4px;
+  border-radius: var(--r-chip);
   border: 1px solid currentcolor;
+  line-height: 1.5;
+}
+
+.verdict--compact {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  font-size: 0.8125rem;
+  gap: 0;
 }
 
 .verdict--not_assessed {
@@ -304,18 +742,25 @@ td.cell--no-mark {
   border-style: dashed;
 }
 
+/* The quietest mark on the page. "Does not arise" must never look like a
+   finding: no fill, a dotted hairline, and the least contrast anything here is
+   allowed to carry. */
 .verdict--not_applicable {
   color: var(--v-not_applicable);
   border-style: dotted;
+  opacity: 0.75;
 }
 
 .verdict--missing {
-  color: var(--v-missing);
+  color: var(--panel);
+  background: var(--v-missing);
+  border-color: var(--v-missing);
   font-weight: 700;
 }
 
 .verdict--insufficient {
   color: var(--v-insufficient);
+  border-width: 2px;
 }
 
 .verdict--partial {
@@ -323,8 +768,9 @@ td.cell--no-mark {
 }
 
 .verdict--conflicting {
-  color: var(--v-conflicting);
-  border-width: 2px;
+  color: var(--panel);
+  background: var(--v-conflicting);
+  border-color: var(--v-conflicting);
   font-weight: 700;
 }
 
@@ -332,15 +778,17 @@ td.cell--no-mark {
   color: var(--v-sufficient);
 }
 
-/* Which store answered. The fixture treatment is loud on purpose: a viewer who
-   does not notice it is reading a demo stub as the fund. */
+/* ── Which store answered ──────────────────────────────────────────────── */
+
 .source {
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  border-radius: 4px;
+  font-weight: 600;
+  border-radius: var(--r-chip);
   padding: 0.1rem 0.45rem;
   border: 1px solid currentcolor;
+  white-space: nowrap;
 }
 
 .source--ledger {
@@ -348,16 +796,20 @@ td.cell--no-mark {
 }
 
 .source--fixture {
-  color: var(--v-missing);
+  color: var(--panel);
+  background: var(--v-missing);
+  border-color: var(--v-missing);
   font-weight: 700;
-  border-width: 2px;
 }
+
+/* ── Row support and approval ──────────────────────────────────────────── */
 
 .support {
   display: inline-flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
   font-size: 0.75rem;
+  max-width: 15rem;
 }
 
 .support--supported {
@@ -372,47 +824,25 @@ td.cell--no-mark {
 
 .support__reasons {
   list-style: none;
-  margin: 0.15rem 0 0;
+  margin: 0;
   padding: 0;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
 }
 
 .support__reasons code {
   color: var(--v-missing);
-}
-
-.qualified {
-  font-size: 0.78rem;
-  margin: 0.35rem 0;
   font-weight: 600;
-}
-
-.qualified--yes {
-  color: var(--v-missing);
-}
-
-.qualified--no {
-  color: var(--v-sufficient);
-}
-
-.approval__fv {
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-}
-
-.approval__fv--yes {
-  color: var(--v-sufficient);
-}
-
-.approval__fv--no {
-  color: var(--muted);
 }
 
 .approval {
   font-size: 0.75rem;
   display: inline-flex;
   flex-direction: column;
+  max-width: 13rem;
 }
 
 .approval--none {
@@ -433,12 +863,28 @@ td.cell--no-mark {
   font-size: 0.7rem;
 }
 
-.tag {
-  font-size: 0.68rem;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 0.05rem 0.35rem;
+.approval__fv {
+  font-size: 0.6875rem;
+  letter-spacing: 0.01em;
+}
+
+.approval__fv--yes {
+  color: var(--v-sufficient);
+}
+
+.approval__fv--no {
   color: var(--muted);
+}
+
+/* ── Small labels ──────────────────────────────────────────────────────── */
+
+.tag {
+  font-size: 0.6875rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  padding: 0.05rem 0.4rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .tag--exec {
@@ -451,47 +897,888 @@ td.cell--no-mark {
   color: var(--v-conflicting);
 }
 
+.tag--authority {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .codes {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
   align-items: center;
-  margin: 0.35rem 0;
+  margin: 0.5rem 0 0;
 }
 
 .codes__label {
-  font-size: 0.68rem;
+  font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
+  font-weight: 600;
   color: var(--muted);
 }
 
 .codes code {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 0.05rem 0.35rem;
+  border-radius: var(--r-chip);
+  padding: 0.05rem 0.4rem;
 }
 
-/* The evidence surface. The quote is the product; it gets the most contrast on
-   the page and is never truncated, wrapped in an ellipsis or highlighted. */
-.claim-list,
-.fact-list {
+/* ══ The coverage map ══════════════════════════════════════════════════════
+   Small on purpose. It exists to expose a column with no mark and a row with no
+   mark, and nothing else; every gram of decoration added here would be paid for
+   out of the passage pane below it. */
+
+.cov {
+  margin-top: 0.9rem;
+}
+
+.cov__grid {
+  width: auto;
+  min-width: min(100%, 34rem);
+  font-size: 0.75rem;
+}
+
+.cov__grid th,
+.cov__grid td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+
+.cov__corner {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  position: static;
+  background: none;
+  box-shadow: none;
+}
+
+.cov__req {
+  position: static;
+  box-shadow: none;
+  background: none;
+  text-align: center;
+  width: 3rem;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.75rem;
+}
+
+.cov__glyph {
+  display: block;
+  font-size: 0.8125rem;
+  line-height: 1.1;
+}
+
+.cov__req--missing {
+  color: var(--v-missing);
+  font-weight: 700;
+}
+
+.cov__req--insufficient {
+  color: var(--v-insufficient);
+}
+
+.cov__req--partial {
+  color: var(--v-partial);
+}
+
+.cov__req--conflicting {
+  color: var(--v-conflicting);
+  font-weight: 700;
+}
+
+.cov__req--sufficient {
+  color: var(--v-sufficient);
+}
+
+.cov__req--not_applicable {
+  color: var(--v-not_applicable);
+  opacity: 0.7;
+}
+
+.cov__req--not_assessed,
+.cov__req--absent {
+  color: var(--v-not_assessed);
+}
+
+.cov__claim {
+  font-weight: 400;
+}
+
+.cov__key {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink);
+}
+
+.cov__meta,
+.cov__offfile {
+  display: block;
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+
+.cov__offfile {
+  color: var(--v-conflicting);
+}
+
+.cov__cell {
+  text-align: center;
+  color: var(--muted);
+  opacity: 0.45;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.cov__cell--on,
+.cov__cell--subsequent {
+  opacity: 1;
+}
+
+.cov__cell--on {
+  color: var(--accent);
+}
+
+.cov__cell--subsequent {
+  color: var(--v-conflicting);
+}
+
+.cov__row--unused .cov__key {
+  color: var(--muted);
+}
+
+.cov__use {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.cov__use--unused {
+  color: var(--v-insufficient);
+  font-weight: 700;
+}
+
+.cov__feet th,
+.cov__feet td {
+  border-bottom: none;
+  padding-top: 0.45rem;
+}
+
+.cov__foot {
+  text-align: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.cov__foot--gap {
+  color: var(--v-missing);
+}
+
+.cov__foot--cited {
+  color: var(--v-sufficient);
+}
+
+/* Met, and citing nothing of its own. Green like `cited`, because it is not a
+   hole, and lighter, because no document sits under it. */
+.cov__foot--met {
+  color: var(--v-sufficient);
+  font-weight: 400;
+}
+
+.cov__foot--na {
+  color: var(--v-not_applicable);
+  opacity: 0.75;
+  font-weight: 400;
+}
+
+.cov__foot--absent {
+  color: var(--muted);
+}
+
+.cov__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.cov__legend-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.cov__swatch {
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.cov__swatch--subsequent {
+  color: var(--v-conflicting);
+}
+
+.cov__legend-item strong {
+  color: var(--ink);
+  font-size: 0.6875rem;
+}
+
+.cov__empty {
+  border: 1px dashed var(--v-missing);
+  border-radius: var(--r-control);
+  padding: 0.75rem 0.9rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.8375rem;
+  max-width: 62ch;
+}
+
+/* ══ The evidence trail ════════════════════════════════════════════════════
+   Three panes in the order the questions are asked. The first two are narrow
+   and quiet so the third can be wide and loud. */
+
+.trail {
+  display: grid;
+  grid-template-columns: minmax(12rem, 15rem) minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: 0 1.25rem;
+  margin-top: 1rem;
+  align-items: start;
+}
+
+/* Nothing to show on the right: the middle takes the room and the placeholder
+   becomes a note under it rather than a third of the screen saying so. */
+.trail--no-passage {
+  grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
+}
+
+.trail--no-passage .trail__passage {
+  grid-column: 2;
+  border-left: none;
+  padding-left: 0;
+  margin-top: 1.25rem;
+  position: static;
+}
+
+@media (max-width: 78rem) {
+  .trail {
+    grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  }
+
+  .trail__passage {
+    grid-column: 1 / -1;
+    border-left: none;
+    padding-left: 0;
+    padding-top: 1.25rem;
+    margin-top: 1.25rem;
+    border-top: 1px solid var(--rule);
+  }
+}
+
+@media (max-width: 48rem) {
+  .trail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .trail__middle {
+    border-left: none;
+    padding-left: 0;
+  }
+}
+
+.rail ul,
+.figrows {
   list-style: none;
-  margin: 0.5rem 0 0;
+  margin: 0;
+  padding: 0;
+}
+
+.rail__item {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  padding: 0.5rem 0.6rem;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.rail__item:hover {
+  background: var(--accent-soft);
+}
+
+/* The 2px marker is the selected-state indicator on a list item, not a coloured
+   card stripe: it exists only on the active row and it is what says "you are
+   here" in a three-pane layout with no other cue. */
+.rail__item--on {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+.rail__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.rail__item--on .rail__label {
+  font-weight: 600;
+}
+
+.rail__detail {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+/* Three answers to "why is nothing cited", and only one of them is a finding.
+   The requirement that does not arise is the quietest mark in the rail; the one
+   that is short is the only one that carries the missing hue. */
+.rail__detail--not_required {
+  opacity: 0.75;
+}
+
+.rail__detail--met {
+  color: var(--v-sufficient);
+  cursor: help;
+}
+
+.rail__detail--short {
+  color: var(--v-missing);
+  font-weight: 600;
+}
+
+.rail__item .verdict {
+  justify-self: start;
+}
+
+.rail__chip {
+  justify-self: start;
+  font-size: 0.6875rem;
+  border: 1px dashed currentcolor;
+  border-radius: var(--r-chip);
+  padding: 0 0.35rem;
+  color: var(--v-not_assessed);
+}
+
+.rail__chip--unused {
+  color: var(--v-insufficient);
+}
+
+.trail__middle {
+  border-left: 1px solid var(--rule);
+  padding-left: 1.25rem;
+  min-width: 0;
+}
+
+/* Both outer panes follow the reader down the middle column. Poolside's one
+   agreement states thirteen figures, and a passage that scrolls off while the
+   figure list is still going is a trail that breaks halfway along it. */
+.rail,
+.trail__passage {
+  position: sticky;
+  top: 0.75rem;
+}
+
+.trail__passage {
+  border-left: 1px solid var(--rule);
+  padding-left: 1.25rem;
+  min-width: 0;
+}
+
+.trail__group + .trail__group,
+.trail__group + .gaw,
+.figrows + .gaw {
+  margin-top: 1.1rem;
+}
+
+.trail__claim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.4rem;
+}
+
+.trail__claim-key {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.figrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 0.5rem;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  padding: 0.35rem 0.4rem;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.figrow:hover {
+  background: var(--accent-soft);
+}
+
+.figrow--on {
+  background: var(--accent-soft);
+}
+
+.figrow__field {
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.figrow--on .figrow__field {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.figrow__value {
+  grid-column: 1;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.figrow__state,
+.figrow__where {
+  grid-column: 2;
+  justify-self: end;
+  font-size: 0.65rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.figrow__where {
+  font-family: var(--mono);
+}
+
+.trail__none,
+.trail__na,
+.trail__orphan-note {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  max-width: 60ch;
+  margin: 0 0 0.75rem;
+}
+
+.trail__none--passage {
+  border: 1px dashed var(--line);
+  border-radius: var(--r-control);
+  padding: 1rem 1.1rem;
+}
+
+.trail__orphan-note {
+  color: var(--v-insufficient);
+}
+
+/* ══ The passage pane ══════════════════════════════════════════════════════
+   The one screen this application is an argument for, and the only place on
+   the page allowed to raise its voice. */
+
+.passage {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.passage__head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.passage__file {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.passage__caption {
+  display: block;
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-family: var(--mono);
+}
+
+.passage__where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+/* Not debug output. These are the auditor's instructions for finding the
+   passage again in the stored text by hand, so they are set as a figure. */
+.offsets {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--accent-soft);
+  border-radius: var(--r-chip);
+  padding: 0.05rem 0.4rem;
+}
+
+.passage__extractor {
+  overflow-wrap: anywhere;
+}
+
+/* A page. Shadow, no border: elevation declared once. */
+.paper {
+  background: var(--paper);
+  border-radius: var(--r-page);
+  box-shadow: var(--shadow-lift);
+  padding: 1.25rem 1.4rem;
+  max-height: min(60vh, 34rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.paper__body {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  tab-size: 4;
+}
+
+.paper__degraded,
+.paper__unresolved {
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--v-insufficient);
+  font-weight: 600;
+  max-width: 64ch;
+}
+
+.paper__unresolved {
+  color: var(--v-missing);
+  margin-bottom: 0.5rem;
+}
+
+/* The single most important visual moment in the application. */
+.cited {
+  background: var(--hi);
+  color: var(--hi-ink);
+  border-bottom: 2px solid var(--hi-edge);
+  border-radius: 2px 2px 0 0;
+  padding: 0.1em 0.15em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: 600;
+}
+
+.cited--unresolved {
+  background: none;
+  color: var(--v-missing);
+  border-bottom: 2px dashed var(--v-missing);
+  font-weight: 700;
+}
+
+.paper--quote-only .paper__body {
+  white-space: pre-wrap;
+}
+
+.paper--loading {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.skeleton {
+  display: block;
+  height: 0.7rem;
+  border-radius: 3px;
+  background: var(--rule);
+  width: 78%;
+}
+
+.skeleton--wide {
+  width: 96%;
+}
+
+.skeleton--short {
+  width: 44%;
+}
+
+/* ══ Gap → action → why ════════════════════════════════════════════════════
+   Three lines, always the same three, always in this order. The third is the
+   fund's own sentence, and it is set as a quotation so nobody mistakes it for
+   something this application decided. */
+
+.gaw {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.2rem 1rem;
+  margin: 1.4rem 0 0;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+}
+
+.gaw__line {
+  display: contents;
+}
+
+.gaw__label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 700;
+  color: var(--muted);
+  padding-top: 0.1rem;
+}
+
+.gaw__line--missing .gaw__label {
+  color: var(--v-missing);
+}
+
+.gaw__line--insufficient .gaw__label {
+  color: var(--v-insufficient);
+}
+
+.gaw__line--partial .gaw__label {
+  color: var(--v-partial);
+}
+
+.gaw__line--conflicting .gaw__label {
+  color: var(--v-conflicting);
+}
+
+.gaw__line--not_assessed .gaw__label {
+  color: var(--v-not_assessed);
+}
+
+.gaw__body {
+  margin: 0 0 0.6rem;
+  min-width: 0;
+}
+
+.gaw__subject {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.6rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.8125rem;
+}
+
+.gaw__req {
+  font-weight: 600;
+}
+
+.gaw__doc {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+
+.gaw__reasons,
+.gaw__actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.gaw__reasons li,
+.gaw__actions li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.5rem;
+}
+
+.gaw__code {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--accent-soft);
+  border-radius: var(--r-chip);
+  padding: 0.05rem 0.4rem;
+  overflow-wrap: anywhere;
+}
+
+.gaw__gloss {
+  font-size: 0.8125rem;
+}
+
+.gaw__to {
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.gaw__none {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+  max-width: 58ch;
+}
+
+/* Same verdict word, three different situations, three different letters.
+   `expired` is a document on file whose own window has closed; `never_located`
+   is a document searched for and not found; `held_elsewhere` is a document that
+   exists and sits with counsel. Rendering them alike would send a request for
+   an update to a company that was never asked for the document, and an
+   accusation of a missing file to a firm that is holding it. */
+.origin {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  border-radius: var(--r-chip);
+  padding: 0.05rem 0.45rem;
+  white-space: nowrap;
+  border: 1px solid currentcolor;
+}
+
+.origin--expired {
+  color: var(--v-insufficient);
+  border-style: solid;
+}
+
+.origin--never_located {
+  color: var(--panel);
+  background: var(--v-missing);
+  border-color: var(--v-missing);
+}
+
+.origin--held_elsewhere {
+  color: var(--v-partial);
+  border-style: dashed;
+}
+
+.origin--insufficient_authority {
+  color: var(--v-conflicting);
+}
+
+.origin--unresolved {
+  color: var(--v-partial);
+  border-style: dashed;
+}
+
+.gaw__quote {
+  margin: 0;
+}
+
+/* The fund admitting the gap, in its own words. Neutral rule, not a coloured
+   stripe: the emphasis belongs to the words. */
+.verbatim {
+  margin: 0;
+  padding: 0.15rem 0 0.15rem 0.85rem;
+  border-left: 2px solid var(--line);
+  font-size: 0.8375rem;
+  line-height: 1.55;
+  color: var(--ink);
+  max-width: 62ch;
+}
+
+.gaw__quote figcaption {
+  margin-top: 0.35rem;
+  padding-left: 0.85rem;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+/* ══ The evidence appendix and the workspace lists ═════════════════════════ */
+
+.appendix {
+  border-top: 1px solid var(--line);
+  margin: 0 0 1rem;
+  padding-top: 0.5rem;
+}
+
+.appendix > summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4rem 0;
+  color: var(--muted);
+  transition: color 160ms ease;
+}
+
+.appendix > summary:hover {
+  color: var(--ink);
+}
+
+.appendix[open] > summary {
+  color: var(--ink);
+}
+
+.claim-list,
+.fact-list,
+.checklist,
+.gap-list,
+.evidence-list,
+.lineage-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
+  gap: 1.25rem;
 }
 
-/* One extracted figure. The field name leads and is the only bold thing in the
-   block, because "which citation supports which number" is the question the
-   whole surface answers. */
+/* Rows separated by rules, not boxes. Nothing on this page is a card except a
+   section. */
+.check,
+.gap,
+.evidence,
+.lineage,
+.claim {
+  border-top: 1px solid var(--rule);
+  padding-top: 0.9rem;
+}
+
+.check__head,
+.gap__head,
+.evidence__head,
+.lineage__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.check__head strong,
+.gap__doc {
+  font-size: 0.875rem;
+  letter-spacing: -0.01em;
+}
+
 .fact-entry,
 .fact {
-  border-top: 1px solid var(--line);
-  padding-top: 0.5rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
 }
 
 .fact-entry .fact {
@@ -504,7 +1791,7 @@ td.cell--no-mark {
   flex-wrap: wrap;
   gap: 0.45rem;
   align-items: baseline;
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.4rem;
   font-size: 0.78rem;
 }
 
@@ -514,28 +1801,23 @@ td.cell--no-mark {
 }
 
 .fact__value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--mono);
 }
 
 .fact__numeric {
   color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.claim {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
-  border-radius: 8px;
-  padding: 0.7rem 0.85rem;
+  font-size: 0.7rem;
 }
 
 .citation__quote {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.65;
   color: var(--ink);
-  border-left: 3px solid var(--accent);
-  background: var(--bg);
-  padding: 0.5rem 0.7rem;
+  background: var(--paper);
+  border-left: none;
+  border-radius: var(--r-page);
+  padding: 0.6rem 0.8rem;
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -543,10 +1825,11 @@ td.cell--no-mark {
 
 .citation__where {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: baseline;
-  margin: 0.3rem 0 0;
-  font-size: 0.72rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
 }
 
 .citation__where .sub {
@@ -554,74 +1837,39 @@ td.cell--no-mark {
 }
 
 .claim__uncited {
-  border-left: 2px dashed var(--v-insufficient);
-  padding-left: 0.6rem;
+  padding-left: 0.75rem;
+  border-left: 1px dashed var(--v-insufficient);
+}
+
+/* A requirement that arises, is unmet, and cites nothing. The one of the three
+   uncited states that is a finding, and it is the only one set in the missing
+   hue — the other two are a `.note`. */
+.uncited {
+  color: var(--v-missing);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0;
+  max-width: 68ch;
 }
 
 .empty-evidence {
   border: 1px dashed var(--v-missing);
-  border-radius: 8px;
-  padding: 0.7rem 0.85rem;
+  border-radius: var(--r-control);
+  padding: 0.85rem 1rem;
   color: var(--ink);
-  font-size: 0.85rem;
-  margin: 0.6rem 0 0;
-}
-
-.tag--authority {
-  border-color: var(--accent);
-  color: var(--accent);
+  font-size: 0.8375rem;
+  max-width: 66ch;
+  margin: 0.75rem 0 0;
 }
 
 .evidence__when {
   margin: 0 0 0.4rem;
 }
 
-.checklist,
-.gap-list,
-.evidence-list,
-.lineage-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-}
-
-.check,
-.gap,
-.evidence,
-.lineage {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.7rem 0.85rem;
-}
-
-.check__head,
-.gap__head,
-.evidence__head,
-.lineage__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.gap--with_counsel {
-  border-left: 3px solid var(--v-partial);
-}
-
-.gap--referenced_location_unspecified {
-  border-left: 3px solid var(--v-insufficient);
-}
-
-.gap--not_located {
-  border-left: 3px solid var(--v-missing);
-}
-
+/* Gap kinds keep their own colour in the label, not in a stripe down the item. */
 .gap-kind {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .gap-kind--with_counsel {
@@ -636,39 +1884,203 @@ td.cell--no-mark {
   color: var(--v-missing);
 }
 
-.gap__doc {
-  font-weight: 600;
-  margin: 0.4rem 0 0.2rem;
-  font-size: 0.9rem;
-}
-
 blockquote {
-  margin: 0.3rem 0;
-  padding-left: 0.7rem;
+  margin: 0.4rem 0;
+  padding-left: 0.8rem;
   border-left: 2px solid var(--line);
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
 }
 
 .picker {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.9rem;
-  font-size: 0.8rem;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
-.picker select {
+.picker select,
+.decide__reason {
   font: inherit;
-  padding: 0.25rem 0.4rem;
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.45rem;
   background: var(--panel);
   color: var(--ink);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-control);
+  transition: border-color 160ms ease;
+}
+
+.picker select:hover {
+  border-color: var(--accent);
 }
 
 .lineage__input {
   font-size: 0.8rem;
   margin: 0.3rem 0;
+}
+
+/* ══ Export the auditor packet ═════════════════════════════════════════════ */
+
+.export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.export__act,
+.decide__act {
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4rem 0.9rem;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.export__act:hover:not(:disabled),
+.decide__act:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.export__act:active:not(:disabled),
+.decide__act:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.export__act:disabled,
+.decide__act:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.export__scope {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.export > .note,
+.export > .error,
+.export__result {
+  flex-basis: 100%;
+}
+
+.export__headline {
+  margin: 0.4rem 0 0;
+  font-size: 0.8375rem;
+  font-weight: 600;
+  color: var(--v-sufficient);
+}
+
+.export__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.4rem 1.5rem;
+  margin: 0.6rem 0 0;
+}
+
+.export__facts dt {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+}
+
+.export__facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+/* ══ The one write surface (SPEC §6.3) ═════════════════════════════════════
+   Deliberately not styled as a primary action. Approving a valuation is the
+   most consequential thing this UI can do and the least reversible: decisions
+   are append-only, so an accidental click is corrected by recording a second
+   decision, never by undoing the first. A bordered control asks for a
+   deliberate click; a filled accent button invites a reflexive one. */
+
+.decide {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+}
+
+.decide__reason {
+  width: 100%;
+  max-width: 40rem;
+  resize: vertical;
+}
+
+.decide .picker {
+  align-items: baseline;
+}
+
+.decide__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.decide__outcome {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--v-sufficient);
+  max-width: 68ch;
+}
+
+/* ── The explanation, on demand ───────────────────────────────────────────
+   `.why` was a <span title="…"> — a native tooltip, which waits about a
+   second, cannot be clicked, and does not exist on a touch screen. It looked
+   like a control and was not one, so a reader who clicked it learned that the
+   interface ignores them. It is a button now, and clicking it reveals the
+   paragraph in place.
+
+   The `title` is kept as well: hover still works for anyone who expects it,
+   and the visually-hidden copy still reaches a screen reader whether the
+   disclosure is open or shut. */
+.why-wrap {
+  display: inline;
+}
+
+button.why {
+  font: inherit;
+  font-size: 0.625rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+}
+
+button.why[aria-expanded="true"] {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+/* Block, not a floating layer: it pushes the page rather than covering it, so
+   nothing the reader was looking at is hidden by the act of asking why. */
+.why__body {
+  display: block;
+  margin: 0.4rem 0 0.2rem;
+  padding: 0.5rem 0.7rem;
+  max-width: 68ch;
+  border-left: 1px solid var(--accent);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
 }

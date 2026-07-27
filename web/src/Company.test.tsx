@@ -72,7 +72,7 @@ describe("Company", () => {
     serve(HOLDING_WITH_EVIDENCE);
     await mount("https://api.example.com", [FIXTURE_ROW]);
     await waitFor(() => {
-      expect(screen.getByText("The mark — three facts, not one")).toBeDefined();
+      expect(screen.getByText("The mark", { selector: "h2" })).toBeDefined();
     });
   });
 

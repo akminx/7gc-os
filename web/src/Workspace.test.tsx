@@ -12,13 +12,30 @@ function show(row: HoldingRow) {
   return render(<Workspace row={row} />);
 }
 
+/** The value under one meta label, read out of its own row. */
+function metaValue(scope: Element, label: string): string | undefined {
+  const row = [...scope.querySelectorAll(".meta > div")].find(
+    (item) => item.querySelector("dt")?.textContent === label,
+  );
+  return row?.querySelector("dd")?.textContent ?? undefined;
+}
+
+function held(container: HTMLElement): string | undefined {
+  return metaValue(container, "held at measurement date");
+}
+
 describe("the mark", () => {
   it("presents reported, validated and support as three facts", () => {
-    show(FIXTURE_ROW);
-    expect(screen.getByText("The mark — three facts, not one")).toBeDefined();
+    const { container } = show(FIXTURE_ROW);
+    expect(screen.getByText("The mark", { selector: "h2" })).toBeDefined();
     expect(screen.getByText("Reported — tracker")).toBeDefined();
     expect(screen.getByText("Validated — independently derived")).toBeDefined();
     expect(screen.getByText("Support — evidence verdicts")).toBeDefined();
+    // Three captions carry the distinction; INV-13's argument for it is on the
+    // mark beside the heading rather than in a paragraph under it.
+    expect(container.querySelector(".section__head .why")?.getAttribute("title")).toMatch(
+      /Three facts, not one/,
+    );
   });
 
   it("states the reported amount and the reason no validated amount exists", () => {
@@ -37,7 +54,9 @@ describe("the mark", () => {
     const { container } = show(FIXTURE_ROW);
     expect(screen.getByText("unsupported")).toBeDefined();
     expect(container.querySelector(".support__reasons")?.textContent).toBe("R1 missingR2 partial");
-    expect(screen.getByText(/decided by the API/)).toBeDefined();
+    expect(container.querySelector(".figure--support .sub")?.getAttribute("title")).toMatch(
+      /Decided by the API/,
+    );
   });
 
   it("renders a supported row as supported, with no reasons attached", () => {
@@ -69,8 +88,8 @@ describe("the mark", () => {
   });
 
   it("says whether the position was held at the measurement date", () => {
-    show(FIXTURE_ROW);
-    expect(screen.getByText("yes")).toBeDefined();
+    const { container } = show(FIXTURE_ROW);
+    expect(held(container)).toBe("yes");
     cleanup();
     show(SWAY_ROW);
     expect(screen.getByText(/not an input to the held-at-date total/)).toBeDefined();
@@ -130,9 +149,20 @@ describe("PBC checklist", () => {
     expect(screen.getByText(/artifact · pro forma/)).toBeDefined();
   });
 
-  it("says when a requirement cites no claim, and lists the claims when it does", () => {
-    show(FIXTURE_ROW);
-    expect(screen.getAllByText("No claim is cited for this requirement.").length).toBe(4);
+  /**
+   * The four uncited requirements on this row are not one finding. R1 arises and
+   * is short; R3 and R4 do not arise; R5 is met from the execution status of the
+   * claims cited at R2 and cites nothing of its own (INV-4). One sentence for all
+   * four read as four omissions, three of which are not.
+   */
+  it("separates a short requirement from one not required and one met uncited", () => {
+    const { container } = show(FIXTURE_ROW);
+    expect(container.querySelectorAll(".uncited")).toHaveLength(1);
+    expect(screen.getByText("No claim is cited, and this requirement is short.")).toBeDefined();
+    expect(screen.getAllByText("No citation is required here.")).toHaveLength(2);
+    const met = screen.getByText(/Met without a citation/);
+    expect(met.title).toMatch(/labelling requirement/);
+    // And the requirement that does cite claims lists them.
     expect(screen.getByText("dream_b_cap")).toBeDefined();
     expect(screen.getByText("dream_close_email")).toBeDefined();
   });
@@ -143,11 +173,19 @@ describe("PBC checklist", () => {
    * reader to infer from the verdict chip beside it.
    */
   it("states applicability from the field the API sends, both ways round", () => {
-    show(FIXTURE_ROW);
-    expect(screen.getAllByText("yes — this requirement arises here")).toHaveLength(3);
-    expect(
-      screen.getAllByText("no — this requirement does not arise for this position at this date"),
-    ).toHaveLength(2);
+    const { container } = show(FIXTURE_ROW);
+    const applicable = [...container.querySelectorAll(".check")].map((check) =>
+      metaValue(check, "applicable"),
+    );
+    expect(applicable).toEqual([
+      "yes",
+      "yes",
+      "no · does not arise here",
+      "no · does not arise here",
+      "yes",
+    ]);
+    // INV-2 · why the two are opposite findings rather than degrees of one.
+    expect(container.querySelector(".check .meta dt[title]")?.getAttribute("title")).toBeDefined();
   });
 
   it("renders a tracker label when one is supplied, and a dash when it is not", () => {
@@ -171,11 +209,23 @@ describe("gaps and approval", () => {
     expect(screen.getByText("No gap observation is recorded for this holding.")).toBeDefined();
   });
 
-  it("renders approval state without offering an approve action", () => {
+  // Named "without offering an approve action" while the workspace had grown
+  // one. What it actually pins is that the control is absent when the
+  // deployment names NO ACTORS — `show()` passes none — which is the mechanism
+  // keeping the public demo read-only. Under the old name the test read as
+  // proof that no approve action exists anywhere, which is the opposite of
+  // true, and a reader trusting it would not have looked for `api/decisions.py`.
+  it("renders approval state, and offers no control when no actor is configured", () => {
     const { container } = show(SWAY_ROW);
     expect(screen.getByText(/valuation approval · approved/)).toBeDefined();
     expect(screen.getByText("counts as approved fair value")).toBeDefined();
-    expect(container.querySelectorAll("button")).toHaveLength(0);
+    // Decision controls specifically, not every button on the page. This
+    // counted ALL buttons, which held only while nothing else on the surface
+    // was interactive — the `?` disclosures made it fail without the property
+    // it guards having changed. A test whose subject is wider than its claim
+    // goes red for the wrong reason, and the temptation is then to widen the
+    // claim to match.
+    expect(container.querySelectorAll(".decide__act")).toHaveLength(0);
   });
 
   it("reports the absence of an approval as a fact", () => {

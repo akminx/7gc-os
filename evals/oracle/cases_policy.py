@@ -77,6 +77,25 @@ def run(snap: dict, o: Oracle) -> None:
     print("\n── Q1-2/INV-13: validated amount is orthogonal to the verdict ──")
     for h, dt, val, st in [
         ("poolside", "2025-12-31", "2000000", "derivable"),
+        # Not `not_derivable`: the evidence is present and in scope, and it
+        # states a figure. It is the FUND's figure about the fund's own
+        # position, so it validates nothing — a distinct status, because
+        # "nobody has said" and "only the audited party has said" send an
+        # auditor to different places.
+        #
+        # This case is at FY2024, not FY2025. It was written at FY2025 while
+        # the FY2024 memo's reliance window stood open, which put the memo in
+        # scope a year after it speaks. The window is closed again on the
+        # sentence's own subject — "THE INTEREST will be re-measured", a
+        # statement about the memo, not about the rate — so FY2025 has no
+        # applicable evidence at all and the status that belongs there is
+        # `not_derivable`.
+        #
+        # Both rows are pinned deliberately. The distinction this case exists
+        # for is "only the audited party has said" versus "nobody has said",
+        # and asserting one without the other lets the pair collapse the moment
+        # a window moves again.
+        ("moonfare", "2024-12-31", None, "management_carrying_value"),
         ("moonfare", "2025-12-31", None, "not_derivable"),
         ("anthropic", "2025-12-31", None, "not_derivable"),
         ("because_market", "2025-12-31", None, "not_derivable"),
@@ -109,9 +128,9 @@ def run(snap: dict, o: Oracle) -> None:
     # r6 asserted only fluidstack_b_cap survived. That was the defect: the
     # Series A claim prices a class 7GC still holds, so both must coexist.
     check(
-        "independent claims coexist",
-        sorted(row(snap, "fluidstack", "2025-12-31")["requirements"]["R2"]["relied_on"]),
-        ["fluidstack_a_spa", "fluidstack_b_cap"],
+        "independent claims coexist, in the order the evidence arose",
+        row(snap, "fluidstack", "2025-12-31")["requirements"]["R2"]["relied_on"],
+        ["fluidstack_a_spa", "fluidstack_a2_ref", "fluidstack_b_cap"],
     )
     check(
         "earlier claim survives when it is the latest applicable",
@@ -119,8 +138,8 @@ def run(snap: dict, o: Oracle) -> None:
         ["fluidstack_a_spa"],
     )
     check(
-        "same-claim documents corroborate, neither is dropped",
-        sorted(row(snap, "dream", "2025-12-31")["requirements"]["R2"]["relied_on"]),
+        "same-claim documents corroborate, neither is dropped, both in date order",
+        row(snap, "dream", "2025-12-31")["requirements"]["R2"]["relied_on"],
         ["dream_b_cap", "dream_close_email"],
     )
 
@@ -356,7 +375,7 @@ def run(snap: dict, o: Oracle) -> None:
     )
     r = two_class.run()["rows"][0]
     # 100 x $10 + 100 x $20 = 3,000. Applying one price to both gives 4,000.
-    check("both claims retained", sorted(r["requirements"]["R2"]["relied_on"]), ["da", "db"])
+    check("both claims retained, older first", r["requirements"]["R2"]["relied_on"], ["da", "db"])
     check("derives 3,000, not 4,000", r["validated_amount"], "3000")
     check("per-class lineage recorded", len(r["derivation_lineage"]), 2)
     check(
@@ -463,12 +482,22 @@ def run(snap: dict, o: Oracle) -> None:
     )
     check("no approved total is stated", mm["totals"][0]["approved_fair_value_total"], None)
     check("and the mark is named", mm["totals"][0]["mismatched_marks"], ["h"])
-    # The corpus carries exactly one such row. It is blocked first for an
-    # unrelated reason (`row_verdict` is partial), which is what made this
-    # latent — so the packet total must still NAME it, or the only real instance
-    # stays invisible and the guard has nothing to fail against.
+    # The corpus carries TWO such rows. This comment used to say "exactly one",
+    # and that was never true — Fluidstack's A-2 evidence was relied on for
+    # nothing, so its derivation had no price for a class the fund holds and
+    # reported `unconfirmable` instead of a 2,500,000-against-6,000,000
+    # mismatch. An answer key that counts the instances it can see, and calls
+    # that the total, is the same error one level up from the code.
+    #
+    # Both are blocked first for unrelated reasons, which is what kept them
+    # latent, so the packet total must NAME them or the guard has nothing to
+    # fail against.
     f2_25 = next(t for t in snap["totals"] if t["fund"] == "fund_ii" and t["date"] == "2025-12-31")
-    check("the corpus mismatch reaches its packet total", f2_25["mismatched_marks"], ["lucra"])
+    check(
+        "both corpus mismatches reach the packet total",
+        f2_25["mismatched_marks"],
+        ["fluidstack", "lucra"],
+    )
     # An approved total is summed from VALIDATED amounts, so a held mark with no
     # validated amount cannot be approved either — there is nothing to sum, and
     # falling back to the reported figure is exactly the substitution above.

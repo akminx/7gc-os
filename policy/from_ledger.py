@@ -13,7 +13,7 @@ is absent (`document_gap.kind`), what a mark is made of
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import psycopg
@@ -32,6 +32,7 @@ from policy.inputs import (
     Gap,
     Holding,
     Ledger,
+    LedgerError,
     Lot,
     ManagementAssessment,
     MarkObservation,
@@ -42,6 +43,11 @@ from policy.inputs import (
 )
 
 Conn = psycopg.Connection[tuple[object, ...]]
+
+#: Date-valued cited facts this loader reads, and the format each is cited in.
+#: An allowlist rather than a rule over `field_name`, so adding one is a
+#: decision someone makes rather than a side effect of naming a column.
+DATE_FACTS: dict[str, str] = {"fx_rate_effective_date": "%m/%d/%Y"}
 
 
 def _s(v: object) -> str:
@@ -122,6 +128,68 @@ def load(conn: Conn) -> Ledger:
     for r in conn.execute("select claim_id, requirement from claim_requirement").fetchall():
         reliance.setdefault(_s(r[0]), set()).add(RequirementCode(_s(r[1])))
 
+    # The cited figures, so a validator can compare what a document STATES
+    # against what the tracker reports. `value_numeric` is not free text: a
+    # trigger in 0009 and `packages/contracts/citations.py` both require it to
+    # equal the numeral inside `value_text`, and `value_text` to be a whole
+    # figure appearing exactly once in `citation_quote`, which must itself be
+    # the document's own substring at the stored span. So every number arriving
+    # here is already bound to a passage.
+    #
+    # Facts with a null `value_numeric` are skipped rather than defaulted: a
+    # cited date or a cited name is a fact, and coercing it to zero would make
+    # a validator compute against a figure the document never stated.
+    #
+    # Two facts sharing a `field_name` on one claim would silently keep the last
+    # row read, so it raises instead. `field_name` is the key a validator asks
+    # by; if a claim states two different net asset values, the collision is the
+    # finding, not something to resolve by ordering.
+    facts: dict[str, dict[str, Decimal]] = {}
+    for r in conn.execute(
+        "select claim_id, field_name, value_numeric from extracted_fact"
+        " where value_numeric is not null order by claim_id, field_name"
+    ).fetchall():
+        claim_id, field_name, value = _s(r[0]), _s(r[1]), _dec(r[2])
+        by_field = facts.setdefault(claim_id, {})
+        if field_name in by_field and by_field[field_name] != value:
+            raise LedgerError(
+                f"claim {claim_id} cites two different values for {field_name!r}: "
+                f"{by_field[field_name]} and {value}. Decide which figure the claim "
+                f"states before a validator reads it."
+            )
+        by_field[field_name] = value
+
+    # Date-valued cited facts, by an explicit allowlist of `field_name` and an
+    # explicit format. Not "every field whose name ends in `_date`", and not a
+    # parser that tries several layouts: `measurement_date` is cited as
+    # "December 31, 2023" and `fx_rate_effective_date` as "12/31/2024", so a
+    # guesser would silently pick a reading for a figure a validator then
+    # compares dates against. An unreadable cited date raises for the same
+    # reason a doubled `field_name` does.
+    fact_dates: dict[str, dict[str, date]] = {}
+    for r in conn.execute(
+        "select claim_id, field_name, value_text from extracted_fact"
+        " where field_name = any(%s) and value_text is not null"
+        " order by claim_id, field_name",
+        (list(DATE_FACTS),),
+    ).fetchall():
+        claim_id, field_name, text = _s(r[0]), _s(r[1]), _s(r[2])
+        try:
+            parsed = datetime.strptime(text.strip(), DATE_FACTS[field_name]).date()
+        except ValueError as exc:
+            raise LedgerError(
+                f"claim {claim_id} cites {field_name!r} as {text!r}, which is not "
+                f"{DATE_FACTS[field_name]!r}. A cited date this loader cannot read "
+                f"would reach V7 as 'no rate for this date', which is a verdict."
+            ) from exc
+        by_date = fact_dates.setdefault(claim_id, {})
+        if field_name in by_date and by_date[field_name] != parsed:
+            raise LedgerError(
+                f"claim {claim_id} cites two different dates for {field_name!r}: "
+                f"{by_date[field_name]} and {parsed}."
+            )
+        by_date[field_name] = parsed
+
     claims = tuple(
         EvidenceClaim(
             id=_s(r[0]),
@@ -138,6 +206,8 @@ def load(conn: Conn) -> Ledger:
             stated_currency=None if r[11] is None else _s(r[11]),
             supersedes_claim_id=None if r[12] is None else _s(r[12]),
             requirements=frozenset(reliance.get(_s(r[0]), set())),
+            facts=dict(facts.get(_s(r[0]), {})),
+            fact_dates=dict(fact_dates.get(_s(r[0]), {})),
         )
         for r in conn.execute(
             "select id, holding_id, source_class, execution_status, issued_date,"

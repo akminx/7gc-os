@@ -406,6 +406,27 @@ MUTATIONS: list[Mutation] = [
         " if r.held_at_date and not r.supported),",
         "            unsupported_positions=sum(1 for r in self.rows if not r.supported),",
     ),
+    Mutation(
+        # The defect this restores was real and deployed: `packet_gap_positions`
+        # read 6 against the oracle's 5 because R1 and R2 were demanded on a
+        # position sold in May. It survived 175 requirement comparisons and 92
+        # mutations, because the requirement VERDICTS agreed on both sides and
+        # only the contract's derivation from them did not.
+        "support: demand existence and cost on a position that was not held",
+        MODELS,
+        "        if self.held_at_date:\n            for code in sorted(ALWAYS_APPLICABLE):",
+        "        if True:\n            for code in sorted(ALWAYS_APPLICABLE):",
+    ),
+    Mutation(
+        # And the over-correction in the other direction: skipping the loop
+        # without saying anything makes an unexamined row read as clean.
+        "support: an unheld row with nothing assessed is silently supported",
+        MODELS,
+        "        elif not any(a.applicable for a in self.assessments):\n"
+        '            # And an unheld row with NOTHING applicable is not "clean", it is',
+        "        elif False:\n"
+        '            # And an unheld row with NOTHING applicable is not "clean", it is',
+    ),
     # ── the parse layer: what a citation resolves against ────────────────
     Mutation(
         "pages: count the trailing form feed as an extra page",

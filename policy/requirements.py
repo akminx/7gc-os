@@ -226,12 +226,38 @@ def r2(ledger: Ledger, holding_id: str, on: date) -> Outcome:
         # with counsel and a document nobody can find call for different action,
         # and reducing both to "unsupported" is what makes a gap inventory
         # useless to the person who has to close it.
-        gaps = ledger.gaps_for(holding_id, RequirementCode.R2)
-        kind = gaps[0].kind if gaps else None
-        cell = gap_result(kind)
-        verdicts.append(cell.verdict)
-        actions.update(cell.next_actions)
-        reasons.add(gap_reason(kind, prefix="NO_APPLICABLE_SUPPORT"))
+        #
+        # The first distinction is between never-had and had-and-expired, and it
+        # was missing. Because Market has no portfolio document of any kind;
+        # Moonfare has TWO, and its FY2023 memo closes its own window in its own
+        # words — "should not be relied upon for subsequent measurement dates
+        # without update". Both rendered as `missing` with `REQUEST_FROM_COMPANY`
+        # beside them, which reads as "go and find something" for a fund that
+        # already holds the thing and needs it REFRESHED. Those are different
+        # letters to different people.
+        #
+        # The verdict is `missing` either way and that is right — there is no
+        # support at this date, and an expired memo is not weaker support, it is
+        # no support. What changes is the reason and the action.
+        expired = [
+            c
+            for c in ledger.claims
+            if c.holding_id == holding_id
+            and RequirementCode.R2 in c.requirements
+            and c.applicable_to is not None
+            and c.applicable_to < on
+        ]
+        if expired:
+            verdicts.append(_MISSING)
+            reasons.add("SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW")
+            actions.add("REQUEST_UPDATED_VALUATION")
+        else:
+            gaps = ledger.gaps_for(holding_id, RequirementCode.R2)
+            kind = gaps[0].kind if gaps else None
+            cell = gap_result(kind)
+            verdicts.append(cell.verdict)
+            actions.update(cell.next_actions)
+            reasons.add(gap_reason(kind, prefix="NO_APPLICABLE_SUPPORT"))
 
     contradicted = _contradictions(relied)
     if contradicted:

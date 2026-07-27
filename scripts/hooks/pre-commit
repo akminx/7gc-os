@@ -3,17 +3,50 @@
 # Emergency bypass only (declare it): git commit --no-verify
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
-PY=python3
-if [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"; PATH="$ROOT/.venv/bin:$PATH"; export PATH; fi
-[ -f "$ROOT/scripts/check_all.py" ] && "$PY" "$ROOT/scripts/check_all.py"
+
+# The project's Python is uv-managed and lives in .venv. This used to be
+# `PY=python3` with .venv as an upgrade, so on a machine without .venv the gate
+# ran on whatever `python3` resolved to — Homebrew's 3.14, in the environment
+# where that was tested. That interpreter has none of the project's
+# dependencies, which means checks report clean because they could not import
+# the thing they were meant to inspect. A missing .venv is a broken
+# environment, not a reason to run something else.
+PY="$ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+  echo "pre-commit: no $PY" >&2
+  echo "  the gate runs on the project venv, never a system interpreter." >&2
+  echo "  create it: uv venv --python 3.13 && uv pip install -e '.[dev]'" >&2
+  exit 1
+fi
+PATH="$ROOT/.venv/bin:$PATH"
+export PATH
+
+# Each gate was invoked as `[ -f gate ] && run it`, so deleting one removed it
+# from every commit in silence. A gate that is not installed is a failure to
+# report, not a step to skip.
+require_file() {
+  [ -f "$ROOT/$1" ] || {
+    echo "pre-commit: $1 is missing — the gate is not installed" >&2
+    exit 1
+  }
+}
+require_file scripts/check_all.py
 # The Node half owns .ts/.tsx, which check_all.py deliberately does not read.
-# Without this line the frontend is ungated and the gate means less than it looks.
-[ -f "$ROOT/scripts/check-all.mjs" ] && node "$ROOT/scripts/check-all.mjs"
+# Without it the frontend is ungated and the gate means less than it looks.
+require_file scripts/check-all.mjs
 # Path-derived risk tier (review-policy.yaml). It was invoked by neither gate,
 # so the strongest floor in the policy was evaluated by nothing. Non-interactive
 # ways to satisfy it — no prompt, no flag on `git commit`:
 #   GILLY_DECLARE_TIER=semantic git commit ...
 #   GILLY_ACK_TRUST=1 git commit ...   (trust-critical; needs a queue packet)
 # An empty diff resolves to `routine` and passes.
-[ -f "$ROOT/scripts/check-tier.mjs" ] && node "$ROOT/scripts/check-tier.mjs"
-exit 0
+require_file scripts/check-tier.mjs
+
+command -v node >/dev/null 2>&1 || {
+  echo "pre-commit: node is not on PATH — two of the three gates cannot run" >&2
+  exit 1
+}
+
+"$PY" "$ROOT/scripts/check_all.py"
+node "$ROOT/scripts/check-all.mjs"
+node "$ROOT/scripts/check-tier.mjs"

@@ -42,7 +42,16 @@ app.add_middleware(
     allow_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o]
     or ["http://localhost:5173"],
     allow_origin_regex=PREVIEW_ORIGIN,
-    allow_methods=["GET"],
+    # GET for every read route, POST for `/decisions` and nothing else. A JSON
+    # POST preflights, so a GET-only list made the browser fail before the API
+    # ever saw the request — the approve control would have been dead on the
+    # deployed UI while working perfectly in every test, because `TestClient`
+    # does not preflight.
+    #
+    # Widening this to `["*"]` would be the easy version and the wrong one:
+    # SPEC §3.1 keeps the write surface to one route, and the method list is
+    # part of how that stays true from the browser's side.
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 

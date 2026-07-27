@@ -31,6 +31,10 @@ def dsn(key: str = "DATABASE_URL") -> str | None:
     return load_env().get(key) or None
 
 
+class SchemaNameError(ValueError):
+    """A schema name that cannot safely be interpolated into `search_path`."""
+
+
 def ledger_schema() -> str:
     """Which schema the application reads. `public` unless told otherwise.
 
@@ -46,3 +50,23 @@ def ledger_schema() -> str:
     that differs between them.
     """
     return load_env().get("LEDGER_SCHEMA") or "public"
+
+
+def resolve_schema(requested: str | None) -> str:
+    """The schema a caller asked for, checked as an identifier.
+
+    Three copies of this existed — `ingest/load.py`, `ingest/documents/load.py`,
+    and `api/routes.py::_connect` — because a `search_path` is set by
+    formatting, not by parameterising: `set search_path to %s` quotes the value
+    as a string literal and silently selects nothing. So every caller that sets
+    one has to check that the value cannot be SQL, and each copy was a separate
+    chance to check it differently or to forget.
+
+    `is None`, not falsy. Omitting the flag means "use the default"; passing it
+    empty is a caller stating a schema it cannot have meant, and collapsing the
+    two let `--schema ""` fall through to the demo ledger holding the fund.
+    """
+    schema = ledger_schema() if requested is None else requested
+    if not schema.replace("_", "").isalnum():
+        raise SchemaNameError(f"{schema!r} is not a plain identifier")
+    return schema

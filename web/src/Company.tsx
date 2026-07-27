@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-
+import { CoverageMap } from "./Coverage";
 import type { HoldingRow } from "./contracts";
 import type { Async } from "./data";
 import { failureDetail, loadHolding } from "./data";
 import { EvidencePanel } from "./Evidence";
 import type { HoldingResponse } from "./responses";
+import { EvidenceTrail } from "./Trail";
+import { Section, SourceBadge } from "./ui";
 import { Workspace } from "./Workspace";
 
 /**
@@ -73,12 +75,49 @@ export function Company({
         <p className="note">Loading the evidence for this holding…</p>
       )}
       {evidence.kind === "error" && (
-        <p className="error">
+        <p
+          className="error"
+          title="A failed request and a finding of no evidence are opposite states, and must never render the same way."
+        >
           Evidence request failed: {evidence.detail}. This is a failed request, not a finding of no
-          evidence — the two must never render the same way.
+          evidence.
         </p>
       )}
-      {evidence.kind === "ready" && <EvidencePanel holding={evidence.data} />}
+      {evidence.kind === "ready" && (
+        <>
+          <Section
+            title="Coverage"
+            hint="Documents on file down the side, the five requirements across the top, a mark where a requirement relies on a document. A column with no mark is a gap. A row with no mark is a document nothing depends on."
+          >
+            <p className="note">
+              <SourceBadge source={evidence.data.source} /> · holding{" "}
+              <code>{evidence.data.holding_id}</code>
+            </p>
+            <CoverageMap claims={evidence.data.evidence} assessments={row.assessments} />
+          </Section>
+
+          <Section
+            title="Evidence trail"
+            note="Pick a requirement, then a figure, to open the passage that states it."
+            hint="The passage on the right is the stored document version, with the cited characters marked in place at the offsets an auditor re-verifies against."
+          >
+            <EvidenceTrail
+              assessments={row.assessments}
+              claims={evidence.data.evidence}
+              gaps={row.gaps}
+            />
+          </Section>
+
+          {/* The full inventory, folded away. It is the appendix to the trail
+              above — every claim on file with every figure and passage under it
+              — and it is closed by default because the trail is the path a
+              reader takes and this is what they check it against. */}
+          <details className="appendix">
+            <summary>All claims on file for this holding, in full</summary>
+            <EvidencePanel holding={evidence.data} />
+          </details>
+        </>
+      )}
 
       <Workspace row={row} />
     </>

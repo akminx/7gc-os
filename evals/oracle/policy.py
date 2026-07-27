@@ -26,6 +26,15 @@ from model import (
     worst,
 )
 
+#: The one derivation status whose figure is STATED but confirms nothing, so it
+#: is published under `carried_amount` and never under `validated_amount`.
+#:
+#: Named rather than compared inline in three places. The routing rule is the
+#: finding — a figure the audited party states about its own position is not a
+#: validation — and a rule spelled out at each site is a rule that can be
+#: applied at two of them.
+CARRIED_NOT_VALIDATED = "management_carrying_value"
+
 
 class PolicyMixin:
     def matrix_lookup(self, req: str, doc: dict, position_type: str) -> dict:
@@ -61,7 +70,25 @@ class PolicyMixin:
                 if d(doc["date"]) > on:
                     continue
             out.append((link["document"], doc))
-        return out
+        # Chronological, then by document name. ORDER IS PART OF THE PUBLISHED
+        # ANSWER: `relied_on` reaches the packet as a list an auditor reads, and
+        # evidence reads in the order it arose. A derivation that leaves it to
+        # the order `links` happens to be written down in is publishing an
+        # artefact of a YAML file as though it were a finding.
+        #
+        # Derived from that rule directly, and deliberately NOT by reading how
+        # `policy/` does it. One rule written twice is the whole point of this
+        # oracle: if the two implementations ever diverge again, the comparison
+        # has to be able to SAY so, which it cannot do if one was copied from
+        # the other.
+        #
+        # Unsorted, this returned declaration order, which matched the product
+        # by luck for as long as no holding relied on two documents of the same
+        # date. Fluidstack's A-2 link ended that — it and the Series B cap table
+        # are both 12/18/2025, cited from the same PDF — and the disagreement
+        # was invisible because the anchors that would have shown it were
+        # wrapping this value in `sorted()`.
+        return sorted(out, key=lambda link: (d(link[1]["date"]), link[0]))
 
     def supersede(self, links: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
         """SPEC §7.4. Supersession is WITHIN a priced class, not global.
@@ -152,12 +179,35 @@ class PolicyMixin:
                 actions.add(row["next_action"])
 
         if not links:
-            gaps = self.gaps_for(holding, "R2")
-            kind = gaps[0]["kind"] if gaps else "none"
-            gv = self.gap_verdicts[kind]
-            verdicts.append(gv["verdict"])
-            actions.add(gv["next_action"])
-            reasons.add(f"NO_APPLICABLE_SUPPORT_{kind.upper()}")
+            # Never-had and had-and-expired are different findings. Because
+            # Market holds no document of any kind. Moonfare and Capsule each
+            # hold a third-party memo that closes its OWN window — "should not
+            # be relied upon for subsequent measurement dates without update"
+            # (INV-16, and the sentence is itself a cited fact). Reporting both
+            # as "request from the company" sends an auditor to look for
+            # something the fund already has and needs refreshed.
+            #
+            # The verdict stays `missing` in both cases, and that is the point
+            # worth keeping: an expired memo is not weaker support, it is no
+            # support. Only the reason and the action separate them.
+            expired = [
+                name
+                for link in self.links
+                if link["holding"] == holding and link["requirement"] == "R2"
+                for name in [link["document"]]
+                if (to := d(self.docs[name].get("applicable_to"))) is not None and to < on
+            ]
+            if expired:
+                verdicts.append("missing")
+                reasons.add("SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW")
+                actions.add("REQUEST_UPDATED_VALUATION")
+            else:
+                gaps = self.gaps_for(holding, "R2")
+                kind = gaps[0]["kind"] if gaps else "none"
+                gv = self.gap_verdicts[kind]
+                verdicts.append(gv["verdict"])
+                actions.add(gv["next_action"])
+                reasons.add(f"NO_APPLICABLE_SUPPORT_{kind.upper()}")
 
         # Q1-8: two relied-upon documents asserting the SAME claim with
         # different prices materially contradict. `conflicting` dominates and
@@ -385,8 +435,40 @@ class PolicyMixin:
         """
         if not relied:
             return None, "not_derivable", "NO_APPLICABLE_EVIDENCE", []
+        # WHOSE WORD the stated figure is. `concluded_value` alone used to mean
+        # "a third party concluded it", so Moonfare's FY2024 memo — the fund's
+        # OWN paperwork, `fund_internal_record`, "Prepared by Fund Operations;
+        # reviewed by the CFO" — minted THIRD_PARTY_CONCLUSION and V2 passed on
+        # management confirming management. The application carried the same
+        # preference, so 175 comparisons agreed with the defect and this answer
+        # key could not have caught it. A cross-family pass did.
+        #
+        # `management_carrying_value` is derivable and states a real figure; it
+        # simply cannot confirm the mark, because the fund authored both.
         for _, doc in relied:
             if doc.get("concluded_value") is not None:
+                if doc.get("source_class") == "fund_internal_record":
+                    # The figure is returned, and callers publish it under
+                    # `carried_amount` rather than `validated_amount` — see
+                    # CARRIED_NOT_VALIDATED. INV-13 keeps reported, validated
+                    # and supported apart, and a figure the fund states about
+                    # its own position is the first of those wearing the
+                    # second's clothes.
+                    #
+                    # It used to return None here, on the reasoning that the
+                    # number "IS the reported mark, so it does not need
+                    # repeating". True of this corpus and not of the rule: it
+                    # is true only while the tracker's figure and the memo's
+                    # agree, and the case where they DIVERGE is the one an
+                    # auditor most needs to see. Returning it makes the two
+                    # separately visible; routing it to another key keeps it
+                    # out of the column that means "confirmed".
+                    return (
+                        money(doc["concluded_value"]),
+                        CARRIED_NOT_VALIDATED,
+                        "MANAGEMENT_CARRYING_VALUE",
+                        [],
+                    )
                 return money(doc["concluded_value"]), "derivable", "THIRD_PARTY_CONCLUSION", []
             if doc.get("nav") is not None:
                 return money(doc["nav"]), "derivable", "ADMINISTRATOR_NAV", []
@@ -454,7 +536,13 @@ class PolicyMixin:
             "reported": self.obs.get(holding, {}).get(
                 self._period_id(self.holdings[holding]["fund"], on)
             ),
-            "validated": fmt(val) if val is not None else None,
+            # `validated` stays None for a carried figure, which is what this
+            # digest already recorded when `validated_amount` returned None for
+            # it. Deliberately unchanged: the digest decides whether a recorded
+            # approval still covers the thing approved, so widening it to
+            # mention the carried figure would invalidate every existing
+            # approval to record something no approver was shown.
+            "validated": fmt(val) if val is not None and dstatus != CARRIED_NOT_VALIDATED else None,
             "derivation_status": dstatus,
             "derivation_reason": dreason,
             "verdict": r2["verdict"],

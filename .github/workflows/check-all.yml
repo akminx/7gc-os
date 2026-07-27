@@ -22,6 +22,17 @@ jobs:
           --health-retries 20
     env:
       MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/sevengc # pragma: allowlist secret
+      # The same database under the name the application resolves. `dsn()` in
+      # api/config.py defaults to DATABASE_URL and only the schema suites ask
+      # for MIGRATION_DATABASE_URL, so a job that set the second and not the
+      # first ran a Postgres service that a whole class of suites could not
+      # find: they skipped with "no DATABASE_URL" while the database was up.
+      # Every developer's .env sets both; CI now says the same thing.
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/sevengc # pragma: allowlist secret
+      # Named rather than defaulted. `ledger_schema()` falls back to `public`,
+      # which is what CI wants, but a developer machine sets `demo` — so the
+      # value CI runs under should not be the one nobody writes down.
+      LEDGER_SCHEMA: public
       # Turns a skipped database guard into a red gate — see check_db_guards
       # in scripts/check_all.py. Unset locally, where a developer may have no
       # database and the guards legitimately do not run.

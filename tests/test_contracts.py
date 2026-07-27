@@ -169,6 +169,58 @@ def test_an_empty_assessment_set_is_not_supported() -> None:
     assert _row([]).supported is False
 
 
+# ── ¶1 vs ¶4 · what an UNHELD row is answerable for ──────────────────────
+# The audit letter asks for existence and cost "for each portfolio investment
+# held during the periods under audit" (¶1), and for realisation support
+# separately (¶4). A position sold mid-period is the second, not the first.
+# `unsupported_reasons` demanded R1 and R2 on every row regardless, so
+# Jackpocket at 2024-12-31 — sold in May, `fully_supported: true` in
+# `evals/oracle/derived.json` — was reported as an open gap by the deployed
+# API (`packet_gap_positions: 6` against the oracle's 5). Three tests, because
+# the fix has two ways to be wrong and the third is the check whose absence was
+# the real finding.
+
+
+def test_an_unheld_row_is_not_asked_for_existence_and_cost_it_cannot_have() -> None:
+    """The defect, in the oracle's exact shape: R1/R2 not_applicable, R4
+    sufficient. Chasing existence-and-cost paperwork for a position that did not
+    exist at the measurement date is work the letter never asked for."""
+    row = _row(
+        [
+            _na(RequirementCode.R1),
+            _na(RequirementCode.R2),
+            _assessment(RequirementCode.R4, RequirementVerdict.SUFFICIENT),
+        ],
+        held=False,
+    )
+    assert row.unsupported_reasons == {}
+    assert row.supported is True
+
+
+def test_an_unheld_row_with_short_realisation_evidence_is_still_a_gap() -> None:
+    """The over-correction to refuse: "unheld" must not become "clean". R4 is
+    the letter's ¶4, and a realised position whose realisation evidence is
+    missing is exactly the row an auditor needs to see."""
+    row = _row(
+        [
+            _na(RequirementCode.R1),
+            _na(RequirementCode.R2),
+            _assessment(RequirementCode.R4, RequirementVerdict.MISSING),
+        ],
+        held=False,
+    )
+    assert row.supported is False
+    assert row.unsupported_reasons == {RequirementCode.R4: "missing"}
+
+
+def test_an_unheld_row_with_nothing_applicable_is_unexamined_not_supported() -> None:
+    """Skipping the always-applicable loop makes an empty assessment set read as
+    supported unless something says otherwise. That would trade a gap the
+    auditor should not chase for a gap nobody would ever see."""
+    assert _row([], held=False).supported is False
+    assert _row([_na(RequirementCode.R1), _na(RequirementCode.R2)], held=False).supported is False
+
+
 def test_adverse_verdicts_must_carry_a_reason_code() -> None:
     with pytest.raises(ValidationError, match="at least one reason code"):
         RequirementAssessment(
@@ -202,7 +254,17 @@ def test_a_realised_row_may_have_no_existence_or_fair_value_requirement() -> Non
 
     A position sold during the period has no mark at the measurement date and no
     position whose existence can be evidenced at it. Refusing this shape made the
-    packet unable to carry the one class of row the letter asks for by name."""
+    packet unable to carry the one class of row the letter asks for by name.
+
+    This test used to end `assert row.supported is False`, which was never what
+    it set out to prove — the docstring is about the shape being CONSTRUCTIBLE —
+    and which contradicted `evals/oracle/derived.json`, where this row is
+    `fully_supported: true`. It survived because nothing compared the contract's
+    derived flag to the oracle's; the requirement verdicts agreed, and the
+    disagreement was created afterwards by the contract's own derivation.
+    Support is now asserted by
+    `test_an_unheld_row_is_not_asked_for_existence_and_cost_it_cannot_have`, and
+    checked against the oracle directly in `tests/test_policy_vs_oracle.py`."""
     row = _row(
         [
             _na(RequirementCode.R1),
@@ -211,7 +273,11 @@ def test_a_realised_row_may_have_no_existence_or_fair_value_requirement() -> Non
         ],
         held=False,
     )
-    assert row.supported is False
+    assert [a.requirement for a in row.assessments] == [
+        RequirementCode.R1,
+        RequirementCode.R2,
+        RequirementCode.R4,
+    ]
 
 
 def test_a_conditional_requirement_may_be_not_applicable() -> None:

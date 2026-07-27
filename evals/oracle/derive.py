@@ -30,7 +30,8 @@ from decimal import Decimal
 
 from checks import ChecksMixin
 from model import HERE, OracleBase, fmt, money
-from policy import PolicyMixin
+
+from policy import CARRIED_NOT_VALIDATED, PolicyMixin
 
 
 class Oracle(ChecksMixin, PolicyMixin, OracleBase):
@@ -56,12 +57,26 @@ class Oracle(ChecksMixin, PolicyMixin, OracleBase):
             "date": on.isoformat(),
             "held_at_date": held_at_date,
             "reported_amount": amount,
-            "validated_amount": fmt(val) if val is not None else None,
+            # Two keys, because the figures answer two different questions.
+            # `validated_amount` is what this derivation CONFIRMED; it is null
+            # whenever nothing was confirmed, including when a real figure was
+            # read off the audited party's own memo. `carried_amount` is that
+            # figure. Publishing one under the other's name is the collapse
+            # `not_comparable` exists to prevent, moved into the answer key.
+            "validated_amount": (
+                fmt(val) if val is not None and dstatus != CARRIED_NOT_VALIDATED else None
+            ),
+            "carried_amount": fmt(val) if dstatus == CARRIED_NOT_VALIDATED else None,
             "derivation_status": dstatus,
             "derivation_reason": dreason,
             "derivation_lineage": dlineage,
+            # Still null for a carried figure: comparing the fund's own number
+            # to the mark the fund took FROM it is the circularity, and
+            # answering `true` is what that circularity produces.
             "validated_matches_reported": (
-                None if (val is None or amount is None) else money(amount) == val
+                None
+                if (val is None or amount is None or dstatus == CARRIED_NOT_VALIDATED)
+                else money(amount) == val
             ),
             "requirements": {k: v for k, v in reqs.items()},
             "applicable_count": len(applicable),

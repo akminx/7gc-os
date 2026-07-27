@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 import type {
   Approval,
@@ -25,18 +26,57 @@ import type { Source } from "./responses";
 
 /** Shared display primitives. None of them decides anything. */
 
+/**
+ * The paragraph, one hover away instead of in the reading path.
+ *
+ * The distinctions this product is built on each need a paragraph, and a
+ * paragraph under every heading buries the figure the reader came for. The text
+ * stays in the DOM — announced, searchable, quotable — and leaves the scan.
+ */
+export function Why({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="why-wrap">
+      <button
+        type="button"
+        className="why"
+        aria-expanded={open}
+        aria-label={open ? "Hide the explanation" : "Explain this"}
+        title={text}
+        onClick={() => {
+          setOpen((was) => !was);
+        }}
+      >
+        <span aria-hidden="true">?</span>
+      </button>
+      {open && <span className="why__body">{text}</span>}
+      <span className="vh">{text}</span>
+    </span>
+  );
+}
+
+/**
+ * `note` is one line the reader needs. `hint` is the reasoning behind it, which
+ * lives on the mark beside the heading. The affordance sits outside the `h2` so
+ * the heading's text is still only its title.
+ */
 export function Section({
   title,
   note,
+  hint,
   children,
 }: {
   title: string;
   note?: string;
+  hint?: string;
   children: ReactNode;
 }) {
   return (
     <section className="section">
-      <h2>{title}</h2>
+      <div className="section__head">
+        <h2>{title}</h2>
+        {hint !== undefined && <Why text={hint} />}
+      </div>
       {note !== undefined && <p className="note">{note}</p>}
       {children}
     </section>
@@ -165,12 +205,32 @@ export function SourceFactItem({ fact }: { fact: SourceFact }) {
  * INV-2 · one visible treatment per verdict, seven of them, no shared "not ok".
  * The glyph carries the same distinction as the colour so the seven stay
  * distinguishable without it.
+ *
+ * `compact` takes the label out of the reading order and leaves it in the
+ * accessibility tree. It is for the holdings table, where five verdicts sit in
+ * five columns under headings that already say R1 to R5, and where a partner is
+ * scanning eight rows for the one in trouble rather than reading seven words per
+ * row. The label is still in the DOM, still in the tooltip, and still announced.
+ *
+ * The seven remain distinguishable without colour in either form, because the
+ * glyph is what carries the distinction and the glyph never leaves.
  */
-export function VerdictChip({ verdict }: { verdict: RequirementVerdict }) {
+export function VerdictChip({
+  verdict,
+  compact,
+}: {
+  verdict: RequirementVerdict;
+  compact?: boolean;
+}) {
   const term = VERDICT[verdict];
+  const classes =
+    compact === true
+      ? `verdict verdict--${verdict} verdict--compact`
+      : `verdict verdict--${verdict}`;
   return (
-    <span className={`verdict verdict--${verdict}`} title={term.meaning}>
-      <span aria-hidden="true">{term.glyph}</span> {term.label}
+    <span className={classes} title={`${term.label} — ${term.meaning}`}>
+      <span aria-hidden="true">{term.glyph}</span>{" "}
+      <span className={compact === true ? "vh" : undefined}>{term.label}</span>
     </span>
   );
 }
@@ -207,9 +267,11 @@ export function SupportState({
     <span className="support support--unsupported">
       <span className="support__flag">unsupported</span>
       {entries.length === 0 ? (
-        <span className="sub">
-          The API reports this row unsupported and sent no reason for it — a disagreement between
-          two fields it computes, not a state this screen can resolve.
+        <span
+          className="sub"
+          title="The API reports this row unsupported and sent no reason for it: a disagreement between two fields it computes, not a state this screen can resolve."
+        >
+          no reason supplied · a disagreement between two fields the API computes
         </span>
       ) : (
         <ul className="support__reasons">
@@ -257,7 +319,7 @@ export function ApprovalState({
   const fairValue = (
     <span
       className={approved ? "approval__fv approval__fv--yes" : "approval__fv approval__fv--no"}
-      title="INV-10 · only a recorded valuation approval citing its assessments creates this."
+      title="Only a recorded valuation approval that names the evidence it relied on creates this."
     >
       {approved ? "counts as approved fair value" : "not an approved fair value"}
     </span>
@@ -266,7 +328,7 @@ export function ApprovalState({
     return (
       <span
         className="approval approval--none"
-        title="INV-10 · an approval is a record, not an inference"
+        title="An approval is something a person recorded. Nothing unsupported becomes approved by having no objections."
       >
         no approval recorded
         {fairValue}
@@ -308,10 +370,16 @@ export function ClaimFacts({ claim }: { claim: Claim }) {
     <>
       <div className="evidence__head">
         <code>{claim.id}</code>
-        <span className="tag tag--authority" title="INV-15 · authority lives on the claim">
+        <span
+          className="tag tag--authority"
+          title="Whose word this is. One document can carry statements of different authority, so this describes the assertion rather than the file."
+        >
           authority · {SOURCE_CLASS[claim.source_class]}
         </span>
-        <span className="tag tag--exec" title="INV-4 · a signed document and a proposed one differ">
+        <span
+          className="tag tag--exec"
+          title="Whether the document is signed, proposed, or refers to a closing set held elsewhere."
+        >
           artifact · {EXECUTION_STATUS[claim.execution_status]}
         </span>
       </div>
@@ -383,14 +451,13 @@ export function GapItem({ gap, heading }: { gap: GapObservation; heading: ReactN
     <li className={`gap gap--${gap.kind}`}>
       <div className="gap__head">
         {heading}
-        <span className={`gap-kind gap-kind--${gap.kind}`}>{kind.label}</span>
+        <span className={`gap-kind gap-kind--${gap.kind}`} title={`${kind.meaning} ${kind.next}`}>
+          {kind.label}
+        </span>
         <span className="tag">remediation · {gap.remediation}</span>
       </div>
       <p className="gap__doc">{gap.missing_document}</p>
       <blockquote>{gap.source_quote}</blockquote>
-      <p className="note">
-        {kind.meaning} {kind.next}
-      </p>
       <Meta
         items={[
           { label: "requirement", value: gap.requirement },

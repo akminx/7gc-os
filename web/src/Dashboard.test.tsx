@@ -60,8 +60,13 @@ describe("totals", () => {
       { label: "packet gap positions (held or not)", value: "2" },
       { label: "unsupported but not held at this date", value: "1" },
     ]);
-    expect(screen.getByText(/superset/)).toBeDefined();
-    expect(screen.getByText(/not additive/)).toBeDefined();
+    // Non-additivity stays on the page; the paragraph explaining why is on the
+    // mark beside it and on the count it qualifies.
+    expect(screen.getByText(/The three counts are not additive/)).toBeDefined();
+    const hints = [...container.querySelectorAll(".totals .why")].map((el) =>
+      el.getAttribute("title"),
+    );
+    expect(hints.join(" ")).toMatch(/superset/);
   });
 
   /**
@@ -192,9 +197,16 @@ describe("holding rows", () => {
     expect(screen.getAllByText("absent").length).toBe(4);
   });
 
-  it("declines to compute the sufficient / applicable fraction SPEC 7.1 asks for", () => {
-    show();
-    expect(screen.getByText(/counting rows is an aggregate/)).toBeDefined();
+  it("shows the five verdicts rather than reducing them to a score", () => {
+    const { container } = show();
+    const hints = [...container.querySelectorAll(".why")].map((el) => el.getAttribute("title"));
+    // The property is that a ratio is NOT rendered and the reason is stated in
+    // the reader's terms. It matched on "a count over rows, which the API owns"
+    // — the architectural reason, which is now a code comment rather than
+    // screen copy, because an auditor does not know or care which layer counts.
+    expect(hints.join(" ")).toMatch(/a ratio hides which requirement is short/);
+    // The five verdicts, not a ratio over them.
+    expect(container.querySelectorAll("thead .rcol")).toHaveLength(5);
   });
 
   /**

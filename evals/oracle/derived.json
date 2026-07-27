@@ -933,6 +933,7 @@
       "held_at_date": true,
       "reported_amount": "1000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -985,6 +986,7 @@
       "held_at_date": true,
       "reported_amount": "1000000",
       "validated_amount": "1000000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "THIRD_PARTY_CONCLUSION",
       "derivation_lineage": [],
@@ -1035,6 +1037,7 @@
       "held_at_date": true,
       "reported_amount": "2000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -1087,6 +1090,7 @@
       "held_at_date": true,
       "reported_amount": "2000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -1139,6 +1143,7 @@
       "held_at_date": true,
       "reported_amount": "1000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -1199,11 +1204,12 @@
       "date": "2024-12-31",
       "held_at_date": true,
       "reported_amount": "1048515",
-      "validated_amount": "1048515",
-      "derivation_status": "derivable",
-      "derivation_reason": "THIRD_PARTY_CONCLUSION",
+      "validated_amount": null,
+      "carried_amount": "1048515",
+      "derivation_status": "management_carrying_value",
+      "derivation_reason": "MANAGEMENT_CARRYING_VALUE",
       "derivation_lineage": [],
-      "validated_matches_reported": true,
+      "validated_matches_reported": null,
       "requirements": {
         "R1": {
           "verdict": "missing",
@@ -1254,6 +1260,7 @@
       "held_at_date": true,
       "reported_amount": "2000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -1315,6 +1322,7 @@
       "held_at_date": true,
       "reported_amount": "2000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -1367,6 +1375,7 @@
       "held_at_date": true,
       "reported_amount": "1500000",
       "validated_amount": "1500000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -1429,6 +1438,7 @@
       "held_at_date": true,
       "reported_amount": "2000000",
       "validated_amount": "2000000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -1486,6 +1496,7 @@
       "held_at_date": true,
       "reported_amount": "1000000",
       "validated_amount": "1000000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -1543,6 +1554,7 @@
       "held_at_date": false,
       "reported_amount": null,
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -1596,6 +1608,7 @@
       "held_at_date": true,
       "reported_amount": "1000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -1657,6 +1670,7 @@
       "held_at_date": true,
       "reported_amount": "1048515",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -1674,10 +1688,10 @@
         "R2": {
           "verdict": "missing",
           "reasons": [
-            "NO_APPLICABLE_SUPPORT_NONE"
+            "SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW"
           ],
           "next_actions": [
-            "REQUEST_FROM_COMPANY"
+            "REQUEST_UPDATED_VALUATION"
           ],
           "relied_on": [],
           "cross_class": false,
@@ -1718,6 +1732,7 @@
       "held_at_date": true,
       "reported_amount": "350000",
       "validated_amount": "350000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -1782,6 +1797,7 @@
       "held_at_date": true,
       "reported_amount": "8000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_PRICE_IN_EVIDENCE",
       "derivation_lineage": [],
@@ -1840,6 +1856,7 @@
       "held_at_date": true,
       "reported_amount": "2250000",
       "validated_amount": "1500000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -1909,6 +1926,7 @@
       "held_at_date": true,
       "reported_amount": "2000000",
       "validated_amount": "2000000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -1974,11 +1992,29 @@
       "date": "2025-12-31",
       "held_at_date": true,
       "reported_amount": "6000000",
-      "validated_amount": null,
-      "derivation_status": "not_derivable",
-      "derivation_reason": "NO_PRICE_FOR_CLASS:series_a2",
-      "derivation_lineage": [],
-      "validated_matches_reported": null,
+      "validated_amount": "2500000",
+      "carried_amount": null,
+      "derivation_status": "derivable",
+      "derivation_reason": "PER_CLASS_SHARES_X_PPS",
+      "derivation_lineage": [
+        {
+          "lot": "fluid_1",
+          "class": "series_a",
+          "pps": "10.00",
+          "shares": 100000,
+          "amount": "1000000",
+          "cross_class": false
+        },
+        {
+          "lot": "fluid_2",
+          "class": "series_a2",
+          "pps": "15.00",
+          "shares": 100000,
+          "amount": "1500000",
+          "cross_class": false
+        }
+      ],
+      "validated_matches_reported": false,
       "requirements": {
         "R1": {
           "verdict": "partial",
@@ -1993,16 +2029,16 @@
         "R2": {
           "verdict": "partial",
           "reasons": [
+            "CLOSING_SET_PENDING",
             "CROSS_CLASS_POLICY_DECISION_REQUIRED",
-            "PRO_FORMA_PENDING_EXECUTION",
-            "UNCOVERED_SECURITY_CLASS"
+            "PRO_FORMA_PENDING_EXECUTION"
           ],
           "next_actions": [
-            "RECORD_VALUATION_POLICY_DECISION",
-            "REQUEST_SUPPORT_FOR_CLASS"
+            "RECORD_VALUATION_POLICY_DECISION"
           ],
           "relied_on": [
             "fluidstack_a_spa",
+            "fluidstack_a2_ref",
             "fluidstack_b_cap"
           ],
           "cross_class": true,
@@ -2038,6 +2074,7 @@
       "held_at_date": true,
       "reported_amount": "5000000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_PRICE_FOR_CLASS:series_a1",
       "derivation_lineage": [],
@@ -2099,6 +2136,7 @@
       "held_at_date": true,
       "reported_amount": "600000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -2116,10 +2154,10 @@
         "R2": {
           "verdict": "missing",
           "reasons": [
-            "NO_APPLICABLE_SUPPORT_NONE"
+            "SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW"
           ],
           "next_actions": [
-            "REQUEST_FROM_COMPANY"
+            "REQUEST_UPDATED_VALUATION"
           ],
           "relied_on": [],
           "cross_class": false,
@@ -2151,6 +2189,7 @@
       "held_at_date": true,
       "reported_amount": "2750000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "COMPONENT_WITHOUT_SHARE_COUNT",
       "derivation_lineage": [],
@@ -2211,6 +2250,7 @@
       "held_at_date": true,
       "reported_amount": "1500000",
       "validated_amount": "1500000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -2277,6 +2317,7 @@
       "held_at_date": true,
       "reported_amount": "1000000",
       "validated_amount": "1000000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "ADMINISTRATOR_NAV",
       "derivation_lineage": [],
@@ -2325,6 +2366,7 @@
       "held_at_date": true,
       "reported_amount": "120000",
       "validated_amount": "120000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -2384,6 +2426,7 @@
       "held_at_date": true,
       "reported_amount": "600000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -2401,10 +2444,10 @@
         "R2": {
           "verdict": "missing",
           "reasons": [
-            "NO_APPLICABLE_SUPPORT_NONE"
+            "SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW"
           ],
           "next_actions": [
-            "REQUEST_FROM_COMPANY"
+            "REQUEST_UPDATED_VALUATION"
           ],
           "relied_on": [],
           "cross_class": false,
@@ -2445,6 +2488,7 @@
       "held_at_date": true,
       "reported_amount": "2750000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "COMPONENT_WITHOUT_SHARE_COUNT",
       "derivation_lineage": [],
@@ -2518,6 +2562,7 @@
       "held_at_date": true,
       "reported_amount": "1500000",
       "validated_amount": "1500000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -2584,6 +2629,7 @@
       "held_at_date": true,
       "reported_amount": "1000000",
       "validated_amount": "1000000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "ADMINISTRATOR_NAV",
       "derivation_lineage": [],
@@ -2632,6 +2678,7 @@
       "held_at_date": true,
       "reported_amount": "55000",
       "validated_amount": "55000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -2691,6 +2738,7 @@
       "held_at_date": true,
       "reported_amount": "600000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "NO_APPLICABLE_EVIDENCE",
       "derivation_lineage": [],
@@ -2708,10 +2756,10 @@
         "R2": {
           "verdict": "missing",
           "reasons": [
-            "NO_APPLICABLE_SUPPORT_NONE"
+            "SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW"
           ],
           "next_actions": [
-            "REQUEST_FROM_COMPANY"
+            "REQUEST_UPDATED_VALUATION"
           ],
           "relied_on": [],
           "cross_class": false,
@@ -2752,6 +2800,7 @@
       "held_at_date": true,
       "reported_amount": "2750000",
       "validated_amount": null,
+      "carried_amount": null,
       "derivation_status": "not_derivable",
       "derivation_reason": "COMPONENT_WITHOUT_SHARE_COUNT",
       "derivation_lineage": [],
@@ -2825,6 +2874,7 @@
       "held_at_date": true,
       "reported_amount": "1500000",
       "validated_amount": "1500000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -2891,6 +2941,7 @@
       "held_at_date": true,
       "reported_amount": "1000000",
       "validated_amount": "1000000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "ADMINISTRATOR_NAV",
       "derivation_lineage": [],
@@ -2941,6 +2992,7 @@
       "held_at_date": true,
       "reported_amount": "31000",
       "validated_amount": "31000",
+      "carried_amount": null,
       "derivation_status": "derivable",
       "derivation_reason": "PER_CLASS_SHARES_X_PPS",
       "derivation_lineage": [
@@ -3049,6 +3101,7 @@
       "underived_marks": [
         "anthropic",
         "because_market",
+        "moonfare",
         "sway"
       ],
       "labels": [
@@ -3078,13 +3131,13 @@
         "sway"
       ],
       "mismatched_marks": [
+        "fluidstack",
         "lucra"
       ],
       "underived_marks": [
         "anthropic",
         "because_market",
         "dream",
-        "fluidstack",
         "moonfare"
       ],
       "labels": [

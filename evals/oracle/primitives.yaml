@@ -138,8 +138,8 @@ documents:
   lucra_term_sheet:  {source_file: "Lucra term sheet.pdf", claim: lucra/series_a1_price, holding: lucra,      source_class: company_communication,     execution_status: non_binding,          date: "2024-05-20", applicable_from: "2024-05-20", applicable_to: null, priced_class: series_a1, pps: "2.00"}
   lucra_ceo_email:   {source_file: "Lucra CEO email.txt", claim: lucra/series_a2_price, holding: lucra,      source_class: company_communication,     execution_status: unexecuted_referenced, date: "2025-10-17", applicable_from: "2025-10-17", applicable_to: null, priced_class: series_a2, pps: "3.00"}
   anthropic_press:   {source_file: "The Signal.txt", claim: anthropic/round_rumour, holding: anthropic,  source_class: press,                     execution_status: not_applicable,       date: "2025-12-09", applicable_from: "2025-12-09", applicable_to: null, priced_class: null,      pps: null}
-  moonfare_memo_23:  {source_file: "Moonfare FY2023 memo.pdf", claim: moonfare/fy2023_value, holding: moonfare,   source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2023-12-31", applicable_from: "2023-12-31", applicable_to: "2023-12-31", priced_class: null, pps: null, concluded_value: "1000000", fx_rate: "1.0526"}
-  moonfare_fx_24:    {source_file: "Moonfare FX memo.pdf", claim: moonfare/fy2024_value, holding: moonfare,   source_class: fund_internal_record, execution_status: not_applicable,      date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: null, pps: null, concluded_value: "1048515", fx_rate: "1.1037"}
+  moonfare_memo_23:  {source_file: "Moonfare FY2023 memo.pdf", claim: moonfare/fy2023_value, holding: moonfare,   source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2023-12-31", applicable_from: "2023-12-31", applicable_to: "2023-12-31", priced_class: null, pps: null, concluded_value: "1000000", fx_rate: "1.0526", fx_rate_effective_date: "2023-12-31"}
+  moonfare_fx_24:    {source_file: "Moonfare FX memo.pdf", claim: moonfare/fy2024_value, holding: moonfare,   source_class: fund_internal_record, execution_status: not_applicable,      date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: null, pps: null, concluded_value: "1048515", fx_rate: "1.1037", fx_rate_effective_date: "2024-12-31"}
   capsule_memo_22:   {source_file: "Capsule FY2022 memo.pdf", claim: capsule/fy2022_value, holding: capsule,    source_class: third_party_valuation_memo, execution_status: not_applicable,      date: "2022-12-31", applicable_from: "2022-12-31", applicable_to: "2022-12-31", priced_class: series_b, pps: "1.20"}
   mom_c_term_sheet:  {source_file: "MomProject C term sheet.pdf", claim: mom_project/series_c_price, holding: mom_project, source_class: company_communication,    execution_status: non_binding,          date: "2021-09-15", applicable_from: "2021-09-15", applicable_to: null, priced_class: series_c,  pps: "5.00"}
   jackpocket_merger: {source_file: "Jackpocket merger notice.pdf", claim: jackpocket/merger_consideration, holding: jackpocket, source_class: executed_transaction_doc,  execution_status: executed,             date: "2024-05-20", applicable_from: "2024-05-20", applicable_to: null, priced_class: series_b,  pps: "6.20"}
@@ -200,6 +200,11 @@ evidence_links:
   - {holding: roofstock,  requirement: R2, document: roofstock_spa}
   - {holding: fluidstack, requirement: R2, document: fluidstack_a_spa}
   - {holding: fluidstack, requirement: R2, document: fluidstack_b_cap}
+  # F7 · linked after a cross-family review. Fluidstack holds series_a AND
+  # series_a2 at 25Q4, so with this unlinked the derivation had no price for
+  # the second class and reported `unconfirmable` — the answer key asserting
+  # a check could not run while the corpus held, cited, the price it wanted.
+  - {holding: fluidstack, requirement: R2, document: fluidstack_a2_ref}
   - {holding: dream,      requirement: R2, document: dream_b_cap}
   # The CFO's closing notice corroborates the same Series B round. It was
   # transcribed as a document but never linked, so it was never consulted.
@@ -283,6 +288,8 @@ policy_matrix:
 
   - {req: R2, source_class: executed_transaction_doc,   execution_status: executed,              position_type: direct_equity,           verdict: sufficient}
   - {req: R2, source_class: company_cap_table,          execution_status: pro_forma,             position_type: direct_equity,           verdict: partial,      reason: PRO_FORMA_PENDING_EXECUTION}
+  - {req: R2, source_class: company_cap_table,          execution_status: unexecuted_referenced, position_type: direct_equity,           verdict: partial,      reason: CLOSING_SET_PENDING}
+  - {req: R1, source_class: company_communication,      execution_status: not_applicable,        position_type: direct_equity,           verdict: partial,      reason: SETTLEMENT_WITHOUT_SHARE_TERMS}
   - {req: R2, source_class: company_communication,      execution_status: unexecuted_referenced, position_type: direct_equity,           verdict: partial,      reason: CLOSING_SET_PENDING}
   - {req: R2, source_class: company_communication,      execution_status: non_binding,           position_type: direct_equity,           verdict: insufficient, reason: NON_BINDING_TERM_SHEET}
   - {req: R2, source_class: public_market_quote,        execution_status: not_applicable,        position_type: public_listed,           verdict: sufficient}

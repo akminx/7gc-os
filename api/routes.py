@@ -11,8 +11,22 @@ the browser. Which source answered is stated in the response (`source`), because
 a demo that silently falls back to a fixture is a demo that shows a number
 nobody can trace.
 
-SPEC §3.1 · the public surface is read-only. Every route here is a GET, and
-there is no write path to disable later.
+SPEC §3.1 · the public surface is read-only. Every route in THIS module is a
+GET, and that is still true.
+
+It is no longer true of the application. §6.3 requires four typed approvable
+resources and nothing in this system could record a human approval, so a write
+path now exists — in `api/decisions.py`, on its own router, under `/decisions`,
+off unless the deployment names its actors. That module states the whole
+argument; this note exists so the sentence above cannot be read as covering the
+service. `tests/test_decisions.py` asserts that `/decisions` is the only non-GET
+route the application serves, so the separation is a property the gate checks
+rather than a convention the next reader has to notice.
+
+The router is mounted here rather than in `api/main.py` for the same reason the
+read routes are: `main.py` is the service boundary and knows about one router.
+Mounting is not exposing — `api/decisions.py` refuses every request on a
+deployment that names no actors.
 """
 
 from __future__ import annotations
@@ -23,12 +37,26 @@ import psycopg
 from fastapi import APIRouter, HTTPException
 
 from api import ledger
-from api.config import dsn, ledger_schema
+from api.config import SchemaNameError, dsn, resolve_schema
+from api.decisions import decisions_router
+from api.reconciliation import router as reconciliation_router
 from api.serialize import packet_json, totals_json
 from packages.contracts.fixtures.dream import DREAM_ROW, dream_packet
 from packages.contracts.models import Packet
 
 router = APIRouter()
+router.include_router(decisions_router)
+# `/reconciliation` and `/scorecard`. Both GET, so §3.1's read-only surface is
+# unchanged — mounted here rather than in `api/main.py` for the same reason
+# every other router is: the service boundary knows about one router.
+#
+# `/reconciliation` never returns a flat finding list. It answers with three
+# named scopes — packet, lineage-only, unscoped — because INV-20 says a
+# lineage-only period is not a packet period, and a caller handed one list can
+# render a figure the packet does not stand behind without doing anything
+# wrong. Making the shape carry the distinction is what stops that, rather than
+# a note asking the next reader to remember it.
+router.include_router(reconciliation_router)
 
 #: Kept so the app is demonstrable without a database. Step 0's one holding.
 _FIXTURE_ROWS = {DREAM_ROW.holding_id: DREAM_ROW}
@@ -64,11 +92,15 @@ def _connect() -> psycopg.Connection[tuple[object, ...]] | None:
         # time.
         conn = psycopg.connect(url, connect_timeout=10, prepare_threshold=None)
         # Identifier, not a parameter — `set search_path to %s` quotes it as a
-        # string literal and silently selects nothing. Restricted to a plain
-        # identifier so a stray value cannot become SQL.
-        schema = ledger_schema()
-        if not schema.replace("_", "").isalnum():
-            raise HTTPException(status_code=500, detail="LEDGER_SCHEMA is not an identifier")
+        # string literal and silently selects nothing. `resolve_schema` is the
+        # one place that decides whether a name can safely be interpolated;
+        # this was the third hand-written copy of that check.
+        try:
+            schema = resolve_schema(None)
+        except SchemaNameError:
+            raise HTTPException(
+                status_code=500, detail="LEDGER_SCHEMA is not an identifier"
+            ) from None
         conn.execute(f"set search_path to {schema}")
         return conn
     except psycopg.Error:

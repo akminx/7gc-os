@@ -29,6 +29,8 @@ from packages.contracts.base import MONEY_SCALE, PPS_SCALE
 from packages.contracts.citations import from_stored
 from packages.contracts.enums import (
     AuditScope,
+    DecisionStatus,
+    DecisionType,
     DerivationStatus,
     ExecutionStatus,
     FactState,
@@ -36,6 +38,7 @@ from packages.contracts.enums import (
     SourceClass,
 )
 from packages.contracts.models import (
+    Approval,
     Claim,
     EvidenceCitation,
     GapObservation,
@@ -80,6 +83,16 @@ def _opt_date(v: object) -> date | None:
 def _dec(v: object) -> Decimal:
     assert isinstance(v, Decimal | int | str)
     return Decimal(str(v))
+
+
+def _dt(v: object) -> datetime:
+    assert isinstance(v, datetime)
+    return v
+
+
+def _ints(v: object) -> list[int]:
+    assert isinstance(v, list)
+    return [int(x) for x in v]
 
 
 def _money(amount: object, currency: object) -> Money:
@@ -146,6 +159,53 @@ def _period(conn: Conn, fund_id: str, period_id: str) -> Period | None:
     )
 
 
+#: The claim columns, selected identically wherever claims are read, so the
+#: row-to-`Claim` mapping below can be written once.
+_CLAIM_COLUMNS = (
+    "select c.id, c.document_version_id, c.holding_id, c.claim_key, c.source_class,"
+    " c.execution_status, c.issued_date, c.as_of_date, c.received_date, c.applicable_from,"
+    " c.applicable_to, c.priced_class, c.price_per_share, c.stated_amount,"
+    " c.stated_currency, c.supersedes_claim_id from claim c"
+)
+
+
+def _claim(r: tuple[object, ...]) -> Claim:
+    return Claim(
+        id=_s(r[0]),
+        document_version_id=_s(r[1]),
+        holding_id=_s(r[2]),
+        claim_key=_s(r[3]),
+        source_class=SourceClass(_s(r[4])),
+        execution_status=ExecutionStatus(_s(r[5])),
+        issued_date=_date(r[6]),
+        as_of_date=_opt_date(r[7]),
+        received_date=_opt_date(r[8]),
+        applicable_from=_date(r[9]),
+        applicable_to=_opt_date(r[10]),
+        priced_class=None if r[11] is None else _s(r[11]),
+        price_per_share=None if r[12] is None else _at_scale(r[12], PPS_SCALE, "price"),
+        # The claim-level amount and the supersession link. Both are columns on
+        # `claim` and both were missing from this SELECT, so the workspace
+        # rendered "—" for a figure the ledger was holding.
+        stated=None if r[13] is None else _money(r[13], r[14]),
+        supersedes_claim_id=None if r[15] is None else _s(r[15]),
+    )
+
+
+def all_claims(conn: Conn) -> dict[str, Claim]:
+    """Every claim in the ledger, keyed by id, in one statement.
+
+    For callers that need to look a claim up by id and never read its facts.
+    `packet()` did this by calling `claims_for` once per holding — fourteen
+    holdings, two statements each, and it discarded the facts every time. Twenty
+    seven round trips to build a dictionary one statement fills.
+
+    Not scoped to a fund: the packet resolves claim ids that its assessments
+    name, and a claim is named by id rather than by whose fund it belongs to.
+    """
+    return {c.id: c for c in (_claim(r) for r in conn.execute(_CLAIM_COLUMNS).fetchall())}
+
+
 def claims_for(conn: Conn, holding_id: str) -> list[tuple[Claim, list[SourceFact]]]:
     """Every claim about this holding, with the citations its facts resolve to.
 
@@ -161,41 +221,35 @@ def claims_for(conn: Conn, holding_id: str) -> list[tuple[Claim, list[SourceFact
     only the ends of it leaves an auditor with quotations and no arithmetic.
     """
     rows = conn.execute(
-        "select c.id, c.document_version_id, c.holding_id, c.claim_key, c.source_class,"
-        " c.execution_status, c.issued_date, c.as_of_date, c.received_date, c.applicable_from,"
-        " c.applicable_to, c.priced_class, c.price_per_share, c.stated_amount,"
-        " c.stated_currency, c.supersedes_claim_id"
-        " from claim c where c.holding_id = %s order by c.issued_date, c.id",
+        _CLAIM_COLUMNS + " where c.holding_id = %s order by c.issued_date, c.id",
         (holding_id,),
     ).fetchall()
+    # Every fact for every claim on this holding, in ONE statement, grouped in
+    # Python. This ran one query PER CLAIM, and each of those queries executes
+    # in under a millisecond — the cost was never the database, it was the round
+    # trip, forty of them for one packet page. Instrumented, `GET .../packet`
+    # made 60 round trips and took 11.5 s, of which `claims_for` was 42 and
+    # 6.1 s. Grouping here takes this function to two statements whatever the
+    # holding carries.
+    #
+    # `order by claim_id, field_name, id` reproduces the per-claim ordering the
+    # loop below relied on, so the facts arrive in the same order they did when
+    # each claim asked for its own.
+    facts_by_claim: dict[str, list[tuple[object, ...]]] = {}
+    claim_ids = [_s(r[0]) for r in rows]
+    if claim_ids:
+        for f in conn.execute(
+            "select claim_id, id, field_name, value_text, value_numeric, state,"
+            " citation_quote, span_start, span_end from extracted_fact"
+            " where claim_id = any(%s) order by claim_id, field_name, id",
+            (claim_ids,),
+        ).fetchall():
+            facts_by_claim.setdefault(_s(f[0]), []).append(f[1:])
+
     out: list[tuple[Claim, list[SourceFact]]] = []
     for r in rows:
-        claim = Claim(
-            id=_s(r[0]),
-            document_version_id=_s(r[1]),
-            holding_id=_s(r[2]),
-            claim_key=_s(r[3]),
-            source_class=SourceClass(_s(r[4])),
-            execution_status=ExecutionStatus(_s(r[5])),
-            issued_date=_date(r[6]),
-            as_of_date=_opt_date(r[7]),
-            received_date=_opt_date(r[8]),
-            applicable_from=_date(r[9]),
-            applicable_to=_opt_date(r[10]),
-            priced_class=None if r[11] is None else _s(r[11]),
-            price_per_share=None if r[12] is None else _at_scale(r[12], PPS_SCALE, "price"),
-            # The claim-level amount and the supersession link. Both are columns
-            # on `claim` and both were missing from this SELECT, so the workspace
-            # rendered "—" for a figure the ledger was holding.
-            stated=None if r[13] is None else _money(r[13], r[14]),
-            supersedes_claim_id=None if r[15] is None else _s(r[15]),
-        )
-        facts = conn.execute(
-            "select id, field_name, value_text, value_numeric, state,"
-            " citation_quote, span_start, span_end from extracted_fact"
-            " where claim_id = %s order by field_name, id",
-            (claim.id,),
-        ).fetchall()
+        claim = _claim(r)
+        facts = facts_by_claim.get(claim.id, [])
         out.append(
             (
                 claim,
@@ -286,6 +340,64 @@ def _gaps(ledger: PolicyLedger, holding_id: str) -> list[GapObservation]:
     ]
 
 
+def _approvals(conn: Conn, fund_id: str, period_id: str) -> dict[int, Approval]:
+    """Recorded human decisions for this fund-period, keyed by the mark they bind.
+
+    Nothing read `review_decision`. `POST /decisions` wrote rows the schema
+    enforced every invariant on, and `HoldingRow.approval` stayed `None` on
+    every row, so an approval a human had actually recorded was invisible in
+    the dashboard, in the packet, and in `approved_fair_value` — which is a
+    total defined by exactly this table. A write path with no read path reports
+    "not approved" whatever the human did.
+
+    Keyed by `mark_id` and not by holding: INV-10 binds a decision to the exact
+    revision. The rest of the system already relies on that — `0003` refuses an
+    approval whose evidence set does not cover the requirements of THAT mark —
+    so keying any other way here would let the stricter half be bypassed by the
+    looser half.
+
+    `evidence_assessment_ids` is aggregated rather than left empty. The set is
+    what the approval means: an approval that names no evidence is exactly what
+    `0003`'s `valuation_approval_needs_complete_evidence` rejects, and carrying
+    it as an empty list would make a refused shape indistinguishable from a
+    valid one at the contract layer.
+    """
+    rows = conn.execute(
+        "select d.id, d.decision_type, d.status, d.mark_id, d.packet_id, d.policy_version,"
+        "       d.actor_id, d.decided_at,"
+        "       coalesce(array_agg(de.assessment_id order by de.assessment_id)"
+        "                filter (where de.assessment_id is not null), '{}') as assessment_ids"
+        "  from review_decision d"
+        "  left join decision_evidence de on de.decision_id = d.id"
+        "  join mark m on m.id = d.mark_id"
+        "  join holding h on h.id = m.holding_id"
+        " where h.fund_id = %s and m.period_id = %s"
+        " group by d.id"
+        # Latest first, then keep the first per mark: a mark can carry a
+        # rejection followed by an approval, and the row must show where the
+        # decision actually stands rather than where it started.
+        " order by d.decided_at desc, d.id desc",
+        (fund_id, period_id),
+    ).fetchall()
+    latest: dict[int, Approval] = {}
+    for r in rows:
+        mark_id = _i(r[3])
+        if mark_id in latest:
+            continue
+        latest[mark_id] = Approval(
+            id=_i(r[0]),
+            decision_type=DecisionType(_s(r[1])),
+            status=DecisionStatus(_s(r[2])),
+            mark_id=mark_id,
+            packet_id=None if r[4] is None else _s(r[4]),
+            policy_version=None if r[5] is None else _s(r[5]),
+            evidence_assessment_ids=_ints(r[8]),
+            actor_id=_s(r[6]),
+            decided_at=_dt(r[7]),
+        )
+    return latest
+
+
 def packet(conn: Conn, fund_id: str, period_id: str) -> Packet | None:
     """The packet for one fund-period, assembled from the ledger."""
     period = _period(conn, fund_id, period_id)
@@ -293,11 +405,7 @@ def packet(conn: Conn, fund_id: str, period_id: str) -> Packet | None:
         return None
 
     policy = load_policy(conn)
-    claims = {
-        claim.id: claim
-        for holding_id in policy.holdings
-        for claim, _ in claims_for(conn, holding_id)
-    }
+    claims = all_claims(conn)
 
     # Membership comes from the LOTS, not from the marks. Anchoring on marks
     # dropped every realised position — the one class of row the audit letter
@@ -361,6 +469,8 @@ def packet(conn: Conn, fund_id: str, period_id: str) -> Packet | None:
         (period.period_date, fund_id, period.period_date, fund_id, period_id),
     ).fetchall()
 
+    approvals = _approvals(conn, fund_id, period_id)
+
     built: list[HoldingRow] = []
     for r in rows:
         mark = None
@@ -389,6 +499,12 @@ def packet(conn: Conn, fund_id: str, period_id: str) -> Packet | None:
                 mark=mark,
                 assessments=_assessments(policy, claims, holding_id, period.period_date),
                 gaps=_gaps(policy, holding_id),
+                # Bound through `mark_id`, never through the holding. INV-10:
+                # an approval names the exact revision it approved, so a mark
+                # revised after the decision has no approval — which is the
+                # behaviour, not a limitation. Keying by holding would carry
+                # the old approval onto the new number.
+                approval=None if mark is None else approvals.get(mark.id),
             )
         )
 

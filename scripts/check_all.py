@@ -2,12 +2,21 @@
 """Agent-ready verification harness — one deterministic gate the agent cannot bypass.
 
 Detects Python sub-projects (dirs containing pyproject.toml) and enforces:
-lint, format, types (mypy), tests + coverage floor, database guards actually
-running rather than skipping (REQUIRE_DB_TESTS=1), duplicate code, file-size
-limits, debt markers, architecture invariants (INVARIANTS.md, via arch_checks),
-suppression budget, secrets (detect-secrets), security SAST (bandit), dependency
-CVEs (pip-audit), CLAUDE.md path alignment, and CI parity. Budgets live in
-scripts/budgets/ and ratchet forward — they only get stricter.
+lint, format, types (mypy), tests + coverage floor, a floor on how many tests
+exist, database guards actually running rather than skipping
+(REQUIRE_DB_TESTS=1), duplicate code, file-size limits, debt markers,
+architecture invariants (INVARIANTS.md, via arch_checks), suppression budget,
+secrets (detect-secrets), security SAST (bandit), dependency CVEs (pip-audit),
+CLAUDE.md path alignment, and CI parity. Budgets live in scripts/budgets/ and
+ratchet forward — they only get stricter.
+
+One rule sits above all of them: a check that could not run reports FAIL. SKIP
+and WARN do not aggregate into "all checks passed", and the two checks allowed
+to say they could not run are named in main() with the reason. A tool that
+crashed, a suite that skipped, a workflow that mentions the gate in a comment
+and a discovery pass that found nothing are all the same defect — a green tick
+over an empty measurement — and this file has now been repaired for it
+fourteen times.
 
   python3 scripts/check_all.py                # run the full gate (pre-commit + CI)
   python3 scripts/check_all.py --init-budgets # baseline the ratchets to current state
@@ -21,7 +30,9 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 import arch_checks  # architecture-invariant checks (INVARIANTS.md); scripts/ on sys.path
 
@@ -36,11 +47,15 @@ _MARKERS = ["TO" + "DO", "FIX" + "ME", "XX" + "X", "HA" + "CK"]
 DEBT_RE = re.compile(r"\b(" + "|".join(_MARKERS) + r")\b")
 
 
-def sh(cmd, cwd=None):
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+def sh(
+    cmd: Sequence[str], cwd: Path | None = None, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd, cwd=cwd, capture_output=True, text=True, env={**os.environ, **env} if env else None
+    )
 
 
-def tracked():
+def tracked() -> list[Path]:
     out = sh(["git", "ls-files"], cwd=ROOT).stdout.splitlines()
     return [ROOT / f for f in out]
 
@@ -63,7 +78,7 @@ _SKIP_DIRS = {
 }
 
 
-def py_projects():
+def py_projects() -> list[Path]:
     # a real project's pyproject.toml — never one inside an installed dep
     # (.venv/.../stevedore/example2/) or a git worktree (.worktrees/…,
     # .claude/worktrees/…). Prune skip dirs DURING the walk so we never
@@ -76,16 +91,19 @@ def py_projects():
     return sorted(out)
 
 
-def load(name, default):
+def load(name: str, default: dict[str, Any]) -> dict[str, Any]:
     f = BUD / name
-    return json.loads(f.read_text()) if f.exists() else dict(default)
+    if not f.exists():
+        return dict(default)
+    stored: dict[str, Any] = json.loads(f.read_text())
+    return stored
 
 
-def save(name, data):
+def save(name: str, data: dict[str, Any]) -> None:
     (BUD / name).write_text(json.dumps(data, indent=2) + "\n")
 
 
-def venv_bin(p):
+def venv_bin(p: Path) -> Path | None:
     """Per-project .venv/bin, if the project has one — else None."""
     for name in ("bin", "Scripts"):
         vb = p / ".venv" / name
@@ -94,7 +112,7 @@ def venv_bin(p):
     return None
 
 
-def project_python(p):
+def project_python(p: Path) -> str:
     vb = venv_bin(p)
     if vb:
         for exe in ("python", "python.exe"):
@@ -103,17 +121,25 @@ def project_python(p):
     return sys.executable
 
 
-def _tool_for(p, name):
+def _tool_for(p: Path, name: str) -> str | None:
     vb = venv_bin(p)
     search_path = f"{vb}{os.pathsep}{os.environ.get('PATH', '')}" if vb else None
     return shutil.which(name, path=search_path)
 
 
-def ruff_for(p):
+def ruff_for(p: Path) -> str | None:
     return _tool_for(p, "ruff")
 
 
-def check_lint(projects):
+# A required check has no way of saying "I could not run". SKIP and WARN both
+# printed a symbol and then aggregated into "all checks passed", so a missing
+# ruff, mypy, pytest, jscpd, detect-secrets or bandit read the same as a clean
+# one. The only sanctioned SKIPs are declared in main(); everything else that
+# cannot run says FAIL and says why.
+MISSING_TOOL = "{tool} not installed — required check cannot SKIP ({how})"
+
+
+def check_lint(projects: Sequence[Path]) -> tuple[str, str]:
     fails, missing = [], []
     for p in projects:
         rb = ruff_for(p)
@@ -125,14 +151,16 @@ def check_lint(projects):
             fails.append(r.stdout + r.stderr)
     if fails:
         return ("FAIL", "\n".join(fails))
-    if missing and len(missing) == len(projects):
-        return ("SKIP", "ruff not installed (pip install ruff, or add it to a project .venv)")
     if missing:
-        return ("WARN", f"ruff not found for: {', '.join(missing)}")
+        return (
+            "FAIL",
+            MISSING_TOOL.format(tool="ruff", how="pip install ruff, or add it to a project .venv")
+            + f"\nnot found for: {', '.join(missing)}",
+        )
     return ("OK", f"{len(projects)} project(s) clean")
 
 
-def check_format(projects):
+def check_format(projects: Sequence[Path]) -> tuple[str, str]:
     fails, missing = [], []
     for p in projects:
         rb = ruff_for(p)
@@ -144,42 +172,74 @@ def check_format(projects):
             fails.append(r.stdout)
     if fails:
         return ("FAIL", "\n".join(fails) + "\nrun: ruff format .")
-    if missing and len(missing) == len(projects):
-        return ("SKIP", "ruff not installed")
     if missing:
-        return ("WARN", f"ruff not found for: {', '.join(missing)}")
+        return (
+            "FAIL",
+            MISSING_TOOL.format(tool="ruff", how="pip install ruff")
+            + f"\nnot found for: {', '.join(missing)}",
+        )
     return ("OK", "formatted")
 
 
-def check_types(projects, fix=False, ratchet=False):
+def check_types(
+    projects: Sequence[Path], fix: bool = False, ratchet: bool = False
+) -> tuple[str, str]:
     """mypy as a ratchet: the type-error count is a ceiling that only falls.
     Existing untyped code is baselined so it doesn't block, but no new type
     error can slip in. Tighten per-project strictness in [tool.mypy]."""
     budget = load("mypy.json", {"max_errors": 0})
     cap = budget.get("max_errors", 0)
-    total, ran, missing, sample = 0, False, [], []
+    total, ran, missing, sample, crashed = 0, False, [], [], []
     for p in projects:
         mb = _tool_for(p, "mypy")
         if not mb:
             missing.append(p.name)
             continue
         ran = True
+        # `--explicit-package-bases` with the project root as the base, because
+        # without it mypy reached `scripts/capture_web_fixture.py` by two paths,
+        # called it two module names, and ABORTED with exit 2 having checked
+        # nothing. The gate read that as "no lines matched `: error:`" and
+        # printed `0 type errors ≤ ceiling 79` for as long as the collision
+        # existed. Naming the base makes every module resolve the way it does at
+        # runtime — `api.config`, `packages.contracts` — instead of depending on
+        # which directory mypy happened to walk from.
         r = sh(
             [
                 mb,
                 ".",
                 "--ignore-missing-imports",
                 "--no-error-summary",
+                "--explicit-package-bases",
                 "--exclude",
                 r"(\.venv|node_modules|build|dist)/",
             ],
             cwd=p,
+            env={"MYPYPATH": str(p)},
         )
         errs = [ln for ln in (r.stdout + r.stderr).splitlines() if ": error:" in ln]
+        # mypy exits 0 when it found nothing and 1 when it found errors. Any
+        # other status — a crash, a bad flag, a binary that is not mypy — is a
+        # run that did not happen, and so is exit 1 with nothing parseable to
+        # show for it. This used to be read as "no lines matched `: error:`,
+        # therefore zero type errors": replacing the binary with /usr/bin/false
+        # reported a clean type check against a ceiling of 79.
+        if r.returncode not in (0, 1) or (r.returncode and not errs):
+            crashed.append(
+                f"{p.name}: mypy exited {r.returncode} with no parseable errors\n"
+                + (r.stdout + r.stderr)[-800:]
+            )
+            continue
         total += len(errs)
         sample += errs[:5]
-    if not ran:
-        return ("SKIP", "mypy not installed (pip install mypy, or add it to a project .venv)")
+    if crashed:
+        return ("FAIL", "the type check did not run:\n" + "\n".join(crashed))
+    if missing or not ran:
+        return (
+            "FAIL",
+            MISSING_TOOL.format(tool="mypy", how="pip install mypy, or add it to a project .venv")
+            + (f"\nnot found for: {', '.join(missing)}" if missing else ""),
+        )
     if fix:
         budget["max_errors"] = total
         save("mypy.json", budget)
@@ -194,10 +254,35 @@ def check_types(projects, fix=False, ratchet=False):
     return ("OK", f"{total} type errors ≤ ceiling {cap}{nudge}")
 
 
-def check_tests(projects, fix=False, ratchet=False):
+#: pytest's own tally line — "40 passed, 1 skipped in 0.31s". Read rather than
+#: trusted: a line this cannot parse is a FAIL, because an unreadable summary
+#: must never resolve to "nothing was skipped".
+TALLY = re.compile(r"(\d+) (passed|failed|error|errors|skipped|xfailed|xpassed|deselected)\b")
+
+
+def _tally(text: str) -> dict[str, int]:
+    """The last parseable tally line in a pytest run, as {kind: count}."""
+    for line in reversed([ln for ln in text.splitlines() if ln.strip()]):
+        found = TALLY.findall(line)
+        if found:
+            return {kind: int(n) for n, kind in found}
+    return {}
+
+
+#: Every project's pytest output from the last check_tests() run, keyed by
+#: project name. check_db_guards() reads the skip report out of it instead of
+#: running a hand-listed subset of suites a second time — see the comment there.
+#: Empty is not "nothing skipped"; it is "no run to read", which is a FAIL.
+_TEST_REPORTS: dict[str, str] = {}
+
+
+def check_tests(
+    projects: Sequence[Path], fix: bool = False, ratchet: bool = False
+) -> tuple[str, str]:
     budget = load("coverage.json", {"floor": 0.0})
     floor = budget.get("floor", 0.0)
     fails, total, ran, missing = [], None, False, []
+    _TEST_REPORTS.clear()
     for p in projects:
         py = project_python(p)
         if sh([py, "-c", "import pytest"]).returncode:
@@ -205,24 +290,46 @@ def check_tests(projects, fix=False, ratchet=False):
             continue
         ran = True
         has_cov = sh([py, "-c", "import pytest_cov"]).returncode == 0
-        cmd = [py, "-m", "pytest", "-q"]
+        # `-rs` prints one SKIPPED line per skipped test, with the reason pytest
+        # was given. It is what check_db_guards() reads: the set of suites that
+        # need a database is derived from what actually skipped and why, rather
+        # than from a list of filenames somebody has to remember to grow.
+        cmd = [py, "-m", "pytest", "-q", "-rs"]
         jp = p / ".coverage.json"
         if has_cov:
             cmd += [f"--cov={p}", f"--cov-report=json:{jp}", "--cov-report="]
         r = sh(cmd, cwd=p)
+        _TEST_REPORTS[p.name] = r.stdout + r.stderr
         if r.returncode:
             fails.append(f"{p.name}:\n{(r.stdout + r.stderr)[-1500:]}")
+        else:
+            # A run in which nothing executed is not a passing run. A project
+            # whose every test skipped returned OK with 100% coverage, because
+            # "pytest exited 0" and "the tests pass" were treated as the same
+            # sentence.
+            tally = _tally(r.stdout)
+            if not tally:
+                fails.append(f"{p.name}: pytest exited 0 but printed no tally to read")
+            elif not tally.get("passed"):
+                fails.append(
+                    f"{p.name}: {sum(tally.values())} test(s) collected and none passed "
+                    f"({', '.join(f'{v} {k}' for k, v in sorted(tally.items()))}) — "
+                    "a suite in which nothing ran is not a suite that passed"
+                )
         if has_cov and jp.exists():
             pc = json.loads(jp.read_text()).get("totals", {}).get("percent_covered", 0)
             jp.unlink()
             total = pc if total is None else min(total, pc)
-    if not ran:
-        return ("SKIP", "pytest not installed (pip install pytest, or add it to a project .venv)")
+    if missing or not ran:
+        return (
+            "FAIL",
+            MISSING_TOOL.format(
+                tool="pytest", how="pip install pytest, or add it to a project .venv"
+            )
+            + (f"\nnot found for: {', '.join(missing)}" if missing else ""),
+        )
     if fails:
-        detail = "tests failed\n" + "\n".join(fails)
-        if missing:
-            detail += f"\n(no pytest found for: {', '.join(missing)})"
-        return ("FAIL", detail)
+        return ("FAIL", "tests failed\n" + "\n".join(fails))
     if total is None:
         return ("OK", "tests pass (coverage off: pip install pytest-cov)")
     # Owner's decision, recorded rather than silently dropped: the coverage
@@ -257,101 +364,136 @@ def check_tests(projects, fix=False, ratchet=False):
     return ("OK", f"tests pass · coverage {total:.2f}% ≥ floor {floor}%{nudge}")
 
 
-# Every test in these targets is skipif'd on MIGRATION_DATABASE_URL. Without a
-# DSN they do not fail — they vanish, and "tests + coverage" above still prints
-# OK. That is the whole defect: a skipped guard reads exactly like a passing
-# one, so the claim "invariants enforced as database constraints" was unexercised
-# in CI while both gates reported green.
-DB_GUARD_TARGETS = (
-    "tests/test_schema_invariants.py",
-    "tests/test_schema_approval.py",
-    # Added late, and its absence here was finding #9 recurring on a new file:
-    # the whole packet-sealing suite could skip in CI and the gate would report
-    # green. A new schema suite that is not listed here is not guarded.
-    "tests/test_schema_packet.py",
-    "tests/test_schema_held_at_date.py",
-    # Split out of test_schema_approval.py at the file-size budget. A split is
-    # exactly when this list goes stale: the tests still run locally, and the
-    # half that moved stops being guarded in CI without anything going red.
-    "tests/test_schema_cross_class.py",
-    # The real corpus against the live schema. Skips without a DSN *or* without
-    # the workbooks — two ways to vanish, and CI has both.
-    "tests/test_real_data_ledger.py",
-    "tests/test_contracts.py::test_python_enums_match_the_postgres_types_in_both_directions",
+#: The skips that are correct rather than missing coverage, matched on the
+#: reason pytest was given rather than on the file that gave it.
+#:
+#: Every one names the same condition: the fund's case-study material is private,
+#: gitignored, and will never be present in CI. Failing on those would make the
+#: gate permanently red for a state that is right.
+#:
+#: This list is the whole of what is allowed. A skip for any other reason —
+#: including every way of spelling "there is no database" — is a guard that did
+#: not run, and a guard that did not run is a FAIL. That direction is the fix:
+#: the previous version listed the SUITES that must not skip, so a suite nobody
+#: added to the list skipped in silence, and the list was short three times in a
+#: row. A new suite is covered on the day it is written, because it is covered by
+#: default.
+SANCTIONED_SKIPS = (
+    "case-study workbooks are not in the repository",
+    "case-study documents are not in the repository",
+    "case-study document is not in the repository",
+    "the case-study document or its recording is not in the repository",
+    "the `demo` schema holds no loaded corpus",
 )
-# pytest's own tally line — "40 passed, 1 skipped in 0.31s". Read rather than
-# trusted: a line this cannot parse is a FAIL, because an unreadable summary must
-# never resolve to "nothing was skipped".
-#: The one skip a database guard is allowed to have in CI. The case-study
-#: workbooks are gitignored private fund material and are never present there,
-#: so this condition is permanent and correct rather than a missing guard.
-WORKBOOK_SKIP = "case-study workbooks are not in the repository"
 
-DB_GUARD_TALLY = re.compile(r"(\d+) (passed|failed|error|errors|skipped|xfailed|xpassed)\b")
+#: pytest's `-rs` short summary: "SKIPPED [3] tests/test_packet_export.py:483: no DATABASE_URL".
+SKIPPED_LINE = re.compile(r"^SKIPPED \[\d+\] ")
 
 
 def check_db_guards() -> tuple[str, str]:
-    """Fail when a database guard skips. Gated on REQUIRE_DB_TESTS=1, which CI
-    sets alongside a Postgres service; locally, without a database, this reports
-    SKIP with its reason rather than blocking a commit.
+    """Fail when any test skipped for a reason that is not sanctioned.
 
-    Runs on this interpreter — the one already executing the gate, which the hook
-    and CI both point at the environment holding pytest. A bare interpreter
-    without pytest yields no tally, and no tally is a FAIL, so the wrong
-    interpreter cannot come out green.
+    Gated on REQUIRE_DB_TESTS=1, which CI sets alongside a Postgres service;
+    locally, without a database, this reports SKIP with its reason rather than
+    blocking a commit.
+
+    It reads the skip report of the run `check_tests` already performed rather
+    than running a second, hand-listed subset. Two things follow. The set of
+    database-backed suites is DERIVED — whatever skipped for want of a DSN is
+    named by pytest itself, so deleting a suite from a list cannot hide it and
+    a new suite needs no registration. And there is no second pytest invocation
+    to drift from the first.
+
+    An absent report is a FAIL, not a pass: "no run to read" and "nothing
+    skipped" are different sentences and were being collapsed into one.
     """
     if os.environ.get("REQUIRE_DB_TESTS") != "1":
         return ("SKIP", "REQUIRE_DB_TESTS is not 1 — guards optional here; CI sets it")
-    absent = [t for t in DB_GUARD_TARGETS if not (ROOT / t.split("::")[0]).exists()]
-    if absent:
-        return ("FAIL", "database guard suite(s) missing: " + ", ".join(absent))
-    r = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider", *DB_GUARD_TARGETS],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    out = (r.stdout + r.stderr)[-1500:]
-    lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
-    tally = {kind: int(n) for n, kind in DB_GUARD_TALLY.findall(lines[-1] if lines else "")}
-    if not tally:
-        return ("FAIL", "pytest printed no tally — refusing to assume nothing skipped\n" + out)
-    ran, skipped = sum(tally.values()), tally.get("skipped", 0)
-    problems = []
-    if skipped:
-        reasons = [ln for ln in lines if ln.startswith("SKIPPED")]
-        # Two ways a guard vanishes, and only one of them is a defect.
-        #
-        # No database is a defect: the guard exists to run against a live schema
-        # and silence there is exactly what finding #9 was about.
-        #
-        # No workbooks is not. The case-study material is the fund's private
-        # data, gitignored, and will never be present in CI — so failing on it
-        # makes the gate permanently red for a condition that is correct. This
-        # check shipped treating both alike and turned CI red on the first push.
-        #
-        # Matched on the reason pytest prints, not on the file, so a suite that
-        # skips for a NEW reason still fails rather than being waved through.
-        unexpected = [ln for ln in reasons if WORKBOOK_SKIP not in ln]
+    if not _TEST_REPORTS:
+        return (
+            "FAIL",
+            "no pytest output to read — the tests check did not produce a skip report, "
+            "so nothing here shows the database guards ran",
+        )
+    problems, total_ran, total_skipped = [], 0, 0
+    for name, out in _TEST_REPORTS.items():
+        tally = _tally(out)
+        if not tally:
+            problems.append(
+                f"{name}: pytest printed no tally — refusing to assume nothing skipped\n"
+                + out[-1200:]
+            )
+            continue
+        total_ran += sum(tally.values())
+        total_skipped += tally.get("skipped", 0)
+        unexpected = [
+            ln
+            for ln in out.splitlines()
+            if SKIPPED_LINE.match(ln) and not any(s in ln for s in SANCTIONED_SKIPS)
+        ]
         if unexpected:
             problems.append(
-                f"{len(unexpected)} of {ran} database guard test(s) SKIPPED for a reason "
-                "other than the absent case-study workbooks — a skipped guard is not a "
-                "passing guard. Point MIGRATION_DATABASE_URL at a database with "
-                "supabase/migrations applied.\n" + "\n".join(unexpected[:10])
+                f"{name}: {len(unexpected)} test(s) SKIPPED for a reason that is not "
+                "sanctioned — a skipped guard is not a passing guard. If it is the "
+                "database, point MIGRATION_DATABASE_URL and DATABASE_URL at one with "
+                "supabase/migrations applied; if the reason is genuinely permanent in "
+                "CI, add it to SANCTIONED_SKIPS deliberately.\n" + "\n".join(unexpected[:10])
             )
-    if r.returncode:
-        problems.append("pytest exited non-zero\n" + out)
     if problems:
         return ("FAIL", "\n".join(problems))
-    return ("OK", f"{ran} database guard test(s) ran, none skipped")
+    return (
+        "OK",
+        f"{total_ran} test(s) reported, {total_skipped} skipped and every skip sanctioned",
+    )
 
 
-def check_dups():
+def check_test_inventory(fix: bool = False, ratchet: bool = False) -> tuple[str, str]:
+    """A floor on how many tests exist, so deleting guards is not a quiet act.
+
+    The check above proves that whatever ran was not silently skipped. It cannot
+    see a suite that no longer exists — a deleted or renamed file collects
+    nothing, skips nothing, and reads as clean. The list this replaced caught
+    that by naming files; a count catches it without naming anything, and covers
+    files the list never knew about.
+
+    Counted by collection, not by execution, so it is the same number with or
+    without a database and takes about ten seconds.
+    """
+    budget = load("tests.json", {"min_tests": 0})
+    floor = budget.get("min_tests", 0)
+    r = sh(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        cwd=ROOT,
+    )
+    m = re.search(r"(\d+) tests? collected", r.stdout)
+    found = int(m.group(1)) if m else 0
+    if r.returncode or not found:
+        return (
+            "FAIL",
+            f"collection failed (exit {r.returncode}) — the test inventory is unknown, "
+            "which is not the same as unchanged\n" + (r.stdout + r.stderr)[-1200:],
+        )
+    if fix or (ratchet and found > floor):
+        budget["min_tests"] = found
+        save("tests.json", budget)
+        verb = "set to" if fix else f"ratcheted {floor} →"
+        return ("OK", f"test-count floor {verb} {found}")
+    if found < floor:
+        return (
+            "FAIL",
+            f"{found} tests collected < floor {floor} — {floor - found} test(s) went missing. "
+            "Deleting a suite is a decision, not a refactor; if it was deliberate, "
+            "re-baseline with --init-budgets.",
+        )
+    nudge = f"  (ratchet floor up toward {found})" if found - floor > 0 else ""
+    return ("OK", f"{found} tests collected ≥ floor {floor}{nudge}")
+
+
+def check_dups() -> tuple[str, str]:
     if not (ROOT / ".jscpd.json").exists():
-        return ("SKIP", "no .jscpd.json")
+        return ("FAIL", "no .jscpd.json — the duplicate-code check is required, not optional")
     if not shutil.which("npx"):
-        return ("SKIP", "npx/node not available for jscpd")
+        return ("FAIL", MISSING_TOOL.format(tool="npx/node", how="install Node; jscpd needs it"))
     r = sh(["npx", "--yes", "jscpd", "--config", str(ROOT / ".jscpd.json")], cwd=ROOT)
     return (
         ("OK", "no clones above threshold")
@@ -363,7 +505,7 @@ def check_dups():
     )
 
 
-def check_file_sizes(fix=False):
+def check_file_sizes(fix: bool = False) -> tuple[str, str]:
     budget = load("file-sizes.json", {"max_lines": 600, "overrides": {}})
     mx, ov = budget["max_lines"], budget.get("overrides", {})
     over = []
@@ -394,7 +536,7 @@ def check_file_sizes(fix=False):
     return ("OK", f"all source files ≤ {mx} lines")
 
 
-def check_debt(fix=False, ratchet=False):
+def check_debt(fix: bool = False, ratchet: bool = False) -> tuple[str, str]:
     budget = load("debt-allowlist.json", {"max_markers": 0})
     cap = budget.get("max_markers", 0)
     hits = []
@@ -416,7 +558,7 @@ def check_debt(fix=False, ratchet=False):
     return ("OK", f"{len(hits)} debt markers ≤ ceiling {cap}")
 
 
-def check_claude_md():
+def check_claude_md() -> tuple[str, str]:
     missing = []
     for name in ("CLAUDE.md", "AGENTS.md"):
         cf = ROOT / name
@@ -435,13 +577,74 @@ def check_claude_md():
     return ("OK", "referenced paths exist")
 
 
-def check_ci_parity():
-    """Guard the promise 'green locally ⇒ green in CI': if a CI workflow
-    exists, it must actually invoke the same gate script(s) this file is part
-    of. Prevents CI silently drifting away from the local checks."""
-    wf_dir = ROOT / ".github" / "workflows"
-    if not wf_dir.is_dir():
-        return ("SKIP", "no .github/workflows")
+_RUN_KEY = re.compile(r"^(\s*)(?:-\s+)?run:\s*(.*)$")
+_JOB_KEY = re.compile(r"^  ([A-Za-z0-9_.\-]+):\s*$")
+_DISABLED = re.compile(r"^    if:\s*(?:false|'false'|\"false\")\s*$")
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def workflow_commands(text: str) -> str:
+    """Every shell command a workflow would actually run.
+
+    Parity used to be `gate_name in file_text`, which a comment satisfies: a
+    workflow whose entire content was `# Historical names only: check_all.py and
+    check-all.mjs` reported that CI ran the same gate as local. So does a job
+    switched off with `if: false`, and so does a name mentioned in a step's
+    `name:` while the `run:` beneath it invokes something else.
+
+    Comments are dropped, disabled jobs are dropped, and only the bodies of
+    `run:` steps are returned — the text that becomes a shell command and
+    nothing else.
+    """
+    lines = text.splitlines()
+    # Job blocks first, so a job turned off with `if: false` contributes nothing.
+    live, i = [], 0
+    while i < len(lines):
+        m = _JOB_KEY.match(lines[i])
+        if not m:
+            live.append(lines[i])
+            i += 1
+            continue
+        block, i = [lines[i]], i + 1
+        while i < len(lines) and (not lines[i].strip() or _indent(lines[i]) > 2):
+            block.append(lines[i])
+            i += 1
+        if not any(_DISABLED.match(b) for b in block):
+            live += block
+
+    out, i = [], 0
+    while i < len(live):
+        line = live[i]
+        if line.lstrip().startswith("#"):
+            i += 1
+            continue
+        m = _RUN_KEY.match(line)
+        if not m:
+            i += 1
+            continue
+        key_indent, rest = len(m.group(1)), m.group(2).strip()
+        i += 1
+        if rest and rest.rstrip("+-") not in ("|", ">"):
+            out.append(rest)
+            continue
+        # A block scalar: everything indented past the `run:` key is its body.
+        while i < len(live):
+            body = live[i]
+            if body.strip() and _indent(body) <= key_indent:
+                break
+            if not body.lstrip().startswith("#"):
+                out.append(body)
+            i += 1
+    return "\n".join(out)
+
+
+def check_ci_parity() -> tuple[str, str]:
+    """Guard the promise 'green locally ⇒ green in CI': the CI workflows must
+    actually invoke the same gate script(s) this file is part of. Prevents CI
+    silently drifting away from the local checks."""
     gates = []
     if (ROOT / "scripts" / "check_all.py").exists():
         gates.append("check_all.py")
@@ -449,26 +652,37 @@ def check_ci_parity():
         gates.append("check-all.mjs")
     if not gates:
         return ("SKIP", "no local gate to compare")
-    text = "".join(
-        wf.read_text(errors="ignore") for pat in ("*.yml", "*.yaml") for wf in wf_dir.glob(pat)
+    wf_dir = ROOT / ".github" / "workflows"
+    files = (
+        sorted(wf for pat in ("*.yml", "*.yaml") for wf in wf_dir.glob(pat))
+        if wf_dir.is_dir()
+        else []
     )
-    if not text:
-        return ("SKIP", "no workflow files")
-    absent = [g for g in gates if g not in text]
+    # "There is no CI" and "CI runs the gate" are not the same answer. Deleting
+    # the workflow directory used to produce the first and be counted as the
+    # second.
+    if not files:
+        return (
+            "FAIL",
+            "a local gate exists but .github/workflows has no workflow to compare it to — "
+            "parity cannot be verified, which is not the same as parity holding",
+        )
+    commands = "\n".join(workflow_commands(wf.read_text(errors="ignore")) for wf in files)
+    absent = [g for g in gates if g not in commands]
     if absent:
         return (
             "FAIL",
-            "CI workflows don't run the local gate: " + ", ".join(absent) + "\n"
-            "add a step invoking it so local green == CI green",
+            "no enabled CI job RUNS the local gate: " + ", ".join(absent) + "\n"
+            "a mention in a comment, a step name or a disabled job is not an invocation",
         )
-    return ("OK", "CI runs the same gate(s) as local")
+    return ("OK", f"{len(files)} workflow file(s) run the same gate(s) as local")
 
 
 # ---- security tier: catches the mechanical vulns (not a substitute for a
 # human security review of auth / money / data-exposure logic) --------------
 
 
-def check_secrets():
+def check_secrets() -> tuple[str, str]:
     """Block commits that introduce credentials. Uses detect-secrets against a
     committed .secrets.baseline — audited existing findings are allowed, new
     ones fail. Language-agnostic; runs over all tracked files."""
@@ -479,12 +693,15 @@ def check_secrets():
             break
     hook = hook or shutil.which("detect-secrets-hook")
     if not hook:
-        return ("SKIP", "detect-secrets not installed (pip install detect-secrets)")
+        return (
+            "FAIL",
+            MISSING_TOOL.format(tool="detect-secrets", how="pip install detect-secrets"),
+        )
     baseline = ROOT / ".secrets.baseline"
     if not baseline.exists():
         return (
-            "WARN",
-            "no .secrets.baseline — run: detect-secrets scan "
+            "FAIL",
+            "no .secrets.baseline, so every finding would be waived — run: detect-secrets scan "
             "--exclude-files '\\.venv/' > .secrets.baseline",
         )
     files = [str(f) for f in tracked() if f.is_file()]
@@ -494,7 +711,9 @@ def check_secrets():
     return ("OK", "no new secrets")
 
 
-def check_security(projects, fix=False, ratchet=False):
+def check_security(
+    projects: Sequence[Path], fix: bool = False, ratchet: bool = False
+) -> tuple[str, str]:
     """bandit SAST as a ratchet: counts MEDIUM+HIGH findings (SQL/command
     injection, unsafe deserialization, weak crypto, XXE, etc.). Ceiling only
     falls. Silence a specific false positive with a `# nosec` comment."""
@@ -508,13 +727,34 @@ def check_security(projects, fix=False, ratchet=False):
             continue
         ran = True
         r = sh([bb, "-r", ".", "-q", "-f", "json", "-x", "./.venv,./node_modules"], cwd=p)
+        # `json.loads(r.stdout or "{}")` treated silence as a clean report: with
+        # the binary replaced by /usr/bin/false there was no output, no
+        # exception, an empty results list, and "0 MEDIUM+ security issues ≤
+        # ceiling 0". A scan that produced nothing did not happen.
         try:
-            results = json.loads(r.stdout or "{}").get("results", [])
-        except json.JSONDecodeError:
+            report = json.loads(r.stdout)
+        except (json.JSONDecodeError, ValueError):
             return (
                 "FAIL",
-                f"bandit output unparseable for {p.name}:\n{(r.stdout + r.stderr)[-800:]}",
+                f"bandit produced no readable report for {p.name} (exit {r.returncode}):\n"
+                f"{(r.stdout + r.stderr)[-800:]}",
             )
+        if not isinstance(report, dict) or "results" not in report:
+            return ("FAIL", f"bandit output for {p.name} has no results key:\n{r.stdout[:400]}")
+        # bandit exits 1 when it found anything at all, including the LOW
+        # findings this ceiling deliberately ignores, so 1 is not a failure
+        # here. Anything else is the tool itself failing.
+        if r.returncode not in (0, 1):
+            return (
+                "FAIL",
+                f"bandit exited {r.returncode} for {p.name}:\n{(r.stdout + r.stderr)[-800:]}",
+            )
+        # Files bandit could not read are reported here rather than raised. They
+        # are the same defect one level down: a file that was not scanned counts
+        # as zero findings.
+        if report.get("errors"):
+            return ("FAIL", f"bandit could not scan every file in {p.name}:\n{report['errors']}")
+        results = report["results"]
         hits = [x for x in results if x.get("issue_severity") in ("MEDIUM", "HIGH")]
         total += len(hits)
         sample += [
@@ -522,8 +762,12 @@ def check_security(projects, fix=False, ratchet=False):
             f"{x['filename']}:{x['line_number']} {x['issue_text'][:60]}"
             for x in hits[:5]
         ]
-    if not ran:
-        return ("SKIP", "bandit not installed (pip install bandit)")
+    if missing or not ran:
+        return (
+            "FAIL",
+            MISSING_TOOL.format(tool="bandit", how="pip install bandit")
+            + (f"\nnot found for: {', '.join(missing)}" if missing else ""),
+        )
     if fix:
         budget["max_issues"] = total
         save("bandit.json", budget)
@@ -541,14 +785,15 @@ def check_security(projects, fix=False, ratchet=False):
     return ("OK", f"{total} MEDIUM+ security issues ≤ ceiling {cap}{nudge}")
 
 
-def check_deps(projects):
+def check_deps(projects: Sequence[Path]) -> tuple[str, str]:
     """pip-audit: fail on dependencies with known published CVEs. Needs the
     advisory DB (network); if unreachable it SKIPs rather than block offline
     commits — CI, which has network, is the real enforcement point."""
-    ran, vulns = False, []
+    ran, vulns, missing = False, [], []
     for p in projects:
         pa = _tool_for(p, "pip-audit")
         if not pa:
+            missing.append(p.name)
             continue
         r = sh([pa, "-l", "--progress-spinner", "off"], cwd=p)
         err = r.stderr.lower()
@@ -557,65 +802,86 @@ def check_deps(projects):
         ):
             return ("SKIP", "pip-audit offline (advisory DB unreachable) — enforced in CI")
         ran = True
+        # Any other nonzero status is a FAIL, whether the tool found a CVE or
+        # fell over: an audit that did not complete has not cleared anything.
         if r.returncode:
-            vulns.append(f"{p.name}:\n{(r.stdout + r.stderr)[-1200:]}")
-    if not ran:
-        return ("SKIP", "pip-audit not installed (pip install pip-audit)")
+            vulns.append(
+                f"{p.name}: pip-audit exited {r.returncode}\n{(r.stdout + r.stderr)[-1200:]}"
+            )
+    if missing or not ran:
+        return (
+            "FAIL",
+            MISSING_TOOL.format(tool="pip-audit", how="pip install pip-audit")
+            + (f"\nnot found for: {', '.join(missing)}" if missing else ""),
+        )
     if vulns:
         return ("FAIL", "vulnerable dependencies:\n" + "\n".join(vulns))
     return ("OK", "no known-vulnerable dependencies")
 
 
-def main():
+def main() -> int:
     fix = "--init-budgets" in sys.argv
     # --ratchet: tighten budgets toward current state, but ONLY tighter, never
     # looser (raise coverage floor, lower error/debt ceilings). Safe to run any
     # time; unlike --init-budgets it can never weaken a budget.
     ratchet = "--ratchet" in sys.argv
     projects = py_projects()
-    checks = [
-        ("lint", lambda: check_lint(projects)),
-        ("format", lambda: check_format(projects)),
-        ("types", lambda: check_types(projects, fix, ratchet)),
-        ("tests + coverage", lambda: check_tests(projects, fix, ratchet)),
-        ("database guards", check_db_guards),
-        ("duplicate code", check_dups),
-        ("file sizes", lambda: check_file_sizes(fix)),
-        ("debt markers", lambda: check_debt(fix, ratchet)),
-        ("architecture", lambda: arch_checks.check_architecture(ROOT, _SKIP_DIRS)),
-        ("invariant coverage", lambda: arch_checks.check_invariant_matrix(ROOT)),
+    # The third field is the only permission a check has to come out anything
+    # other than OK. Everything else — SKIP, WARN, a tool that is not installed
+    # — counts as a failure, because `✓ all checks passed` printed over a check
+    # that did not run is the exact claim this gate exists to refuse.
+    #
+    # Two checks may legitimately not run, and both say so in their detail line:
+    #   database guards — needs a live database; developers may have none, and
+    #     CI sets REQUIRE_DB_TESTS=1 which removes this permission there.
+    #   dependency CVEs — needs the advisory DB over the network, and an
+    #     offline commit should not be blocked. Only the offline branch SKIPs;
+    #     a missing pip-audit is a FAIL.
+    checks: list[tuple[str, Callable[[], tuple[str, str]], bool]] = [
+        ("lint", lambda: check_lint(projects), False),
+        ("format", lambda: check_format(projects), False),
+        ("types", lambda: check_types(projects, fix, ratchet), False),
+        ("tests + coverage", lambda: check_tests(projects, fix, ratchet), False),
+        ("test inventory", lambda: check_test_inventory(fix, ratchet), False),
+        ("database guards", check_db_guards, True),
+        ("duplicate code", check_dups, False),
+        ("file sizes", lambda: check_file_sizes(fix), False),
+        ("debt markers", lambda: check_debt(fix, ratchet), False),
+        ("architecture", lambda: arch_checks.check_architecture(ROOT, _SKIP_DIRS), False),
+        ("invariant coverage", lambda: arch_checks.check_invariant_matrix(ROOT), False),
         (
             "ignore budget",
             lambda: arch_checks.check_ignore_budget(ROOT, tracked(), BUD, fix, ratchet),
+            False,
         ),
-        ("secrets", check_secrets),
-        ("security (SAST)", lambda: check_security(projects, fix, ratchet)),
-        ("dependency CVEs", lambda: check_deps(projects)),
-        ("CLAUDE.md alignment", check_claude_md),
-        ("CI parity", check_ci_parity),
+        ("secrets", check_secrets, False),
+        ("security (SAST)", lambda: check_security(projects, fix, ratchet), False),
+        ("dependency CVEs", lambda: check_deps(projects), True),
+        ("CLAUDE.md alignment", check_claude_md, False),
+        ("CI parity", check_ci_parity, False),
     ]
-    results = []
-    for name, fn in checks:
+    results: list[tuple[str, str, str, bool]] = []
+    for name, fn, may_skip in checks:
         try:
             status, detail = fn()
         except Exception as e:  # a crashing check must not silently pass
             status, detail = "FAIL", f"check crashed: {e}"
-        results.append((name, status, detail))
+        results.append((name, status, detail, may_skip))
 
     sym = {"OK": "✓", "WARN": "!", "SKIP": "·", "FAIL": "✗"}
     mode = " — baseline" if fix else (" — ratchet" if ratchet else "")
     print("\nagent-ready check-all" + mode)
     print("-" * 44)
-    for name, status, detail in results:
+    for name, status, detail, _ in results:
         print(f"  {sym.get(status, '?')} {name:22} {status}")
-        if status in ("FAIL", "WARN") and detail:
+        if status != "OK" and detail:
             for line in detail.splitlines():
                 print(f"        {line}")
 
     if fix:
         print("\nbudgets baselined to current state.\n")
         return 0
-    failed = [n for n, s, _ in results if s == "FAIL"]
+    failed = [n for n, s, _, may_skip in results if not (s == "OK" or (s == "SKIP" and may_skip))]
     if failed:
         print(f"\n✗ {len(failed)} check(s) failed: {', '.join(failed)}\n")
         return 1

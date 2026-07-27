@@ -137,11 +137,39 @@ def run(snap: dict, o: Oracle) -> None:
     )
 
     print("\n── F1 / F2: the two non-derivable marks ──")
+    # `missing`, and this anchor has now been written both ways — which is the
+    # useful part of its history.
+    #
+    # It briefly asserted `insufficient`, on the reading that "the interest will
+    # be re-measured at the closing rate at each future measurement date" is
+    # INV-6 speaking about the RATE rather than INV-16 speaking about reliance,
+    # so the window should stand open and the memo be in scope at 25Q4. The
+    # sentence's grammatical subject settles it the other way: the subject is
+    # THE INTEREST, and the closing rate is the instrument of re-measurement,
+    # not the thing being scoped. It is a whole-document reliance clause of the
+    # same family as Capsule's memo and Moonfare's own FY2023 one.
+    #
+    # The cost of the other reading was not this verdict but the NEXT ACTION.
+    # `insufficient` asks an auditor to go and get primary evidence for support
+    # the packet is holding; `missing` tells them the support expired and an
+    # updated valuation is required. The document that would have supplied the
+    # first is the one whose stale figure the gap exists to flag.
+    #
+    # The reason and action are asserted, not just the verdict: `missing` alone
+    # is what Because Market also reports, and never-had-any and had-and-expired
+    # are the two findings this row exists to keep apart.
+    moonfare_r2 = row(snap, "moonfare", "2025-12-31")["requirements"]["R2"]
     check(
-        "moonfare 25Q4 R2 missing (no FY2025 FX rate)",
-        row(snap, "moonfare", "2025-12-31")["requirements"]["R2"]["verdict"],
+        "moonfare 25Q4 R2 missing (its own memo does not reach this date)",
+        moonfare_r2["verdict"],
         "missing",
     )
+    check(
+        "moonfare 25Q4 R2 reason",
+        moonfare_r2["reasons"],
+        ["SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW"],
+    )
+    check("moonfare 25Q4 R2 action", moonfare_r2["next_actions"], ["REQUEST_UPDATED_VALUATION"])
     check(
         "anthropic 25Q4 R2 insufficient (press)",
         row(snap, "anthropic", "2025-12-31")["requirements"]["R2"]["verdict"],
@@ -332,16 +360,28 @@ def run(snap: dict, o: Oracle) -> None:
         row(snap, "fluidstack", "2024-12-31")["requirements"]["R2"]["relied_on"],
         ["fluidstack_a_spa"],
     )
+    # THREE, not two. The A-2 cap-table reference prices series_a2 — a class the
+    # fund holds 100,000 shares of at this date — and was relied on for nothing,
+    # so the derivation had no price for that class and reported `unconfirmable`
+    # while the price sat cited in the corpus. The principle this case defends is
+    # unchanged (claims pricing different held classes coexist); the enumeration
+    # was short by the one that was unreachable.
+    # Asserted IN ORDER. This was wrapped in `sorted()`, which is why the
+    # oracle and the product could disagree about the order of these three and
+    # nothing said so: the wrapper normalised both sides of a value the packet
+    # publishes as a sequence. The A-2 reference and the Series B cap table are
+    # both dated 12/18/2025, so this is the case where the tiebreak is load
+    # bearing.
     check(
-        "25Q4 retains both class claims",
-        sorted(row(snap, "fluidstack", "2025-12-31")["requirements"]["R2"]["relied_on"]),
-        ["fluidstack_a_spa", "fluidstack_b_cap"],
+        "25Q4 retains a claim per priced class, in the order the evidence arose",
+        row(snap, "fluidstack", "2025-12-31")["requirements"]["R2"]["relied_on"],
+        ["fluidstack_a_spa", "fluidstack_a2_ref", "fluidstack_b_cap"],
     )
     # Dream's cap table and closing email evidence the SAME round — they
     # corroborate rather than supersede, so pro_forma must survive.
     check(
-        "dream relies on both same-round documents",
-        sorted(row(snap, "dream", "2025-12-31")["requirements"]["R2"]["relied_on"]),
+        "dream relies on both same-round documents, cap table then closing email",
+        row(snap, "dream", "2025-12-31")["requirements"]["R2"]["relied_on"],
         ["dream_b_cap", "dream_close_email"],
     )
     check("dream stays pro_forma", "pro_forma" in row(snap, "dream", "2025-12-31")["labels"], True)

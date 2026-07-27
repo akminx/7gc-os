@@ -66,16 +66,54 @@ RELIANCE: dict[str, frozenset[RequirementCode]] = {
     "fund_i_banzai:fy2023_close": frozenset({R2}),
     "fund_i_banzai:fy2024_close": frozenset({R2}),
     "fund_i_banzai:fy2025_close": frozenset({R2}),
+    # The Series A-2 tranche, priced at $15.00 in the Series B cap table, with
+    # the closing set stated to be with counsel.
+    #
+    # This was `frozenset()` — "the reference is not the evidence, the gap is" —
+    # and the reasoning was sound about SUFFICIENCY and wrong about REACH.
+    # Withholding it did not make the evidence weak; it made a check impossible.
+    # Fluidstack holds 100,000 series_a AND 100,000 series_a2 at 25Q4, so with
+    # no price for the second class V2 reported `unconfirmable ·
+    # NO_PRICE_FOR_CLASS:series_a2` — the system saying "I cannot check this"
+    # while holding, cited and bound, the very price it said it lacked.
+    #
+    # Linked, V2 derives 100,000×$10 + 100,000×$15 = 2,500,000 against a
+    # reported 6,000,000 (200,000 × the $30 Series B pro forma price applied to
+    # every class) and reports a 3,500,000 discrepancy. A cross-family review
+    # found this by adding the link in memory and watching `unconfirmable`
+    # become `fail`.
+    #
+    # A check that cannot run because evidence was withheld from it is worse
+    # than a wrong answer: it is the "check that passes because it cannot run"
+    # shape, arriving through reliance rather than through configuration.
+    #
+    # The matrix still decides what the evidence PROVES —
+    # `company_cap_table` + `unexecuted_referenced` is capped at `partial`, so
+    # this cannot make R2 sufficient. It only lets the arithmetic happen.
+    "fund_ii_fluidstack:series_a2_referenced_execution": frozenset({R2}),
+    # Settlement confirmations, bound to R1 because the audit letter's paragraph
+    # 1 asks for the acquisition documents "including share counts, price per
+    # share, AND SETTLEMENT OF FUNDS". These state money actually received by
+    # the company from the fund, with a date and a reference.
+    #
+    # They were `frozenset()` — "the SPA they accompany already covers it". Two
+    # reviewers in different model families found that independently and from
+    # opposite ends: one observed that binding them changes no verdict but the
+    # packet never shows settlement under paragraph 1, the other that R1 never
+    # PROVES settlement exists, so an implementation discarding every settlement
+    # claim stays green. A limb of the letter answered by nothing visible is a
+    # limb the auditor has to ask for twice.
+    #
+    # Binding them does NOT make settlement a condition of R1 sufficiency, and
+    # that restraint is deliberate. Requiring a separate settlement confirmation
+    # would drop Jio — an indirect feeder whose capital-account statement IS its
+    # settlement evidence, showing contributed capital directly. Inventing a
+    # universal rule to satisfy a reading of one sentence would produce exactly
+    # one verdict change in this corpus, and it would be wrong.
+    "fund_ii_poolside:series_b_settlement": frozenset({R1}),
+    "fund_i_roofstock:series_e_settlement": frozenset({R1}),
+    "fund_ii_fluidstack:series_a_settlement": frozenset({R1}),
     # ── Relied upon for nothing, deliberately ────────────────────────────
-    # The closing set is with counsel; the reference is not the evidence, the
-    # gap is. Linking it to R2 would put a $15.00 price into fair-value support
-    # on the strength of a sentence saying the documents are elsewhere.
-    "fund_ii_fluidstack:series_a2_referenced_execution": frozenset(),
-    # Settlement confirmations. They evidence that funds moved, which the SPA
-    # they accompany already covers, and they price nothing.
-    "fund_ii_poolside:series_b_settlement": frozenset(),
-    "fund_i_roofstock:series_e_settlement": frozenset(),
-    "fund_ii_fluidstack:series_a_settlement": frozenset(),
     # The records notes. They bind through `valuation_component_support`.
     "fund_ii_poolside:series_b_fund_records": frozenset(),
     "fund_i_roofstock:series_e_fund_records": frozenset(),

@@ -4,18 +4,30 @@ import { Company } from "./Company";
 import { Dashboard } from "./Dashboard";
 import type { Async } from "./data";
 import { failureDetail, loadFunds, loadPacket } from "./data";
+import { ExportPacket } from "./Export";
 import { GapInventory } from "./GapInventory";
 import type { FundPeriod, FundsResponse, PacketResponse } from "./responses";
-import { SourceBadge } from "./ui";
+import { ThemeChoiceControl } from "./Theme";
+import { SourceBadge, Why } from "./ui";
 
 /**
  * The three read-only surfaces of SPEC §12: the dual-fund dashboard, the
  * company evidence workspace, and the gap inventory.
  *
- * SPEC §3.1 · the public surface is read-only. There is no approve or reject
- * control anywhere in this tree — approval STATE is rendered, and always with
- * the decision type named, because a transcription approval is not a fair-value
- * approval (SPEC §6.3).
+ * Approval STATE is rendered everywhere, and always with the decision type
+ * named, because a transcription approval is not a fair-value approval
+ * (SPEC §6.3).
+ *
+ * This comment used to end "there is no approve or reject control anywhere in
+ * this tree". That stopped being true when §6.3's four approvable resources
+ * needed somewhere for a human to actually decide: the workspace now renders
+ * one, and `api/decisions.py` serves the single route behind it. A stale
+ * assurance is worse than none — a reader checking whether this app can write
+ * would have found the answer here and stopped looking.
+ *
+ * The control appears only where the deployment names its actors. With
+ * `DECISION_ACTORS` unset the API returns 403 and the UI renders nothing,
+ * which is how the demo stays read-only without the code having two versions.
  *
  * Which fund-period is on screen now comes from `GET /funds`. It used to be two
  * constants in the data layer, which made a screen built to compare funds show
@@ -149,10 +161,13 @@ export function App() {
   return (
     <main>
       <header className="masthead">
-        <h1>7GC OS — Valuation Evidence Ledger</h1>
+        <div className="masthead__top">
+          <h1>7GC OS — Valuation Evidence Ledger</h1>
+          <ThemeChoiceControl />
+        </div>
         <p className="note">
-          Audit support, read-only. Every figure on these screens is supplied by the API; this
-          surface formats and orders, and computes nothing.
+          Audit support, read-only.{" "}
+          <Why text="Every figure on these screens is supplied by the API; this surface formats and orders, and computes nothing." />
         </p>
         {funds.kind === "ready" && (
           <p className="note">
@@ -169,13 +184,19 @@ export function App() {
       )}
       {funds.kind === "error" && <p className="error">Fund list failed: {funds.detail}</p>}
       {funds.kind === "ready" && current === undefined && (
-        <p className="note">
-          The API lists no fund-period that a packet can be built for. That is an empty ledger, not
-          an empty screen.
+        <p className="note" title="That is an empty ledger, not an empty screen.">
+          The API lists no fund-period that a packet can be built for.
         </p>
       )}
       {current !== undefined && (
-        <PeriodPicker periods={periods} chosen={keyOf(current)} onChoose={setChosen} />
+        <div className="bar">
+          <PeriodPicker periods={periods} chosen={keyOf(current)} onChoose={setChosen} />
+          {/* The exporter runs against the fund-period on screen, so the control
+              sits beside the picker that chooses it rather than at the end of a
+              surface. A packet button one scroll away from the period selector
+              is a button whose subject the reader has to remember. */}
+          <ExportPacket fundId={current.fund_id} periodId={current.period_id} />
+        </div>
       )}
 
       {current !== undefined && packet.kind === "loading" && (

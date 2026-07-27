@@ -160,7 +160,9 @@ describe("SupportState", () => {
 
   it("reports an unsupported row with no reasons as the contradiction it is", () => {
     render(<SupportState supported={false} reasons={{}} />);
-    expect(screen.getByText(/disagreement between two fields it computes/)).toBeDefined();
+    const stated = screen.getByText(/no reason supplied/);
+    expect(stated).toBeDefined();
+    expect(stated.title).toMatch(/disagreement between two fields it computes/);
   });
 });
 
@@ -273,8 +275,12 @@ describe("GapItem", () => {
         <GapItem gap={COUNSEL_GAP} heading={<strong>Sway</strong>} />
       </ul>,
     );
-    expect(screen.getByText("with counsel")).toBeDefined();
-    expect(screen.getByText(/Request from counsel/)).toBeDefined();
+    const kind = screen.getByText("with counsel");
+    expect(kind).toBeDefined();
+    // What the kind means and who the letter goes to travel with the kind, on
+    // it rather than as a paragraph repeated under every observation.
+    expect(kind.title).toMatch(/Request from counsel/);
+    expect(kind.title).toMatch(/held by counsel/);
     expect(screen.getByText("Series A purchase agreement")).toBeDefined();
     expect(screen.getByText("remediation · requested")).toBeDefined();
     expect(screen.getByText("—")).toBeDefined();

@@ -19,6 +19,11 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 
+# Generated auditor packets. A packet is a build artefact of the private
+# case-study corpus — it embeds the source documents themselves — so it is
+# produced on demand and never committed. `packet/__main__.py` defaults here.
+out/
+
 # Coverage / tooling artefacts
 .coverage
 .coverage.*

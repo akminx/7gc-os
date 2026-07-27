@@ -1,0 +1,45 @@
+{
+  "document": {
+    "content_hash": "sha256:ef179815a92335da4135ad5c2f0790c083b8f7225d1cc10c258895f0a74d5720",
+    "extractor": "utf8-verbatim@1",
+    "filename": "Lucra - Email from CEO re Series A-2 Close (October 17, 2025).txt",
+    "text_hash": "sha256:78f7e1cdbb2be00400719d05c22aaa11d3cc86776d767317eb01b528b1a0feac"
+  },
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+  "recorded_at": "2026-07-26T09:05:12.903688+00:00",
+  "request": {
+    "model": "anthropic/claude-opus-5",
+    "prompt_fingerprint": "sha256:c9cd537f8a7bc6c2ced4cc2ed3c103814993af1a77dd16e0e163b59857ae2acc",
+    "provider": "Anthropic",
+    "temperature": 0
+  },
+  "response": {
+    "content": "{\"facts\":[{\"field_name\":\"email_date\",\"value_text\":\"Friday, October 17, 2025, 2:38 PM ET\",\"quote\":\"Date: Friday, October 17, 2025, 2:38 PM ET\"},{\"field_name\":\"close_statement\",\"value_text\":\"we signed and closed the Series A-2 on Wednesday\",\"quote\":\"Wanted you to hear it from me before it circulates: we signed and closed the Series A-2 on Wednesday.\"},{\"field_name\":\"price_per_share\",\"value_text\":\"$3.00 per share\",\"quote\":\"$3.00 per share, $95M post.\"},{\"field_name\":\"post_money_valuation\",\"value_text\":\"$95M\",\"quote\":\"$95M post. Inside-led with one new strategic.\"},{\"field_name\":\"closing_set_status\",\"value_text\":\"Counsel is still finalizing the closing set\",\"quote\":\"Counsel is still finalizing the closing set; I'll have them send over the executed docs and updated cap table once the final signature pages are in.\"}]}",
+    "id": "gen-1785056706-hkL1ta6qqdqN4TFBWA1D",
+    "model": "anthropic/claude-opus-5",
+    "provider": "Anthropic",
+    "usage": {
+      "completion_tokens": 329,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 0.013765,
+      "cost_details": {
+        "upstream_inference_completions_cost": 0.008225,
+        "upstream_inference_cost": 0.013765,
+        "upstream_inference_prompt_cost": 0.00554
+      },
+      "is_byok": false,
+      "prompt_tokens": 1108,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 1437
+    }
+  }
+}
