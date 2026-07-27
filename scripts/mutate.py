@@ -53,6 +53,7 @@ VALIDATORS = ROOT / "policy/validators.py"
 API_EVALS = ROOT / "api/evals.py"
 DOC_LOAD = ROOT / "ingest/documents/load.py"
 CAP_TABLE = ROOT / "ingest/documents/extract_cap_table.py"
+COMPANY = ROOT / "packet/company.py"
 REDUCER = ROOT / "policy/reducer.py"
 REQS = ROOT / "policy/requirements.py"
 INPUTS = ROOT / "policy/inputs.py"
@@ -186,6 +187,22 @@ MUTATIONS: list[Mutation] = [
         VALIDATORS,
         '        return claim.fact_text.get("currency_pair") == f"{rate.base}/{rate.quote}"',
         "        return True",
+    ),
+    # ── what one company's archive is allowed to contain ────────────────
+    # "Organized by portfolio company" is the letter's closing line, and the one
+    # thing a per-company archive must not do is quietly carry another
+    # company's documents.
+    Mutation(
+        "per-company export: the folder prefix loses its separator",
+        COMPANY,
+        'path.startswith(inside) or not path.startswith(f"{COMPANIES}/")',
+        'path.startswith(inside.rstrip("/")) or not path.startswith(f"{COMPANIES}/")',
+    ),
+    Mutation(
+        "per-company export: every company is kept, so the filter does nothing",
+        COMPANY,
+        "        path.startswith(inside) or not path.startswith",
+        "        True or path.startswith(inside) or not path.startswith",
     ),
     # ── the manifest: a citation can be verbatim and still be wrong ──────
     # Both of these were undefended until `tests/test_corpus_manifest.py`
@@ -1020,6 +1037,7 @@ FILE_SUITES: dict[Path, list[str]] = {
     VALIDATORS: ["tests/test_validators.py"],
     INPUTS: ["tests/test_policy_guards.py", "tests/test_policy_vs_oracle.py"],
     API_EVALS: ["tests/test_evals.py"],
+    COMPANY: ["tests/test_reconciliation.py"],
     # The manifest comparison is the only reader that can tell a right-shaped
     # citation on the wrong passage from a right one, so it defends both of
     # these alone. It needs the corpus and no database.

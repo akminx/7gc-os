@@ -7,6 +7,7 @@ import type {
   ExportResponse,
   FundsResponse,
   HoldingResponse,
+  PacketDownload,
   PacketResponse,
 } from "./responses";
 
@@ -188,9 +189,120 @@ export async function exportPacket(fundId: string, periodId: string): Promise<Ex
     );
   const response = await fetch(`${API}/funds/${fundId}/periods/${periodId}/export`);
   const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(refusalDetail(body, response.status));
+  if (!response.ok) throw new Error(refusalDetail(body, response.status, "this export"));
   assertKeys(body, EXPORT_KEYS, "export");
   return body as ExportResponse;
+}
+
+/**
+ * A header the archive was supposed to carry, or a stated failure.
+ *
+ * `assertKeys` for a response with no body to inspect. A missing header would
+ * otherwise reach the screen as an empty string beside a label, and a blank
+ * where a packet id belongs reads as "this packet has no id" rather than "this
+ * build is talking to an API that no longer sends one".
+ */
+function archiveHeader(response: Response, name: string): string {
+  const value = response.headers.get(name);
+  if (value === null)
+    throw new Error(
+      `the archive arrived without its ${name} header, so this page cannot say what was downloaded`,
+    );
+  return value;
+}
+
+/**
+ * The name the API chose for the file, or the caller's fallback.
+ *
+ * The API builds it from ids that came in over the wire and strips everything
+ * outside a safe set on the way, so it is the name to prefer. When the header
+ * is absent or malformed the browser supplies its own rather than letting the
+ * file save as `export.zip` — a downloads folder with four files called
+ * `export.zip` is four packets nobody can tell apart.
+ */
+function attachmentName(disposition: string | null, fallback: string): string {
+  const found = disposition === null ? null : /filename="([^"]+)"/.exec(disposition);
+  return found?.[1] ?? fallback;
+}
+
+/**
+ * Fetch one archive and everything the response says about it.
+ *
+ * A refusal is read out of the JSON body the API sends INSTEAD of the zip, and
+ * rendered in the API's own words for the same reason every other refusal is:
+ * the exporter names which citation would not resolve or which approved
+ * position is unsupported, and that sentence is the deliverable. A download
+ * that silently does not arrive, or that says "export failed", keeps the
+ * failure and throws the finding away.
+ */
+async function fetchArchive(url: string, fallbackName: string): Promise<PacketDownload> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    throw new Error(refusalDetail(body, response.status, "this export"));
+  }
+  return {
+    filename: attachmentName(response.headers.get("content-disposition"), fallbackName),
+    blob: await response.blob(),
+    packet_id: archiveHeader(response, "x-packet-id"),
+    manifest_hash: archiveHeader(response, "x-manifest-hash"),
+    file_count: archiveHeader(response, "x-file-count"),
+    withheld_file_count: archiveHeader(response, "x-withheld-file-count"),
+    recorded_in_ledger: archiveHeader(response, "x-recorded-in-ledger") === "true",
+  };
+}
+
+/**
+ * Download the whole auditor packet for one fund-period.
+ *
+ * The packet has been the deliverable since SPEC §1 and until this it was only
+ * ever written to the API host's disk — which on a free Render instance is
+ * ephemeral and unreachable, so the thing the project exists to produce could
+ * not be obtained by the person it is for.
+ *
+ * A separate function from `exportPacket`, not a replacement for it. Building
+ * the packet on the host and reporting where it landed is still a real answer,
+ * and it is the one that reports a refusal in full without the reader having to
+ * open anything.
+ */
+export async function downloadPacket(fundId: string, periodId: string): Promise<PacketDownload> {
+  if (API === "")
+    throw new Error(
+      "No API is configured, so this browser is showing the bundled fixture. There is no ledger to export a packet from.",
+    );
+  return fetchArchive(
+    `${API}/funds/${fundId}/periods/${periodId}/export.zip`,
+    `${fundId}-${periodId}.zip`,
+  );
+}
+
+/**
+ * Download one portfolio company's evidence out of that packet.
+ *
+ * The engagement letter closes by asking for the support "organized by
+ * portfolio company", and the export has been organised that way from the
+ * start; this is the half that lets one of those folders be taken away without
+ * the other seven.
+ *
+ * The archive is the whole packet minus the other companies' source documents.
+ * The gap report, the evidence index and the tables travel unmodified, because
+ * a copy of them trimmed to one company would state fewer findings than the
+ * packet found. The archive carries its own note saying exactly which files
+ * were withheld.
+ */
+export async function downloadCompanyEvidence(
+  fundId: string,
+  periodId: string,
+  holdingId: string,
+): Promise<PacketDownload> {
+  if (API === "")
+    throw new Error(
+      "No API is configured, so this browser is showing the bundled fixture. There is no ledger to export this company's evidence from.",
+    );
+  return fetchArchive(
+    `${API}/funds/${fundId}/periods/${periodId}/companies/${holdingId}/export.zip`,
+    `${fundId}-${periodId}-${holdingId}.zip`,
+  );
 }
 
 /**
@@ -225,13 +337,19 @@ export function namedActors(): string[] {
  * refusal text names the invariant, the trigger and the requirement that is
  * short. Discarding it and showing a status code would turn the one moment this
  * product exists for into "something went wrong".
+ *
+ * `subject` names what was refused, and it is a parameter because the exports
+ * now use this too. The fallback sentence is the only place it shows, and it is
+ * the sentence a reader gets when there is nothing better to tell them — so
+ * "the ledger refused this decision" arriving over a failed packet download
+ * would be this function inventing the one detail it exists to preserve.
  */
-function refusalDetail(body: unknown, status: number): string {
+function refusalDetail(body: unknown, status: number, subject: string): string {
   const detail =
     typeof body === "object" && body !== null ? (body as { detail?: unknown }).detail : undefined;
   if (typeof detail === "string") return detail;
   if (detail !== undefined) return JSON.stringify(detail);
-  return `the ledger refused this decision with status ${status} and stated no reason`;
+  return `the API refused ${subject} with status ${status} and stated no reason`;
 }
 
 /**
@@ -252,7 +370,7 @@ export async function recordDecision(request: DecisionRequest, actorId: string):
     body: JSON.stringify(request),
   });
   const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(refusalDetail(body, response.status));
+  if (!response.ok) throw new Error(refusalDetail(body, response.status, "this decision"));
   return body as Approval;
 }
 

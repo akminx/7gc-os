@@ -129,6 +129,8 @@ function Surfaces({ packet }: { packet: PacketResponse }) {
       {surface === "dashboard" && <Dashboard packet={packet} onOpenCompany={open} />}
       {surface === "company" && (
         <Company
+          fundId={packet.fund_id}
+          periodId={packet.period.id}
           rows={packet.rows}
           recomputations={packet.recomputations}
           selected={selected}

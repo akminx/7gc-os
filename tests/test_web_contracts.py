@@ -42,11 +42,13 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from api import routes
+from api import reconciliation, routes
 from api.serialize import recomputation_json, row_json, totals_json
 from packages.contracts import enums, models
 from packages.contracts.base import Money
 from packages.contracts.fixtures.dream import dream_packet
+from packet.export import Written
+from packet.layout import Layout
 from packet.recompute import ClassAmount, Recomputation
 from policy.validators import Outcome
 from scripts import capture_web_fixture
@@ -318,6 +320,46 @@ def test_the_recomputation_carries_every_field_the_derivation_produced() -> None
     sent = recomputation_json(_a_recomputation())
     assert set(sent) == {f.name for f in dataclass_fields(Recomputation)}
     assert set(sent["per_class"][0]) == {f.name for f in dataclass_fields(ClassAmount)}
+
+
+#: The two fields on `PacketDownload` that no header carries: the filename is
+#: read out of `Content-Disposition`, and the archive itself is the body. Named
+#: here rather than filtered by a pattern, so adding a third undeclared field
+#: has to be a decision somebody wrote down.
+DOWNLOAD_WITHOUT_A_HEADER = {"filename", "blob"}
+
+
+def test_the_download_interface_declares_the_headers_the_routes_actually_send() -> None:
+    """`PacketDownload` against `_download_facts`, not against a description of it.
+
+    The export routes that return a zip have no JSON envelope, so the two checks
+    above cannot see them: there is no captured payload to walk and no Pydantic
+    model to compare against. Everything the screen can say about a download it
+    has just handed to the operating system arrives in a header, and a header the
+    API renamed would reach the browser as `null` — which renders as a blank
+    beside a label, and a blank where a packet id belongs reads as "this packet
+    has no id" rather than as a contract that has moved.
+
+    Both directions, for the reason the enum check states: a field the browser
+    declares and the API does not send is as much a drift as the reverse, and
+    only one of the two is visible from the TypeScript side.
+    """
+    stub = Written(
+        packet_id="pkx_test",
+        root=Path("/nonexistent"),
+        manifest={"entries": [], "manifest_hash": "h"},
+        fund_id="fund_ii",
+        period_id="fund_ii_25q4",
+        schema_version="0.1.0",
+        policy_version="v1",
+        layout=Layout(),
+    )
+    sent = reconciliation._download_facts(stub, present=1, withheld=0)
+    assert sent, "no header to compare — this check would pass vacuously"
+    declared = _fields("PacketDownload")
+    assert declared > DOWNLOAD_WITHOUT_A_HEADER
+    as_fields = {name.removeprefix("X-").lower().replace("-", "_") for name in sent}
+    assert as_fields == declared - DOWNLOAD_WITHOUT_A_HEADER
 
 
 def test_the_source_field_names_the_two_stores_the_routes_can_answer_from() -> None:

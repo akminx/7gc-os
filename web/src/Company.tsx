@@ -4,6 +4,7 @@ import type { HoldingRow } from "./contracts";
 import type { Async } from "./data";
 import { failureDetail, loadHolding } from "./data";
 import { EvidencePanel } from "./Evidence";
+import { ExportCompanyEvidence } from "./Export";
 import type { HoldingResponse, Recomputation } from "./responses";
 import { EvidenceTrail } from "./Trail";
 import { Section, SourceBadge } from "./ui";
@@ -23,11 +24,15 @@ import { Workspace } from "./Workspace";
  * engagement letter asks; the mark's own figures are context for it.
  */
 export function Company({
+  fundId,
+  periodId,
   rows,
   recomputations,
   selected,
   onSelect,
 }: {
+  fundId: string;
+  periodId: string;
   rows: HoldingRow[];
   recomputations: Record<string, Recomputation> | null;
   selected: string | null;
@@ -72,6 +77,18 @@ export function Company({
           ))}
         </select>
       </label>
+
+      {/* The letter's closing request, beside the picker that names its
+          subject: the support for ONE portfolio company, taken away on its own.
+          Here rather than next to the packet export because its subject is the
+          holding selected above, and a second company picker elsewhere would be
+          a second idea of which company is on screen. */}
+      <ExportCompanyEvidence
+        fundId={fundId}
+        periodId={periodId}
+        holdingId={row.holding_id}
+        companyName={row.company_name}
+      />
 
       {evidence.kind === "loading" && (
         <p className="note">Loading the evidence for this holding…</p>

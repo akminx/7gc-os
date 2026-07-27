@@ -20,7 +20,14 @@ async function mount(
   vi.resetModules();
   const { Company } = await import("./Company");
   return render(
-    <Company rows={rows} recomputations={recomputations} selected={selected} onSelect={() => {}} />,
+    <Company
+      fundId="fund_ii"
+      periodId="fund_ii_25q4"
+      rows={rows}
+      recomputations={recomputations}
+      selected={selected}
+      onSelect={() => {}}
+    />,
   );
 }
 

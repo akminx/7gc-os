@@ -19,6 +19,7 @@ can be wrong in exactly one consistent way.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tempfile
@@ -34,7 +35,9 @@ from fastapi.testclient import TestClient
 
 from api import ledger, reconciliation
 from api.config import ledger_schema
-from packet.export import MANIFEST_NAME
+from packet.company import COMPANY_SCOPE_NOTE, holdings_in, slice_for
+from packet.export import MANIFEST_NAME, Written
+from packet.layout import Layout
 from tests.schema_helpers import DSN
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -495,3 +498,326 @@ def test_the_download_filename_cannot_carry_a_header_break() -> None:
     hostile = reconciliation._download_name("a\r\nX-Evil: 1", "../../etc/passwd")
     assert "\r" not in hostile and "\n" not in hostile and "/" not in hostile
     assert hostile.endswith(".zip")
+
+
+# ── One company's evidence as a download ─────────────────────────────────
+# The audit letter's closing request, made obtainable: "the support organized by
+# portfolio company", one company at a time.
+#
+# The archive is the whole packet minus the OTHER companies' source documents,
+# and the cases below are arranged around the two ways that can go wrong. It can
+# carry too much — another company's documents, which is the one thing
+# "organized by portfolio company" must not do. Or it can carry too little — a
+# gap report trimmed to one company, which reports fewer findings than the
+# packet found while looking complete.
+
+#: Three positions with different shapes, named rather than discovered, so a
+#: case that stops covering one of them fails instead of quietly narrowing.
+#: Fluidstack holds two documents, Anthropic one, Because Market none.
+WITH_DOCUMENTS = "fund_ii_fluidstack"
+ANOTHER_COMPANY = "fund_ii_anthropic"
+WITHOUT_DOCUMENTS = "fund_ii_because_market"
+
+
+def _company_url(holding_id: str) -> str:
+    fund_id, period_id = DOWNLOADABLE
+    return f"/funds/{fund_id}/periods/{period_id}/companies/{holding_id}/export.zip"
+
+
+def _members(payload: bytes) -> set[str]:
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        assert archive.testzip() is None
+        return set(archive.namelist())
+
+
+def _member_text(payload: bytes, name: str) -> str:
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        return archive.read(name).decode("utf-8")
+
+
+def _folder(members: set[str], company: str) -> set[str]:
+    return {name for name in members if name.startswith(f"companies/{company}/")}
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_company_archive_carries_that_company_and_not_another() -> None:
+    """The whole point of the route, as the only assertion that can catch it
+    getting the prefix wrong: Fluidstack's two documents arrive, and no file
+    under any other company folder does. Checked in both directions — an archive
+    holding nothing at all would satisfy "no other company's documents"."""
+    response = _client().get(_company_url(WITH_DOCUMENTS))
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    members = _members(response.content)
+
+    mine = _folder(members, "Fluidstack")
+    assert mine, "the company's own folder is empty — the archive carries no evidence"
+    #: Each document is exported twice: the bytes the fund holds and the
+    #: canonical text every citation offset indexes into. An archive with the
+    #: PDFs and none of the text files leaves every offset pointing at nothing.
+    assert {name for name in mine if name.endswith(".canonical.txt")}
+    assert {name for name in mine if not name.endswith(".canonical.txt")}
+
+    others = {name for name in members if name.startswith("companies/")} - mine
+    assert others == set(), f"another company's evidence rode along: {sorted(others)}"
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_two_company_archives_from_one_packet_do_not_share_a_document() -> None:
+    """Two positions, two archives, no overlapping company folder.
+
+    The case above compares one archive against a prefix. This compares two
+    archives against each other, which is the form that survives a filter that
+    is wrong for every company in the same way.
+    """
+    first = _client().get(_company_url(WITH_DOCUMENTS))
+    second = _client().get(_company_url(ANOTHER_COMPANY))
+    assert first.status_code == second.status_code == 200
+    mine = {n for n in _members(first.content) if n.startswith("companies/")}
+    theirs = {n for n in _members(second.content) if n.startswith("companies/")}
+    assert mine and theirs
+    assert mine & theirs == set(), f"both archives carry {sorted(mine & theirs)}"
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_company_archive_members_are_what_the_manifest_and_the_note_account_for() -> None:
+    """Every member is accounted for, and every manifest entry is either present
+    or listed as withheld.
+
+    This is the property that makes the archive readable against the packet it
+    was cut from. `MANIFEST.json` is the full packet's, so its entry list is
+    LONGER than the archive — an auditor comparing the two would otherwise find
+    twenty missing files and no statement about why.
+    """
+    listing = _client().get(f"/funds/{DOWNLOADABLE[0]}/periods/{DOWNLOADABLE[1]}/export").json()
+    response = _client().get(_company_url(WITH_DOCUMENTS))
+    assert response.status_code == 200
+    members = _members(response.content)
+
+    entries = set(listing["files"])
+    extras = {MANIFEST_NAME, COMPANY_SCOPE_NOTE}
+    assert extras <= members
+    present = members - extras
+    assert present < entries, "the company archive is not a subset of the packet"
+
+    note = _member_text(response.content, COMPANY_SCOPE_NOTE)
+    withheld = {line.strip() for line in note.splitlines() if line.startswith("  companies/")}
+    assert withheld == entries - present, "the note does not account for what is missing"
+    assert response.headers["x-file-count"] == str(len(present))
+    assert response.headers["x-withheld-file-count"] == str(len(withheld))
+    assert int(response.headers["x-withheld-file-count"]) > 0
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_company_archive_carries_the_gap_report_whole() -> None:
+    """The CSVs are the packet's, byte for byte, and are not trimmed to the
+    company the archive is named for.
+
+    This is the design decision, asserted rather than described. A gap report cut
+    to one company reports fewer findings than the packet found; a holdings table
+    cut to one company's rows sits under a footer stating the fund's total. Both
+    are a deliverable that says less than the system knows while looking complete
+    — which is the defect this project exists to be unable to ship.
+
+    Byte equality against the full download, so "whole" cannot decay into
+    "mostly". The tables only — `MANIFEST.json` and `README.md` carry the
+    generation time, so two runs a minute apart differ there and that is not
+    drift. SPEC §12 calls reproducibility logical rather than byte-identical,
+    and the check below is what makes the tables' identity checkable anyway.
+    """
+    whole = _client().get(f"/funds/{DOWNLOADABLE[0]}/periods/{DOWNLOADABLE[1]}/export.zip")
+    company = _client().get(_company_url(WITH_DOCUMENTS))
+    assert whole.status_code == company.status_code == 200
+    for name in ("gap_report.csv", "evidence_index.csv", "holdings.csv"):
+        assert _member_text(company.content, name) == _member_text(whole.content, name), name
+    #: And the content is what makes it worth carrying: the gap report names a
+    #: company this archive is not about, which a trimmed copy could not do.
+    assert "Because Market" in _member_text(company.content, "gap_report.csv")
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_every_file_in_a_company_archive_hashes_to_what_its_manifest_records() -> None:
+    """The archive is checkable against the manifest travelling with it.
+
+    This is what "carried whole and unmodified" means as something that can go
+    red. Trimming a CSV to one company would leave a file whose bytes no
+    manifest attests to — a figure nobody can trace, arriving inside the packet
+    whose entire purpose is that every figure can be — and this is the assertion
+    that would catch it.
+    """
+    response = _client().get(_company_url(WITH_DOCUMENTS))
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        manifest = json.loads(archive.read(MANIFEST_NAME))
+        recorded = {e["path"]: e["content_hash"] for e in manifest["entries"]}
+        members = set(archive.namelist()) - {MANIFEST_NAME, COMPANY_SCOPE_NOTE}
+        assert members, "no member to hash — this check would pass vacuously"
+        for name in sorted(members):
+            assert hashlib.sha256(archive.read(name)).hexdigest() == recorded[name], name
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_a_company_with_no_documents_downloads_a_stated_absence() -> None:
+    """Because Market holds no source document, and that is a finding.
+
+    Not a 404 and not an empty archive: the folder carries a note saying the
+    document is not held, the gap report carries the same finding, and the scope
+    note says it too. An absence that produced no file would be an absence the
+    deliverable does not state — which is the failure the empty-folder note was
+    written for in the first place.
+    """
+    response = _client().get(_company_url(WITHOUT_DOCUMENTS))
+    assert response.status_code == 200
+    members = _members(response.content)
+    folder = _folder(members, "Because Market")
+    assert folder == {"companies/Because Market/NO_SOURCE_DOCUMENTS.txt"}
+
+    stated = _member_text(response.content, "companies/Because Market/NO_SOURCE_DOCUMENTS.txt")
+    assert "No source document is held for Because Market" in stated
+    assert "reported as a gap, not an omission" in stated
+    assert "NO SOURCE DOCUMENT" in _member_text(response.content, COMPANY_SCOPE_NOTE)
+    assert "no_source_documents" in _member_text(response.content, "gap_report.csv")
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_a_position_the_packet_does_not_hold_is_a_404_that_names_the_ones_it_does() -> None:
+    """404, and the answer to the next question in the same sentence.
+
+    An empty archive would render "this company has no evidence" and "you named
+    a company that is not in this packet" identically, and the first of those is
+    a finding about the fund.
+    """
+    response = _client().get(_company_url("fund_ii_not_a_position"))
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert "fund_ii_not_a_position" in detail
+    assert WITH_DOCUMENTS in detail and WITHOUT_DOCUMENTS in detail
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_company_download_refuses_exactly_as_the_packet_download_does() -> None:
+    """A refusal is a finding and reaches the browser in the exporter's own
+    words, whichever of the three export routes was asked. The per-company route
+    filters a packet that was already validated whole, so a refusal naming
+    another company's citation blocks this download too — and says which one,
+    rather than failing as though this company were the problem.
+
+    Compared against the JSON route rather than against the packet download. The
+    two downloads share the code that builds the packet, so they would agree
+    with each other while both being wrong; `GET .../export` raises its own 409
+    from its own line, which is what makes this an independent comparison rather
+    than two ends of the same wire.
+    """
+    listing = _client().get("/funds/fund_ii/periods/nonexistent/export")
+    company = _client().get(
+        f"/funds/fund_ii/periods/nonexistent/companies/{WITH_DOCUMENTS}/export.zip"
+    )
+    assert company.status_code == 409, "a refusal must not be reported as a fault"
+    assert listing.status_code == 409
+    assert listing.json()["detail"] == company.json()["detail"]
+    assert "nonexistent" in company.json()["detail"]
+
+
+def test_the_company_download_says_there_is_no_ledger_rather_than_shipping_the_stub(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same 503 the packet download gives, for the same reason: a one-holding
+    demo stub zipped under a portfolio company's name is a deliverable that is
+    wrong rather than absent."""
+    monkeypatch.setattr(reconciliation, "dsn", lambda key="DATABASE_URL": None)
+    response = _client().get(_company_url(WITH_DOCUMENTS))
+    assert response.status_code == 503
+    assert "no database is configured" in response.json()["detail"]
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_a_company_download_registers_nothing_and_leaves_nothing_behind() -> None:
+    """The read-only claim holds for the narrower route as well: no
+    `packet_manifest_entry` row, no staging directory, and the response says so
+    itself rather than leaving the browser to assume it."""
+    assert DSN is not None
+    with psycopg.connect(DSN, prepare_threshold=None) as conn:
+        conn.execute(f"set search_path to {ledger_schema()}")
+        before = conn.execute("select count(*) from packet_manifest_entry").fetchone()
+
+    leftovers = set(Path(tempfile.gettempdir()).glob("packet-download-*"))
+    response = _client().get(_company_url(WITH_DOCUMENTS))
+    assert response.status_code == 200
+    assert set(Path(tempfile.gettempdir()).glob("packet-download-*")) == leftovers
+
+    with psycopg.connect(DSN, prepare_threshold=None) as conn:
+        conn.execute(f"set search_path to {ledger_schema()}")
+        after = conn.execute("select count(*) from packet_manifest_entry").fetchone()
+    assert before == after
+    assert response.headers["x-recorded-in-ledger"] == "false"
+
+
+def _slice_over(company_dir: dict[str, str], paths: list[str]) -> Written:
+    """A published packet, constructed rather than exported.
+
+    The collision this pins cannot be produced from the corpus — no two of the
+    fund's companies have names where one folder is a prefix of another — and a
+    guard that can only be exercised by data nobody has is a guard that will be
+    written wrong and stay green.
+    """
+    return Written(
+        packet_id="pkx_test",
+        root=Path("/nonexistent"),
+        manifest={"entries": [{"path": p} for p in paths], "manifest_hash": "h"},
+        fund_id="fund_ii",
+        period_id="fund_ii_24q4",
+        schema_version="0.1.0",
+        policy_version="v1",
+        layout=Layout(company_dir=company_dir),
+    )
+
+
+def test_one_company_folder_is_not_a_prefix_of_another() -> None:
+    """`companies/Ada` must not collect `companies/Adafruit`'s documents.
+
+    A prefix test without the separator attached is the single most likely way
+    this filter is wrong, it is invisible on this corpus, and its consequence is
+    one portfolio company's private documents inside another's archive.
+    """
+    written = _slice_over(
+        {"ada": "companies/Ada", "adafruit": "companies/Adafruit"},
+        ["companies/Ada/a.pdf", "companies/Adafruit/b.pdf", "gap_report.csv"],
+    )
+    chosen = slice_for(written, "ada")
+    assert chosen is not None
+    assert chosen.documents == ("companies/Ada/a.pdf",)
+    assert chosen.present == ("companies/Ada/a.pdf", "gap_report.csv")
+    assert chosen.withheld == ("companies/Adafruit/b.pdf",)
+    assert chosen.label == "Ada"
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_both_downloads_describe_themselves_the_same_way() -> None:
+    """Every fact `_download_facts` states reaches the wire, on both routes.
+
+    The browser cannot look inside a zip it has just saved, so these headers are
+    the whole of what a screen can report about it. Read off the function rather
+    than typed out, so a header renamed in one place fails here instead of
+    arriving as an absence the page renders as a blank.
+    """
+    stub = _slice_over({}, [])
+    facts = {name.lower() for name in reconciliation._download_facts(stub, present=1, withheld=0)}
+    assert facts, "no header to check — this would pass vacuously"
+    whole = _client().get(f"/funds/{DOWNLOADABLE[0]}/periods/{DOWNLOADABLE[1]}/export.zip")
+    company = _client().get(_company_url(WITH_DOCUMENTS))
+    assert whole.status_code == company.status_code == 200
+    assert facts <= set(whole.headers)
+    assert facts <= set(company.headers)
+    #: Stated on the whole packet too, reading zero. A count that appears only
+    #: when it is non-zero is a count a caller learns to stop looking for.
+    assert whole.headers["x-withheld-file-count"] == "0"
+    assert whole.headers["x-file-count"] == str(len(_members(whole.content)) - 1)
+
+
+def test_a_holding_the_layout_does_not_place_has_no_slice() -> None:
+    """`None`, not an empty slice. The route turns it into a 404 naming the
+    positions the packet does hold, and an empty slice would have turned it into
+    a valid archive of nothing."""
+    written = _slice_over({"ada": "companies/Ada"}, ["companies/Ada/a.pdf"])
+    assert slice_for(written, "adafruit") is None
+    assert holdings_in(written) == ("ada",)

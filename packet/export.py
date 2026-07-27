@@ -58,6 +58,13 @@ class Written:
     Carries the fund-period identity rather than a reference to the `Packet` it
     came from: `record()` needs four scalars, and handing it the whole packet
     would let it read a figure the manifest was not built from.
+
+    `layout` is the plan this run actually wrote by, and it is carried for the
+    same reason `layout.py` refuses to compute a path twice: a caller that wants
+    one company's folder out of a published packet must READ the folder the
+    writer used, never re-derive it from the company name. A second derivation
+    that disagrees by one character produces an archive that is missing the
+    documents it was cut for and says nothing about it.
     """
 
     packet_id: str
@@ -67,6 +74,7 @@ class Written:
     period_id: str
     schema_version: str
     policy_version: str
+    layout: Layout
     tables: list[tables_module.Table] = field(default_factory=list)
 
     @property
@@ -230,6 +238,7 @@ def _build(
         period_id=packet.period.id,
         schema_version=packet.schema_version,
         policy_version=packet.policy_version,
+        layout=layout,
         tables=built,
     )
 

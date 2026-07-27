@@ -40,6 +40,8 @@ import os
 import re
 import tempfile
 import zipfile
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,7 @@ from api.config import dsn, ledger_schema
 from api.serialize import totals_json
 from packages.contracts.fixtures.dream import dream_packet
 from packages.contracts.models import Packet
+from packet.company import COMPANY_SCOPE_NOTE, holdings_in, scope_note, slice_for
 from packet.export import MANIFEST_NAME, PacketExportError, Written, export_packet
 
 router = APIRouter()
@@ -470,13 +473,13 @@ def export_auditor_packet(fund_id: str, period_id: str) -> dict[str, Any]:
 # `export_packet` REFUSES rather than publishing a partial packet, and the
 # refusal names which citation would not resolve, or which approved position is
 # unsupported. That sentence is itself a deliverable, and it must not be buried
-# inside a download that either works or does not. Both routes therefore report
-# a refusal identically: 409, carrying the refusal text verbatim.
+# inside a download that either works or does not. Every export route therefore
+# reports a refusal identically: 409, carrying the refusal text verbatim.
 
 #: The packet is assembled under this fixed name inside a per-request temporary
 #: directory. Fixed rather than `period_id`, because `period_id` arrives from the
 #: URL and interpolating a path parameter into a filesystem path is the one way a
-#: caller could write outside the directory this route owns.
+#: caller could write outside the directory the download routes own.
 DOWNLOAD_DIR_NAME = "packet"
 
 #: What may survive into `Content-Disposition`. The ids reach that header from
@@ -491,29 +494,21 @@ def _download_name(fund_id: str, period_id: str) -> str:
     return f"{stem or 'auditor-packet'}.zip"
 
 
-def _zip_bytes(written: Written) -> bytes:
-    """The published packet as one archive, in manifest order.
+@contextmanager
+def _staged_packet(fund_id: str, period_id: str) -> Iterator[Written]:
+    """Build the packet somewhere temporary and keep it alive long enough to zip.
 
-    Built from `written.paths` rather than by walking the directory, so the
-    archive holds exactly what the manifest attests to: a file that appeared on
-    disk without being manifested cannot ride along, and the entry count is the
-    manifest's count rather than whatever `os.walk` happened to find.
+    The whole packet, for both download routes, and the per-company one is not
+    an exception to that: `export_packet` is what refuses an unresolved citation
+    or an approved-but-unsupported position, and a route that assembled one
+    company's folder directly would be a second exporter with none of those
+    checks behind it.
 
-    `MANIFEST.json` leads. It is the index for everything after it and it is not
-    one of its own entries, which is why the archive holds one more member than
-    `file_count` reports.
+    Temporary, not `PACKET_OUT`. The JSON route publishes into the shared
+    directory; a download that wrote there too would have two callers racing
+    over one packet, and would overwrite a published artefact as a side effect
+    of somebody clicking a button.
     """
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.write(written.root / MANIFEST_NAME, MANIFEST_NAME)
-        for path in written.paths:
-            archive.write(written.root / path, path)
-    return buffer.getvalue()
-
-
-@router.get("/funds/{fund_id}/periods/{period_id}/export.zip")
-def download_auditor_packet(fund_id: str, period_id: str) -> StreamingResponse:
-    """Generate the auditor packet for one fund-period and stream it. Nothing persists."""
     conn = _connect()
     if conn is None:
         raise HTTPException(
@@ -531,28 +526,144 @@ def download_auditor_packet(fund_id: str, period_id: str) -> StreamingResponse:
                 # 409, not 500, and the same wording as the JSON route: the
                 # export did not fail, it refused, and the refusal is the answer.
                 raise HTTPException(status_code=409, detail=str(exc)) from None
-        payload = _zip_bytes(written)
-    # The temporary directory is already gone here, which is why the archive is
-    # materialised whole rather than streamed off disk: a lazy stream would be
-    # reading files this block has deleted. A packet is a few hundred kilobytes,
-    # so holding one in memory costs less than the bug would.
+        yield written
+
+
+def _zip_bytes(written: Written, paths: Sequence[str], extra: dict[str, bytes]) -> bytes:
+    """A published packet's files as one archive, in manifest order.
+
+    Built from a list of manifest paths rather than by walking the directory, so
+    the archive holds exactly what the manifest attests to: a file that appeared
+    on disk without being manifested cannot ride along, and the entry count is
+    the manifest's count rather than whatever `os.walk` happened to find.
+
+    `MANIFEST.json` leads. It is the index for everything after it and it is not
+    one of its own entries, which is why the archive holds more members than
+    `file_count` reports. `extra` is anything else that is not a manifest entry
+    — for the per-company archive, the note stating which entries it withheld —
+    and it is passed in rather than assembled here so that this function cannot
+    invent a member the caller did not account for.
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(written.root / MANIFEST_NAME, MANIFEST_NAME)
+        for name, payload in extra.items():
+            archive.writestr(name, payload)
+        for path in paths:
+            archive.write(written.root / path, path)
+    return buffer.getvalue()
+
+
+def _download_facts(written: Written, present: int, withheld: int) -> dict[str, str]:
+    """What an archive says about itself in its own headers.
+
+    One function for both download routes, so the two cannot describe themselves
+    differently. A browser that has just saved a zip has no way to look inside
+    it, and these are what let it report which packet arrived and how much of it
+    — a download that reports nothing is a file the reader has to trust.
+
+    `X-Withheld-File-Count` is on the whole-packet download too, reading zero.
+    Stating "nothing was withheld" costs one header and makes the two responses
+    the same shape; a field that appears only when it is non-zero is a field a
+    caller learns to stop looking for.
+    """
+    return {
+        "X-Packet-Id": written.packet_id,
+        "X-Manifest-Hash": written.manifest_hash,
+        #: Manifest entries carried, matching `file_count` from the JSON route
+        #: when nothing is withheld. The archive holds these plus `MANIFEST.json`
+        #: and anything else the route added.
+        "X-File-Count": str(present),
+        #: Manifest entries this archive does NOT carry. The two counts add up to
+        #: the manifest's own entry count, which is what lets a reader check the
+        #: member list against `MANIFEST.json` instead of trusting it.
+        "X-Withheld-File-Count": str(withheld),
+        #: The sentence the JSON route carries in its body, on every download.
+        #: Generating a packet is not registering one: `packet_manifest_entry`
+        #: has no rows, and a download implying otherwise would be the product
+        #: claiming something it has not done.
+        "X-Recorded-In-Ledger": "false",
+    }
+
+
+def _archive_response(payload: bytes, filename: str, facts: dict[str, str]) -> StreamingResponse:
+    """The archive on the wire. Materialised whole, deliberately.
+
+    Every caller builds its packet inside a temporary directory that is already
+    deleted by the time this runs, so a lazy stream would be reading files that
+    no longer exist. A packet is a few hundred kilobytes; holding one in memory
+    costs less than that bug would.
+    """
     return StreamingResponse(
         io.BytesIO(payload),
         media_type="application/zip",
         headers={
-            "Content-Disposition": f'attachment; filename="{_download_name(fund_id, period_id)}"',
+            "Content-Disposition": f'attachment; filename="{filename}"',
             #: Known, so it is sent. `StreamingResponse` omits it otherwise, and
             #: a download with no length is a progress bar that cannot move.
             "Content-Length": str(len(payload)),
-            "X-Packet-Id": written.packet_id,
-            "X-Manifest-Hash": written.manifest_hash,
-            #: The manifest's count, matching `file_count` from the JSON route.
-            #: The archive holds this many members plus `MANIFEST.json`.
-            "X-File-Count": str(len(written.paths)),
-            #: The sentence the JSON route carries in its body, on every
-            #: download. Generating a packet is not registering one:
-            #: `packet_manifest_entry` has no rows, and a download implying
-            #: otherwise would be the product claiming something it has not done.
-            "X-Recorded-In-Ledger": "false",
+            **facts,
         },
     )
+
+
+@router.get("/funds/{fund_id}/periods/{period_id}/export.zip")
+def download_auditor_packet(fund_id: str, period_id: str) -> StreamingResponse:
+    """Generate the auditor packet for one fund-period and stream it. Nothing persists."""
+    with _staged_packet(fund_id, period_id) as written:
+        payload = _zip_bytes(written, written.paths, {})
+        facts = _download_facts(written, len(written.paths), 0)
+    return _archive_response(payload, _download_name(fund_id, period_id), facts)
+
+
+# ── One company's evidence as a download ─────────────────────────────────
+# The audit letter closes: "We would appreciate receiving the support organized
+# by portfolio company." The export has been organised that way since
+# `packet/layout.py` was written — what was missing was the ability to take one
+# of those folders away without taking the other seven with it.
+#
+# `packet/company.py` holds the filter and argues the choice at length. The
+# short form: this archive is the WHOLE packet minus the other companies'
+# source documents. Every CSV, the workbook, the README and `MANIFEST.json`
+# travel unmodified and still hash to what the manifest records, because a gap
+# report trimmed to one company reports fewer gaps than the packet found, and a
+# holdings table trimmed to one company's rows sits under a footer stating the
+# fund's total. Both are the same defect: a deliverable that says less than the
+# system knows, in a form that looks complete.
+#
+# The whole packet is generated and then filtered, never built company by
+# company. `export_packet` refuses to publish a packet whose citation does not
+# resolve or whose approved position is unsupported; a per-company path that
+# skipped that would deliver one company out of a packet the validator had
+# rejected. So a refusal about ANOTHER company blocks this download, with the
+# refusal's own words, which is the correct answer rather than a limitation.
+
+
+@router.get("/funds/{fund_id}/periods/{period_id}/companies/{holding_id}/export.zip")
+def download_company_evidence(fund_id: str, period_id: str, holding_id: str) -> StreamingResponse:
+    """Stream one portfolio company's evidence out of the fund-period's packet.
+
+    A position the packet does not hold is a 404 naming the ones it does — not
+    an empty archive, which would render "this company has no evidence" and "you
+    asked about a company that is not in this packet" as the same file.
+
+    A position with no source document is NOT that case. It has a folder holding
+    a note that says so and a row in the gap report saying the same thing, so it
+    downloads like any other company and the archive states the absence.
+    """
+    with _staged_packet(fund_id, period_id) as written:
+        chosen = slice_for(written, holding_id)
+        if chosen is None:
+            known = ", ".join(holdings_in(written))
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"no position {holding_id!r} in the {period_id} packet for {fund_id}. "
+                    f"It holds: {known}"
+                ),
+            )
+        payload = _zip_bytes(
+            written, chosen.present, {COMPANY_SCOPE_NOTE: scope_note(written, chosen)}
+        )
+        facts = _download_facts(written, len(chosen.present), len(chosen.withheld))
+    return _archive_response(payload, _download_name(fund_id, f"{period_id}-{holding_id}"), facts)

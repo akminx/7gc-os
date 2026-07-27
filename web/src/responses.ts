@@ -251,6 +251,40 @@ export interface ExportResponse {
 }
 
 /**
+ * `GET .../export.zip` — an archive, and what the response says about it.
+ *
+ * Not a JSON envelope. The body is the zip itself, so everything a screen can
+ * report about a download it has just handed to the operating system arrives in
+ * headers, and this is the browser's declaration of them. A download that
+ * reports nothing is a file the reader has to take on trust: they cannot see
+ * inside it from the page, and "a packet arrived" is not the same fact as
+ * "packet pkx_… arrived, carrying 30 of the manifest's 30 files".
+ *
+ * `file_count` and `withheld_file_count` stay STRINGS. They are counts the API
+ * performed, and parsing them into numbers here would be the browser turning a
+ * supplied figure into one it owns — which is the line `Number()` is banned
+ * across this directory to keep. They add up to the manifest's entry count, so
+ * a reader can check the archive against the manifest inside it.
+ *
+ * `recorded_in_ledger` is the sentence the JSON export route carries in its
+ * body, on every download: generating a packet is not registering one.
+ *
+ * `filename` and `blob` are the two fields with no header behind them —
+ * the first is read out of `Content-Disposition`, the second is the body. The
+ * rest are checked against the headers the route actually sets, in
+ * `tests/test_web_contracts.py`.
+ */
+export interface PacketDownload {
+  filename: string;
+  blob: Blob;
+  packet_id: string;
+  manifest_hash: string;
+  file_count: string;
+  withheld_file_count: string;
+  recorded_in_ledger: boolean;
+}
+
+/**
  * `POST /decisions` — the one write the application accepts.
  *
  * SPEC §6.3 · four typed decisions, none implying another, so `decision_type`
