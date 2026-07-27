@@ -135,6 +135,22 @@ class EvidenceClaim:
     #: carry-forward this system exists to refuse.
     fact_dates: Mapping[str, date] = field(default_factory=dict)
 
+    #: The claim's cited TEXT-valued figures, same keying, separate for the same
+    #: reason `fact_dates` is separate.
+    #:
+    #: V7 is the reason this one exists too. It promises a rate that is
+    #: "directed and cited", and it could check neither the direction nor who it
+    #: was cited to — a GBP/USD rate belonging to another position satisfied it.
+    #: The pair is not unknowable: the Moonfare memos state EUR/USD three times,
+    #: `ingest/documents/extract_memo.py` captures it, and it is stored as
+    #: `extracted_fact.currency_pair`. It had no way to travel, which is a
+    #: different problem from not existing, and the first wording of this gap
+    #: said the second — which is how a closable gap stays open.
+    #:
+    #: `Lot.cost_currency` is NOT the answer to "what is this denominated in".
+    #: It is what the fund paid, and for Moonfare that is USD.
+    fact_text: Mapping[str, str] = field(default_factory=dict)
+
     @property
     def effective_date(self) -> date:
         """The date this claim reaches the fund — delivery if later than issue.

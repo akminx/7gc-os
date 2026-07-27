@@ -175,7 +175,13 @@ MUTATIONS: list[Mutation] = [
     Mutation(
         "V7: any holding's rate will do, so long as the date matches",
         VALIDATORS,
-        " and r.source_claim_id in of_this_holding",
+        " and directed_and_cited(r)",
+    ),
+    Mutation(
+        "V7: the rate's currency pair goes unchecked",
+        VALIDATORS,
+        '        return claim.fact_text.get("currency_pair") == f"{rate.base}/{rate.quote}"',
+        "        return True",
     ),
     # ── the two key normalisations ───────────────────────────────────────
     Mutation(

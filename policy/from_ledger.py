@@ -49,6 +49,21 @@ Conn = psycopg.Connection[tuple[object, ...]]
 #: decision someone makes rather than a side effect of naming a column.
 DATE_FACTS: dict[str, str] = {"fx_rate_effective_date": "%m/%d/%Y"}
 
+#: Cited facts whose value is TEXT, carried through by an explicit allowlist for
+#: the same reason `DATE_FACTS` is explicit — a validator comparing against one
+#: of these is making a judgement, and it must be a judgement about a figure some
+#: document actually states.
+#:
+#: `currency_pair` exists because V7 could not check the one thing its own
+#: docstring promises: that a rate is DIRECTED at this holding's currency. The
+#: pair is stated in the Moonfare memos three times, extracted by
+#: `ingest/documents/extract_memo.py` and stored as an `extracted_fact` — it
+#: simply had no way to reach the policy layer, because `facts` is numeric and
+#: `fact_dates` is dates. `lot.cost_currency` is NOT this: it is what the fund
+#: paid (USD), not what the interest is denominated in, and reading it as the
+#: latter is what made this gap look unclosable.
+TEXT_FACTS: frozenset[str] = frozenset({"currency_pair"})
+
 
 def _s(v: object) -> str:
     assert isinstance(v, str)
@@ -190,6 +205,25 @@ def load(conn: Conn) -> Ledger:
             )
         by_date[field_name] = parsed
 
+    # Text-valued cited facts. Same allowlist discipline, and the same refusal
+    # on a contradiction: two documents citing different pairs for one claim is
+    # a fact about the corpus, not something to resolve by picking one.
+    fact_text: dict[str, dict[str, str]] = {}
+    for r in conn.execute(
+        "select claim_id, field_name, value_text from extracted_fact"
+        " where field_name = any(%s) and value_text is not null"
+        " order by claim_id, field_name",
+        (sorted(TEXT_FACTS),),
+    ).fetchall():
+        claim_id, field_name, text = _s(r[0]), _s(r[1]), _s(r[2]).strip()
+        by_text = fact_text.setdefault(claim_id, {})
+        if field_name in by_text and by_text[field_name] != text:
+            raise LedgerError(
+                f"claim {claim_id} cites two different values for {field_name!r}: "
+                f"{by_text[field_name]!r} and {text!r}."
+            )
+        by_text[field_name] = text
+
     claims = tuple(
         EvidenceClaim(
             id=_s(r[0]),
@@ -208,6 +242,7 @@ def load(conn: Conn) -> Ledger:
             requirements=frozenset(reliance.get(_s(r[0]), set())),
             facts=dict(facts.get(_s(r[0]), {})),
             fact_dates=dict(fact_dates.get(_s(r[0]), {})),
+            fact_text=dict(fact_text.get(_s(r[0]), {})),
         )
         for r in conn.execute(
             "select id, holding_id, source_class, execution_status, issued_date,"

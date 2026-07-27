@@ -28,11 +28,17 @@ from typing import Any
 import pytest
 
 from api.serialize import PACKET_RECOMPUTATION_KEY, packet_json, recomputation_json
-from packages.contracts.enums import PositionType, RequirementCode, RequirementVerdict
-from packages.contracts.models import HoldingRow, Packet, RequirementAssessment
-from packet.recompute import _from_result, disagreeing, for_packet
+from packages.contracts.base import MONEY_SCALE, Money
+from packages.contracts.enums import (
+    DerivationStatus,
+    PositionType,
+    RequirementCode,
+    RequirementVerdict,
+)
+from packages.contracts.models import HoldingRow, Mark, Packet, RequirementAssessment
+from packet.recompute import _at_scale, _from_result, disagreeing, for_packet
 from policy.inputs import Ledger
-from policy.validators import Outcome, Result
+from policy.validators import LotAmount, Outcome, Result
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -246,6 +252,112 @@ def test_a_figure_derived_for_a_row_with_no_mark_is_withheld_not_labelled() -> N
     assert got.difference is None
     assert got.reason == "NO_STATED_FIGURE_TO_COMPARE"
     assert got.outcome is Outcome.BLOCKED_INCOMPLETE
+
+
+#: A row with a mark, so `_from_result` has a currency and publishes figures.
+#: Everything below is written against `_from_result` rather than the corpus for
+#: the reason `test_a_figure_derived_for_a_row_with_no_mark_is_withheld_not_labelled`
+#: gives: the corpus does not contain these cases, so an assertion over it
+#: passes whatever the code does, and an assertion no input can falsify is not
+#: a guard. These are DB-free and corpus-free, so they hold under `--ci` too.
+def _row_with_mark(reported: str = "5000") -> HoldingRow:
+    return HoldingRow(
+        holding_id="h",
+        company_name="H",
+        position_type=PositionType.DIRECT_EQUITY,
+        held_at_date=True,
+        mark=Mark(
+            id=1,
+            holding_id="h",
+            period_id="p",
+            reported=Money(amount=Decimal(reported), currency="USD"),
+            derivation_status=DerivationStatus.NOT_DERIVABLE,
+            derivation_reason="NO_APPLICABLE_EVIDENCE",
+        ),
+        assessments=list(_ALWAYS_APPLICABLE),
+        gaps=[],
+        approval=None,
+    )
+
+
+def _priced(cross_class: bool, pps: str = "10.000000") -> Result:
+    lot = LotAmount(
+        lot_id="lot_1",
+        security_class="series_a1",
+        shares=500,
+        price_per_share=Decimal(pps),
+        amount=Decimal(500) * Decimal(pps),
+        cross_class=cross_class,
+    )
+    return Result(
+        validator="V2",
+        subject="h@2025-12-31",
+        outcome=Outcome.PASS,
+        reason="PER_CLASS_SHARES_X_PPS",
+        computed=lot.amount,
+        evidence=("h:some_cap_table",),
+        lineage=(lot,),
+    )
+
+
+def test_the_cross_class_flag_survives_into_the_served_recomputation() -> None:
+    """INV-17 · pricing one class off another's evidence is a policy act.
+
+    Nothing read `Recomputation.per_class[*].cross_class`. Replacing it with a
+    literal `False` left all 822 tests green: the `cross_class` assertions that
+    exist are on the validator lineage, never on the copy `packet/recompute.py`
+    makes, and the browser renders it off a hand-written fixture that sets it
+    false on both lots — so vitest could not catch a Python-side change either.
+
+    Latent today: no lot in this corpus is currently cross-class, so the flag
+    is the mechanism rather than a visible number. That is precisely why it
+    needs a test written against a constructed lot.
+    """
+    got = _from_result(_priced(cross_class=True), _row_with_mark(), "v1")
+    assert [c.cross_class for c in got.per_class] == [True]
+    assert (
+        _from_result(_priced(cross_class=False), _row_with_mark(), "v1").per_class[0].cross_class
+        is False
+    )
+
+
+def test_the_claims_a_derived_figure_came_from_travel_with_it() -> None:
+    """The citation trail, which is the product's whole reason for existing.
+
+    Blanking `evidence_claim_ids` left every test green while emptying the
+    "which claims support this figure" column on 18 of 35 recomputations across
+    14 distinct claim ids — on both the served response and the exported packet
+    table. For a system whose purpose is tracing every figure to an exact
+    source passage, a green suite over that is the worst kind of false green.
+    """
+    got = _from_result(_priced(cross_class=False), _row_with_mark(), "v1")
+    assert got.evidence_claim_ids == ("h:some_cap_table",)
+
+
+def test_a_price_per_share_keeps_its_own_scale_on_the_wire() -> None:
+    """Asserted on the STRING, because Decimal equality cannot see this.
+
+    `Decimal("10.0000") == Decimal("10.000000")` is True, so quantising a price
+    at the money scale instead of the price scale passed every comparison in
+    the suite — while `api/serialize.py` sends `str(...)`, so an auditor read
+    `10.0000` where the source states six places. All nine distinct prices in
+    the corpus ship at six today and would all have shifted.
+    """
+    got = _from_result(_priced(cross_class=False, pps="10.000000"), _row_with_mark(), "v1")
+    assert str(got.per_class[0].price_per_share) == "10.000000"
+
+
+def test_a_figure_carrying_more_places_than_its_scale_is_refused_not_rounded() -> None:
+    """Deleting this raise is silent re-quantisation on the read path.
+
+    No test referenced `_at_scale` or its ValueError, and the branch never fires
+    on this corpus — every derived figure is a whole number — so removing the
+    refusal was invisible. Rounding here is exactly what the decimal policy
+    exists to prevent, in the one place nobody looks.
+    """
+    with pytest.raises(ValueError, match="more than"):
+        _at_scale(Decimal("10.00000005"), MONEY_SCALE)
+    assert _at_scale(Decimal("10.5000"), MONEY_SCALE) == Decimal("10.5")
 
 
 def test_a_difference_is_null_and_never_zero_when_a_side_is_missing(

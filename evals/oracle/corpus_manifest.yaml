@@ -411,9 +411,15 @@ sources:
     note: >-
       Carries the delivery facts — the delivery date, the recipient of record,
       the annual cadence, and the attachment relation naming the 12.31.2025
-      statement. Those facts are stated HERE and not in the statement PDFs. The
-      statements carry only a general policy sentence about annual delivery, with
-      no date, no recipient and no attachment relation.
+      statement. The DELIVERY DATE and the ATTACHMENT RELATION are stated HERE
+      and not in the statement PDFs.
+
+      The recipient is NOT in that list, and saying it was would reject a
+      correct citation. Each statement names its own recipient twice — a
+      subtitle "Delivered via email to investor of record" and a field "Investor
+      of Record: 7GC Fund I, L.P." — which is where this file's own
+      investor_of_record entries for all three statements were read from. What
+      the statements lack is a delivery DATE and any attachment relation.
 
   - id: banzai_quote_record
     path: "7GC Audit Case Study/02_Portfolio Documentation/Banzai/Banzai (BNZA) - Saved Quote Record - Year-End Closing Prices.txt"
@@ -494,20 +500,33 @@ near_duplicate_hazards:
       Jackpocket states $3,100,000.00 twice, as gross consideration and as net
       payment. Each Jio statement states $1,000,000.00 three times, as
       commitment, contributed capital and NAV. The Moonfare FY2024 memo states
-      $1,000,000 as the PRIOR carrying value on the line directly above the
-      current one. In each case a citation can pick the wrong row and be
+      $1,000,000 as the PRIOR carrying value on the line directly BELOW the
+      current one — "USD carrying value, 12/31/2024  $1,048,515" comes first and
+      "Prior USD carrying value (entry, March 2023: $1,000,000)" follows it,
+      which is the order the distractor on moonfare.fy2024.carried_amount
+      already states correctly. In each case a citation can pick the wrong row and be
       numerically right, which makes the value check useless on its own and the
       passage check the only thing standing.
   - hazard: original_issue_price_beside_current_round_price
     sources: [fluidstack_series_b_proforma, dream_series_b_proforma, sway_series_a3_proforma]
     description: >-
-      All three pro forma tables restate the historic issue price of older
-      classes in a column headed "Orig. PPS" alongside the current round's price.
-      Fluidstack's seven-row table holds $2.00, $10.00, $15.00 and $30.00 in one
-      column; Dream's holds $0.75, $3.20 and $8.00; Sway's holds $0.90, $2.50
-      and $0.40. The fund's own class is the older one in every case, so the
-      passage nearest to the fund's name is the one that must NOT be read as a
-      current price, and the current price is the one furthest from it.
+      Fluidstack's and Dream's pro forma tables restate the historic issue price
+      of older classes in a column headed "Orig. PPS" alongside the current
+      round's price. Fluidstack's seven-row table holds $2.00, $10.00, $15.00
+      and $30.00 in one column; Dream's holds $0.75, $3.20 and $8.00. For BOTH
+      of those the fund's own class is the older one, so the passage nearest to
+      the fund's name is the one that must NOT be read as a current price, and
+      the current price is the one furthest from it.
+
+      SWAY IS THE EXCEPTION AND INVERTS THE RULE. Its "Orig. PPS" column holds
+      only $0.40 — every other row carries an em dash — and $0.40 is the CURRENT
+      price: the fund's class after the recapitalisation is Series A-3, and the
+      25Q3-onward mark of 350,000 is 875,000 x $0.40. The $0.90 and $2.50 that
+      look like they belong to that column are not in it at all; they are
+      parenthetical labels in the Prior Security column of section 3,
+      "Conversion of Prior Preferred - Exchange Ratios", a different table.
+      Reading Sway by the Fluidstack rule selects a historic price for a class
+      the fund no longer holds.
 
 # ---------------------------------------------------------------------------
 # FACTS
@@ -2164,11 +2183,13 @@ facts:
     passage: "Date: Friday, January 30, 2026, 6:02 AM ET"
     confidence: certain
     note: >-
-      IMPORTANT — the delivery facts belong to the EMAIL, not to the statement
-      PDFs. The FY2025 statement carries only a generic policy sentence
-      ("Statements are issued annually … and delivered to the investor's email
-      of record in PDF format") with no date, no recipient and no attachment
-      relation. Binding a delivery date or an attachment relation to the
+      IMPORTANT — the DELIVERY DATE belongs to the EMAIL, not to the statement
+      PDFs. The FY2025 statement carries a generic policy sentence ("Statements
+      are issued annually … and delivered to the investor's email of record in
+      PDF format") with no date and no attachment relation. It DOES name its
+      recipient, in a subtitle and again in an "Investor of Record" field, so
+      the recipient is citable to the statement; the date is not.
+      Binding a delivery date or an attachment relation to the
       statement PDF is a wrong-source citation of exactly the kind this file
       exists to catch, and it is the one I would expect to already be present.
     distractors:

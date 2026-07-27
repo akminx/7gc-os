@@ -934,6 +934,49 @@ def test_v2_prefers_the_third_party_even_when_the_nav_was_issued_first() -> None
     assert got.evidence == ("memo",)
 
 
+def test_v7_checks_the_direction_of_the_rate_against_the_pair_its_claim_states() -> None:
+    """ "Directed and cited" is what V7 promises; it used to check neither.
+
+    A rate for the right date, cited to the right holding's own claim, passed
+    whatever currencies it named. The pair is not unknowable — the Moonfare
+    memos say EUR/USD three times, `extract_memo.py` captures it, and it is
+    stored as `extracted_fact.currency_pair`. It simply had no way to reach this
+    layer, and the first version of this gap was written up as though the
+    information did not exist, which would have kept it open.
+
+    Both directions are asserted here because only the negative was, and a
+    validator that can no longer PASS is a worse defect than one that passes too
+    easily: the corpus would go quiet and every FX date would read as a gap.
+    """
+    on = date(2025, 12, 31)
+    stated = _claim(
+        "moonfare:fx",
+        SourceClass.FUND_INTERNAL_RECORD,
+        on,
+        fact_text={"currency_pair": "EUR/USD"},
+    )
+    ledger = _one_holding_ledger(
+        stated, position_type=PositionType.FX_DENOMINATED_INTEREST, mark=Decimal("1048515")
+    )
+
+    def rate(base: str, quote: str) -> FxRate:
+        return FxRate(
+            base=base,
+            quote=quote,
+            rate=Decimal("1.1037"),
+            observed_date=on,
+            effective_for=on,
+            source_claim_id="moonfare:fx",
+            source_document_version_id="dv_fx",
+        )
+
+    assert v7_fx_rate_present(ledger, "h", on, [rate("EUR", "USD")]).outcome is Outcome.PASS
+    # Right date, right holding, right claim — wrong currencies.
+    assert v7_fx_rate_present(ledger, "h", on, [rate("GBP", "USD")]).outcome is Outcome.FAIL
+    # Inverted is not the same rate: USD/EUR at 1.1037 is a different assertion.
+    assert v7_fx_rate_present(ledger, "h", on, [rate("USD", "EUR")]).outcome is Outcome.FAIL
+
+
 def test_v7_refuses_a_rate_cited_to_another_holding() -> None:
     """V7 says "directed and cited"; nothing checked who it was cited to.
 
@@ -943,11 +986,13 @@ def test_v7_refuses_a_rate_cited_to_another_holding() -> None:
     reported that THIS holding's rate had been observed. Found by a cross-family
     review.
 
-    The directed PAIR is still unchecked, and deliberately so: no holding
-    records the currency it is denominated in — Moonfare's lots carry
-    `cost_currency = USD` — so there is nothing to compare `base`/`quote`
-    against, and a check that passes on a guessed expectation is worse than a
-    named gap.
+    The directed PAIR is still unchecked, and that is a plumbing gap with a
+    known fix rather than something unknowable. The memo states EUR/USD three
+    times, `extract_memo.py` captures it, and `extracted_fact.currency_pair`
+    holds `'EUR/USD'` on both Moonfare claims. It cannot reach here because
+    `EvidenceClaim` has a numeric `facts` map and a `fact_dates` map and no
+    channel for a text fact — the same shape as `fx_rate_effective_date`, and
+    it closes the same way.
     """
     on = date(2025, 12, 31)
     ledger = _one_holding_ledger(

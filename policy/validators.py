@@ -649,16 +649,32 @@ def v7_fx_rate_present(
     # reporting that this holding's rate had been observed. Found by a
     # cross-family review.
     #
-    # The DIRECTED PAIR is still unchecked, and that is a gap rather than an
-    # oversight: no holding records the currency it is denominated in. Moonfare's
-    # lots carry `cost_currency = USD`, so there is nothing in the ledger to
-    # compare `base`/`quote` against, and inventing an expectation here would be
-    # worse than the hole — it would be a check that passes on a guess. Recording
-    # a per-holding denomination is what would close it.
-    of_this_holding = {c.id for c in ledger.claims if c.holding_id == holding_id}
-    for_date = [
-        r for r in observed if r.effective_for == on and r.source_claim_id in of_this_holding
-    ]
+    # The DIRECTED PAIR is still unchecked, and this is a PLUMBING gap with a
+    # known fix — not, as an earlier version of this comment claimed, a case of
+    # having nothing to compare against. That was wrong, and the correction is
+    # here rather than in a note because a comment saying a gap cannot be closed
+    # is how it stays open.
+    #
+    # The pair is stated in the source three times ("FX Re-measurement of
+    # EUR-Denominated Holding", "EUR-denominated interest in Moonfare GmbH into
+    # USD", "EUR/USD closing rate"), extracted by
+    # `ingest/documents/extract_memo.py`, and stored as
+    # `extracted_fact.currency_pair`. It had no way to reach the policy layer,
+    # which is a different problem from not existing. `Lot.cost_currency` is NOT
+    # the field to read: it is what the fund PAID, and for Moonfare that is USD.
+    #
+    # So the pair is now checked against the cited claim's OWN stated pair, and
+    # a claim that states none cannot vouch for a rate — silence is not assent
+    # about the one property this validator's name is about.
+    cited: dict[str, EvidenceClaim] = {c.id: c for c in ledger.claims if c.holding_id == holding_id}
+
+    def directed_and_cited(rate: FxRate) -> bool:
+        claim = cited.get(rate.source_claim_id)
+        if claim is None:
+            return False
+        return claim.fact_text.get("currency_pair") == f"{rate.base}/{rate.quote}"
+
+    for_date = [r for r in observed if r.effective_for == on and directed_and_cited(r)]
     if not for_date:
         # A claim can only stand in for THIS date's rate if it cites a rate
         # whose own effective date IS this date. Being merely in scope is not

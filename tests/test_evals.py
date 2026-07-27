@@ -266,12 +266,30 @@ def test_the_figures_are_a_read_of_whichever_ledger_is_pointed_at(
     assert empty["corpus"]["facts"] == counted[2]
     assert len(empty["by_holding"]) == counted[0]
 
-    # And none of them is the fund's. A constant would be.
-    assert empty["corpus"]["facts"] != measured["corpus"]["facts"]
-    assert empty["corpus"]["documents"] != measured["corpus"]["documents"]
-    assert empty["retrieval"]["gold_cases"] != measured["retrieval"]["gold_cases"]
-    assert empty["citations"]["total"] != measured["citations"]["total"]
-    assert empty["validators"]["holding_dates"] != measured["validators"]["holding_dates"]
+    # And the two readings are not the same reading. A constant would be.
+    #
+    # Asserted on the READING as a whole, not field by field. Field by field
+    # demanded that EVERY count differ, and `public` is not a fixed graph: the
+    # schema test that must COMMIT leaves rows behind, so its document count
+    # climbs about two per suite run. The fund holds twenty. So the count had to
+    # pass through twenty eventually, and on the run where it did this test
+    # failed once and then never again — a time bomb with a single fuse, armed
+    # by an assertion stronger than the property it was defending.
+    #
+    # Coincidental equality on one count is not a cache. A cached or transcribed
+    # page would report the fund's figures for EVERY field, which is what this
+    # compares now. The proof that these are reads is the block above, where
+    # each count is checked against an independent SQL count of the same schema.
+    def reading(page: dict[str, Any]) -> tuple[int, ...]:
+        return (
+            page["corpus"]["facts"],
+            page["corpus"]["documents"],
+            page["retrieval"]["gold_cases"],
+            page["citations"]["total"],
+            page["validators"]["holding_dates"],
+        )
+
+    assert reading(empty) != reading(measured)
 
     # The blind spots are a property of the SYSTEM rather than of the data, so
     # they are reported whatever the ledger holds. A page that lost its own
