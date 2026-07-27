@@ -50,6 +50,9 @@ LOTS = ROOT / "ingest/trackers/to_lots.py"
 CLASSIFY = ROOT / "ingest/trackers/classify.py"
 TUPLES = ROOT / "policy/valid_tuples.py"
 VALIDATORS = ROOT / "policy/validators.py"
+API_EVALS = ROOT / "api/evals.py"
+DOC_LOAD = ROOT / "ingest/documents/load.py"
+CAP_TABLE = ROOT / "ingest/documents/extract_cap_table.py"
 REDUCER = ROOT / "policy/reducer.py"
 REQS = ROOT / "policy/requirements.py"
 SEED = ROOT / "ingest/policy_seed.py"
@@ -182,6 +185,60 @@ MUTATIONS: list[Mutation] = [
         VALIDATORS,
         '        return claim.fact_text.get("currency_pair") == f"{rate.base}/{rate.quote}"',
         "        return True",
+    ),
+    # ── the manifest: a citation can be verbatim and still be wrong ──────
+    # Both of these were undefended until `tests/test_corpus_manifest.py`
+    # landed. Nothing else in the repository compares a citation to an
+    # independent reading of where the figure actually sits — every other check
+    # proves the offsets and the quote agree WITH EACH OTHER, which a wrong
+    # passage satisfies perfectly.
+    Mutation(
+        "documents: a source file is loaded against the wrong holding",
+        DOC_LOAD,
+        '            (extract_spa.ROOFSTOCK, "fund_i_roofstock"),',
+        '            (extract_spa.ROOFSTOCK, "fund_ii_poolside"),',
+    ),
+    # The A-2 share count read off the Series A row. Both rows state 100,000 on
+    # the real document, so the VALUE agrees and only the position disagrees —
+    # `tests/test_extract_cap_table.py` uses a synthetic table whose two rows
+    # differ, so it cannot see this at all.
+    Mutation(
+        "cap table: the A-2 share count is read off the Series A row",
+        CAP_TABLE,
+        r'        r"7GC Fund II, L\.P\.\s+Series A-2\s+(?P<value>[\d,]+)\s+\$[\d.]+"',
+        r'        r"7GC Fund II, L\.P\.\s+Series A(?!-)\s+(?P<value>[\d,]+)\s+\$[\d.]+"',
+    ),
+    Mutation(
+        "R1: a signed agreement answers for settlement of funds too",
+        REQS,
+        "        if not (_SETTLEMENT_EVIDENCE & stated):",
+        "        if False:",
+    ),
+    Mutation(
+        "R1: settlement is only what a stock purchase agreement calls it",
+        REQS,
+        ', "contributed_capital", "acquisition_consideration_usd"',
+    ),
+    Mutation(
+        "R4: a realisation notice answers on its letterhead alone",
+        REQS,
+        "        for missing, needed in _REALIZATION_FIGURES:",
+        "        for missing, needed in _REALIZATION_FIGURES[:0]:",
+    ),
+    # ── what the evaluation page publishes to an auditor ─────────────────
+    Mutation(
+        "evals: a circular derivation is published as a disagreement of zero",
+        API_EVALS,
+        "            if got.outcome is Outcome.FAIL and None not in (",
+        "            if got.outcome in (Outcome.FAIL, Outcome.NOT_COMPARABLE) and None not in (",
+    ),
+    Mutation(
+        "evals: failing citations are attributed by id shape, not by owner",
+        API_EVALS,
+        '                "facts_with_a_failing_citation": failing_by_holding.get(holding_id, 0),',
+        '                "facts_with_a_failing_citation": sum(\n'
+        '                    1 for f in citations["failures"]'
+        ' if str(f["claim_id"]).startswith(holding_id)\n                ),',
     ),
     # ── the two key normalisations ───────────────────────────────────────
     Mutation(
@@ -912,6 +969,12 @@ FILE_SUITES: dict[Path, list[str]] = {
     # The validators are pure and their suite is DB-free, so this stays cheap
     # and still runs under `--ci`.
     VALIDATORS: ["tests/test_validators.py"],
+    API_EVALS: ["tests/test_evals.py"],
+    # The manifest comparison is the only reader that can tell a right-shaped
+    # citation on the wrong passage from a right one, so it defends both of
+    # these alone. It needs the corpus and no database.
+    DOC_LOAD: ["tests/test_corpus_manifest.py", "tests/test_document_load.py"],
+    CAP_TABLE: ["tests/test_corpus_manifest.py", "tests/test_extract_cap_table.py"],
     MAPPER: ["tests/test_real_data_end_to_end.py", "tests/test_contracts.py"],
     LOTS: ["tests/test_real_data_end_to_end.py"],
     CLASSIFY: ["tests/test_real_data_end_to_end.py", "tests/test_policy_guards.py"],

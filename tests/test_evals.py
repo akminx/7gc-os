@@ -25,14 +25,16 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import psycopg
 import pytest
 
-from api.evals import MEASURED_K, REPORTED_K, evals
+from api.evals import MEASURED_K, REPORTED_K, _by_holding, evals
 from evidence.retrieve import gold_cases, recall_at_k
 from packages.contracts.models import Packet
+from packet.recompute import for_packet
 from policy.from_ledger import load as load_policy
 from policy.inputs import Ledger
 from tests.conftest import PACKET_PERIODS
@@ -183,6 +185,88 @@ def test_the_validator_census_is_a_census_and_never_a_pass_rate(
     for row in census["disagreements"]:
         assert row["reported"]["currency"] == row["derived"]["currency"]
         assert row["company_name"] and row["measurement_date"]
+
+
+def test_a_disagreement_is_never_a_difference_of_zero(measured: dict[str, Any]) -> None:
+    """`not_comparable` is the fund confirming the fund, not a discrepancy.
+
+    Moonfare FY2024 derives 1,048,515 from a memo the FUND wrote and reports
+    1,048,515 — equal figures, difference zero, and the whole reason
+    `not_comparable` exists is to say that agreement between an audited party
+    and its own paperwork is not confirmation. Widening this filter to admit
+    `not_comparable` publishes that row to an auditor as a disagreement of ZERO,
+    and the suite stayed green when a review did exactly that.
+
+    The non-zero assertion is the load-bearing half. Counting the rows would
+    pass just as happily with a third row whose difference is nothing.
+    """
+    rows = measured["validators"]["disagreements"]
+    assert rows, "the known disagreements must be named"
+    for row in rows:
+        assert Decimal(row["difference"]["amount"]) != 0, row["company_name"]
+    named = {r["company_name"] for r in rows}
+    assert "Moonfare" not in named, (
+        "Moonfare's derivation is not_comparable — the fund authored both figures, "
+        "so publishing it as a disagreement of zero misreports circularity as a finding"
+    )
+
+
+def test_a_failing_citation_is_counted_against_the_holding_that_owns_the_claim(
+    demo: Conn, measured: dict[str, Any]
+) -> None:
+    """Attribution by the claim's own holding_id, not by the shape of its id.
+
+    This counted `claim_id.startswith(holding_id)`. Claim ids do carry their
+    holding as a prefix today, so the figure was right — by a naming convention
+    nothing enforces. Two holdings where one id prefixes the other would double
+    count, and a claim id that stopped carrying the prefix would attribute its
+    failures to nobody at all, leaving the page reading clean over a broken
+    citation.
+
+    The corpus has NO failing citation, so asserting over it proves nothing —
+    every row reads zero whether the count is computed or hardcoded, and the
+    first version of this test passed happily against `"...": 0`. The failure is
+    injected instead, which is the only way this column can be seen to work.
+    """
+    ledger, packets = _built(demo)
+    recomputed = {pid: for_packet(ledger, p) for pid, p in packets.items()}
+    owners = {
+        str(r[0]): str(r[1]) for r in demo.execute("select id, holding_id from claim").fetchall()
+    }
+    assert owners, "no claims to attribute"
+
+    # A real claim, and the holding the LEDGER says owns it.
+    claim_id = sorted(owners)[0]
+    owner = owners[claim_id]
+    injected = {"failures": [{"claim_id": claim_id, "reason": "planted"}], "total": 1}
+
+    rows = {r["holding_id"]: r for r in _by_holding(demo, packets, recomputed, injected)}
+    assert rows[owner]["facts_with_a_failing_citation"] == 1, (
+        f"{claim_id} failed to resolve and its failure was attributed to nobody"
+    )
+    assert sum(r["facts_with_a_failing_citation"] for r in rows.values()) == 1, (
+        "one failing citation was counted against more than one holding"
+    )
+
+    # And a claim id that does NOT carry its holding as a prefix still lands on
+    # its owner. This is the case the old `startswith` rule could not answer.
+    renamed = {"failures": [{"claim_id": "unprefixed_claim_id", "reason": "planted"}], "total": 1}
+    # Copied whole rather than column by column: `claim` carries not-null
+    # columns this test has no business knowing about, and naming them here
+    # would make an unrelated migration break this test for the wrong reason.
+    demo.execute(
+        "create temp table _probe_claim on commit drop as select * from claim where id = %s",
+        (claim_id,),
+    )
+    demo.execute(
+        "update _probe_claim set id = 'unprefixed_claim_id', claim_key = 'unprefixed_claim_key'"
+    )
+    demo.execute("insert into claim select * from _probe_claim")
+    moved = {r["holding_id"]: r for r in _by_holding(demo, packets, recomputed, renamed)}
+    assert moved[owner]["facts_with_a_failing_citation"] == 1, (
+        "a claim whose id does not begin with its holding attributed to nobody"
+    )
+    demo.rollback()
 
 
 def test_the_worst_holding_is_on_the_page_rather_than_hidden(

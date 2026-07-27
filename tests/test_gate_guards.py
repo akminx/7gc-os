@@ -628,7 +628,7 @@ def test_the_node_gate_fails_when_it_discovers_no_project(tmp_path: Path) -> Non
     sentence, so deleting web/package.json deleted the whole Node gate."""
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / "scripts").mkdir()
-    for name in ("check-all.mjs", "check-web-arch.mjs"):
+    for name in ("check-all.mjs", "check-gate-parity.mjs", "check-web-arch.mjs"):
         (tmp_path / "scripts" / name).write_bytes((ROOT / "scripts" / name).read_bytes())
     r = subprocess.run(
         ["node", "scripts/check-all.mjs"], cwd=tmp_path, capture_output=True, text=True, check=False
@@ -653,9 +653,8 @@ def test_the_node_gate_reads_ci_parity_the_same_way_the_python_one_does(tmp_path
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
         _gate_repo(repo, workflow)
         (repo / "scripts" / "check-all.mjs").write_bytes(NODE_GATE.read_bytes())
-        (repo / "scripts" / "check-web-arch.mjs").write_bytes(
-            (ROOT / "scripts" / "check-web-arch.mjs").read_bytes()
-        )
+        for name in ("check-gate-parity.mjs", "check-web-arch.mjs"):
+            (repo / "scripts" / name).write_bytes((ROOT / "scripts" / name).read_bytes())
         r = _node(
             "const m = await import('./scripts/check-all.mjs');"
             "console.log(JSON.stringify(m.checkCiParity()));",
@@ -671,7 +670,7 @@ def test_the_node_dependency_audit_fails_when_the_audit_did_not_run(tmp_path: Pa
     'found some' and 'went wrong', so only the counts can tell them apart."""
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / "scripts").mkdir()
-    for name in ("check-all.mjs", "check-web-arch.mjs"):
+    for name in ("check-all.mjs", "check-gate-parity.mjs", "check-web-arch.mjs"):
         (tmp_path / "scripts" / name).write_bytes((ROOT / "scripts" / name).read_bytes())
     proj = tmp_path / "proj"
     proj.mkdir()

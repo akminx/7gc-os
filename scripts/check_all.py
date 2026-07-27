@@ -558,20 +558,107 @@ def check_debt(fix: bool = False, ratchet: bool = False) -> tuple[str, str]:
     return ("OK", f"{len(hits)} debt markers ≤ ceiling {cap}")
 
 
+_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+_FENCED_WORD = re.compile(r"[A-Za-z0-9_./-]+")
+
+
+def markdown_paths(text: str) -> list[str]:
+    """Every token in a markdown file that could be naming a path.
+
+    The extractor was `re.findall(r"`([^`]+)`", whole_file)`, and a fenced code
+    block silently inverts what that pairs. An opening fence is three
+    backticks: the scanner consumes the third as an opening delimiter, closes
+    it on the FIRST backtick of the closing fence, and from there on it pairs
+    the prose BETWEEN inline spans rather than the spans themselves. Every one
+    of those prose runs contains a space, so the filter below discarded them
+    without a word — and every real inline path below the fence was never
+    looked at.
+
+    In this repository that hid nine of the eleven sections: appending
+    `xyz/nonexistent` to the end of CLAUDE.md was not detected, while breaking
+    a token above the Commands block was. The check printed "referenced paths
+    exist" having read a quarter of the file.
+
+    So fences are separated from prose before anything is paired. Prose
+    contributes its inline spans. A fence contributes its own words, because
+    the Commands block lists the scripts an agent is told to run and it was the
+    one part of the file this check had never read at all.
+    """
+    prose: list[str] = []
+    fenced: list[str] = []
+    fence = ""
+    for line in text.splitlines():
+        m = _FENCE.match(line)
+        marker = m.group(1)[0] * 3 if m else ""
+        if not fence:
+            if marker:
+                fence = marker
+            else:
+                prose.append(line)
+        elif marker == fence:
+            fence = ""
+        else:
+            fenced.append(line)
+    toks = re.findall(r"`([^`]+)`", "\n".join(prose))
+    return toks + _FENCED_WORD.findall("\n".join(fenced))
+
+
+def _git_ignored(rels: Sequence[str]) -> set[str]:
+    """Which of these repository-relative paths git ignores. Tracked paths are
+    never reported, which is what `check-ignore` does by default."""
+    if not rels:
+        return set()
+    r = sh(["git", "check-ignore", "--", *rels], cwd=ROOT)
+    return {line.strip() for line in r.stdout.splitlines() if line.strip()}
+
+
 def check_claude_md() -> tuple[str, str]:
-    missing = []
+    """The paths CLAUDE.md points an agent at still exist. Its failure mode is
+    a doc that survives a rename and quietly misdirects every reader after it.
+    """
+    candidates: list[tuple[str, str]] = []
+    seen: set[Path] = set()
     for name in ("CLAUDE.md", "AGENTS.md"):
         cf = ROOT / name
         if not cf.exists():
             continue
-        for tok in re.findall(r"`([^`]+)`", cf.read_text()):
-            tok = tok.strip()
-            if "/" not in tok or " " in tok or any(c in tok for c in "*<>"):
+        # In this repository CLAUDE.md is a symlink to AGENTS.md, so the two
+        # names are one inode and every finding was reported twice — a reader
+        # counting the lines would think two files disagreed with the tree.
+        # A repository where the two are genuinely separate files still gets
+        # both, because this compares what they resolve to and not their names.
+        real = cf.resolve()
+        if real in seen:
+            continue
+        seen.add(real)
+        for raw in markdown_paths(cf.read_text()):
+            tok = raw.strip()
+            if " " in tok or any(c in tok for c in "*<>"):
                 continue
-            if tok.startswith(("http", "npm ", "git ", "localhost")):
+            # A leading separator is an absolute path or the scheme-relative
+            # tail of a URL (`//example.com/x`, once the charset above has
+            # dropped the colon). Neither is a path in this repository.
+            if tok.startswith(("http", "npm ", "git ", "localhost", "/")):
                 continue
-            if not (ROOT / tok.rstrip("/")).exists():
-                missing.append(f"{name}: `{tok}`")
+            # A separator BETWEEN two segments is what makes a token a
+            # repository-relative path. `triage/` and `queue/` in the review
+            # section are bare directory names — the sentence beside them
+            # spells the anchored form, `.captain/review/triage/` — and
+            # resolving a bare name against the root reports drift that is not
+            # there. The cost is that a bare `web/` goes unchecked; no token
+            # this check has ever verified is of that shape.
+            if "/" not in tok.strip("/"):
+                continue
+            if (ROOT / tok.rstrip("/")).exists():
+                continue
+            candidates.append((name, tok))
+    # A path git ignores is present on some machines and absent on others:
+    # `.venv/bin/python` and everything under `.captain/` exist locally and do
+    # not exist in a CI checkout at all. Reporting those as documentation drift
+    # would make this check's verdict depend on which machine ran it, which is
+    # the one thing a gate may not do.
+    ignored = _git_ignored([tok.rstrip("/") for _, tok in candidates])
+    missing = [f"{n}: `{t}`" for n, t in candidates if t.rstrip("/") not in ignored]
     if missing:
         return ("WARN", "paths referenced but not found:\n" + "\n".join(missing))
     return ("OK", "referenced paths exist")
@@ -641,6 +728,54 @@ def workflow_commands(text: str) -> str:
     return "\n".join(out)
 
 
+# A gate step is a script committed to this repository. That is the unit the
+# hook and the workflow name in the same words — `scripts/check_all.py` on both
+# sides — so it is the unit the two can be compared over. A hook line that runs
+# something else entirely (`npm run lint`, an inline `ruff check .`) is outside
+# this net and the OK message says so rather than implying otherwise.
+_GATE_SCRIPT = re.compile(r"[A-Za-z0-9_.${}/-]*\.(?:py|mjs|cjs|js|ts|sh)\b")
+# `"$ROOT/scripts/check_all.py"` and `python3 scripts/check_all.py` are the same
+# step written by two different callers. Strip whatever variable holds the repo
+# root so they compare equal.
+_ROOT_VAR = re.compile(r"^(?:\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/|\./)+")
+# core.hooksPath first, because that is what git actually obeys; the other two
+# are where a project puts hooks when it has not configured one. Failing to
+# FIND the hook would silently restore the hole this comparison exists to close,
+# so `test_gate_parity.py` asserts that this repository's hook is discovered.
+_HOOK_DIRS = ("scripts/hooks", ".git/hooks")
+
+
+def gate_scripts(text: str) -> set[str]:
+    """Every script of this repository that `text` invokes, repo-relative.
+
+    Comment lines go first, for the same reason `workflow_commands` drops them:
+    a gate named in a comment is not a gate that runs. A gate named in a
+    TRAILING comment is still counted, and that is deliberate — the error it
+    produces is 'the hook appears to run something CI does not', a false alarm,
+    and the other direction would be a false pass.
+    """
+    found: set[str] = set()
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        for raw in _GATE_SCRIPT.findall(line):
+            tok = _ROOT_VAR.sub("", raw.strip("\"'"))
+            # Repo-relative and real. Without the existence test every `.js` in
+            # an inline heredoc would look like a gate step.
+            if "/" in tok and (ROOT / tok).is_file():
+                found.add(tok)
+    return found
+
+
+def pre_commit_hook() -> Path | None:
+    configured = sh(["git", "config", "core.hooksPath"], cwd=ROOT).stdout.strip()
+    for rel in ([configured] if configured else []) + list(_HOOK_DIRS):
+        hook = ROOT / rel / "pre-commit"
+        if hook.is_file():
+            return hook
+    return None
+
+
 def check_ci_parity() -> tuple[str, str]:
     """Guard the promise 'green locally ⇒ green in CI': the CI workflows must
     actually invoke the same gate script(s) this file is part of. Prevents CI
@@ -675,7 +810,39 @@ def check_ci_parity() -> tuple[str, str]:
             "no enabled CI job RUNS the local gate: " + ", ".join(absent) + "\n"
             "a mention in a comment, a step name or a disabled job is not an invocation",
         )
-    return ("OK", f"{len(files)} workflow file(s) run the same gate(s) as local")
+
+    # Everything above answers only "does CI run check_all.py and
+    # check-all.mjs". It cannot see a check that exists on ONE side. A reviewer
+    # added scripts/check-local-only.py, appended it to the pre-commit hook, and
+    # this function still returned ('OK', '1 workflow file(s) run the same
+    # gate(s) as local') — the local hook had become strictly stricter than CI
+    # and the line that exists to notice that stayed green. Both directions are
+    # a broken promise: a hook step CI lacks means green in CI does not mean the
+    # commit would have passed locally, and a CI step the hook lacks means green
+    # locally does not mean green in CI.
+    hook = pre_commit_hook()
+    if hook is None:
+        # No hook, so nothing local can be stricter than CI: the comparison
+        # above is then the whole of parity rather than a part of it.
+        return ("OK", f"{len(files)} workflow file(s) run the same gate(s) as local")
+    hook_scripts = gate_scripts(hook.read_text(errors="ignore"))
+    ci_scripts = gate_scripts(commands)
+    where = hook.name if hook.parent == ROOT else str(hook).replace(str(ROOT) + "/", "")
+    drift = [
+        f"  {where} runs {s}, no enabled CI job does" for s in sorted(hook_scripts - ci_scripts)
+    ]
+    drift += [f"  CI runs {s}, {where} does not" for s in sorted(ci_scripts - hook_scripts)]
+    if drift:
+        return (
+            "FAIL",
+            f"{where} and CI do not run the same gate scripts, so 'green locally' and "
+            "'green in CI' are different promises:\n" + "\n".join(drift),
+        )
+    return (
+        "OK",
+        f"{len(files)} workflow file(s) and {where} run the same "
+        f"{len(hook_scripts)} gate script(s)",
+    )
 
 
 # ---- security tier: catches the mechanical vulns (not a substitute for a

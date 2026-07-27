@@ -417,7 +417,26 @@ def _by_holding(
             " group by h.id"
         ).fetchall()
     }
-    failing_facts = {f["claim_id"] for f in citations["failures"]}
+    # WHOSE failing citation it is, read from the claim's own `holding_id`
+    # rather than inferred from the shape of its id.
+    #
+    # This counted `claim_id.startswith(holding_id)`. Claim ids happen to be
+    # prefixed by their holding today, so the count is right today — and it is
+    # right by coincidence of naming, not by anything the database enforces. Two
+    # holdings where one id is a prefix of the other (`fund_i_jio` beside
+    # `fund_i_jio_indirect`) would attribute the longer one's failures to both,
+    # and a claim id that stopped carrying the prefix would attribute its
+    # failures to NOBODY — the page would read clean while a citation was
+    # broken, which is the direction that matters.
+    holding_of = {
+        _as(str, r[0]): _as(str, r[1])
+        for r in conn.execute("select id, holding_id from claim").fetchall()
+    }
+    failing_by_holding: dict[str, int] = {}
+    for f in citations["failures"]:
+        owner = holding_of.get(_as(str, f["claim_id"]))
+        if owner is not None:
+            failing_by_holding[owner] = failing_by_holding.get(owner, 0) + 1
     out: list[dict[str, Any]] = []
     for holding_id, tally in sorted(counts.items()):
         appearances = [
@@ -446,9 +465,7 @@ def _by_holding(
                 "documents": tally["documents"],
                 "claims": tally["claims"],
                 "facts": tally["facts"],
-                "facts_with_a_failing_citation": sum(
-                    1 for claim_id in failing_facts if claim_id.startswith(holding_id)
-                ),
+                "facts_with_a_failing_citation": failing_by_holding.get(holding_id, 0),
                 "packet_appearances": len(appearances),
                 "requirements_applicable": applicable,
                 "requirements_sufficient": sufficient,

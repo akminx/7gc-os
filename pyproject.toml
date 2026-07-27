@@ -25,6 +25,11 @@ dev = [
     # The workbook reader is the only untyped third-party surface in the
     # project, and it is the layer that turns spreadsheet cells into money.
     "types-openpyxl>=3.1",
+    # The corpus manifest and the policy matrix are both YAML the tests read as
+    # an answer key. Untyped, `yaml.safe_load` returns `Any` and every field
+    # read off it is unchecked — which is the wrong property for a file whose
+    # whole job is disagreeing with the product about a figure.
+    "types-PyYAML>=6.0",
 ]
 
 [tool.setuptools]

@@ -114,6 +114,20 @@ def supersede(claims: list[EvidenceClaim]) -> list[EvidenceClaim]:
     return [c for c in claims if c.id not in replaced]
 
 
+#: Fields that state the fund's money actually moved, in whichever vocabulary
+#: the position's own document class uses. Alternatives, not a conjunction: a
+#: stock purchase agreement says "received … per the settlement statement", a
+#: capital account statement says "contributed capital" against an unfunded
+#: commitment of zero, and demanding the first of a fund interest reports a gap
+#: the document already closes.
+#:
+#: `acquisition_consideration_usd` is Moonfare's, whose memo records the USD
+#: consideration paid for the EUR interest at entry.
+_SETTLEMENT_EVIDENCE = frozenset(
+    {"settlement_amount_received", "contributed_capital", "acquisition_consideration_usd"}
+)
+
+
 def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
     """Existence and cost — evaluated per held lot, worst wins (INV-7).
 
@@ -159,9 +173,39 @@ def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
         # of something no longer held is not a question the auditor asked.
         return Outcome(requirement=RequirementCode.R1, verdict=_NA)
 
+    verdict = worst(list(per_lot.values()))
+
+    # ¶1 ASKS FOR SETTLEMENT OF FUNDS, and an executed agreement does not
+    # evidence it. "Executed transaction documents supporting the Fund's
+    # acquisition of each position …, including share counts, price per share,
+    # and settlement of funds" — an SPA proves an agreement was signed; whether
+    # the money moved is a separate assertion, and it is half of what "existence
+    # and COST" means.
+    #
+    # NOT keyed on `settlement_amount_received` alone, and the difference
+    # matters. Jio's evidence is a capital account statement, which states
+    # `contributed_capital = $1,000,000.00` against `unfunded_commitment =
+    # $0.00`. That IS the money having moved, said the way a fund interest says
+    # it. A rule naming only the SPA vocabulary would have reported Jio as
+    # lacking settlement evidence while its own document affirms the
+    # contribution — a confident, plausible, wrong finding, which is the exact
+    # failure mode this project exists to refuse.
+    #
+    # Latent as written: roofstock, poolside and fluidstack carry the settlement
+    # fields, Jio carries the contribution fields, and every other holding is
+    # already short of `sufficient` for a reason of its own. Nothing moves
+    # today, which is why the guard needs constructed cases rather than the
+    # corpus.
+    if verdict is _SUFFICIENT:
+        stated = {name for c in claims for name in c.facts}
+        if not (_SETTLEMENT_EVIDENCE & stated):
+            verdict = _PARTIAL
+            reasons.add("SETTLEMENT_OF_FUNDS_NOT_EVIDENCED")
+            actions.add("REQUEST_SETTLEMENT_CONFIRMATION")
+
     return Outcome(
         requirement=RequirementCode.R1,
-        verdict=worst(list(per_lot.values())),
+        verdict=verdict,
         reasons=tuple(sorted(reasons)),
         next_actions=tuple(sorted(actions)),
         relied_on=tuple(dict.fromkeys(relied)),
@@ -302,6 +346,18 @@ def r2(ledger: Ledger, holding_id: str, on: date) -> Outcome:
         # one — `not_derivable, NO_PRICE_FOR_CLASS:series_a1` — while the verdict
         # read `partial`. Two layers of the same system disagreeing about whether
         # the held class had support. They now agree.
+        #
+        # "Price Series B" is true of the CLAIMS, and a cross-family review was
+        # right to point out that it is not true of the DOCUMENTS: Dream's pro
+        # forma table lists 7GC under Series A-1 at $3.20, and the claim even
+        # stores `fund_held_security_class`. That $3.20 is an ORIGINAL ISSUE
+        # price restated in a later table, so the extractor is right not to key
+        # it as a price for A-1 — 625,000 x $3.20 = $2,000,000 against a
+        # $5,000,000 mark, and what shares first sold for does not support what
+        # they are worth now. What was wrong was the reason's WORDING, which
+        # said no document prices the held class while an auditor could open the
+        # PDF and see one. Fixed in the gloss, not here: the code is an
+        # identifier and the sentence is what a reader is owed.
         verdicts.append(_INSUFFICIENT)
         reasons.add("NO_SUPPORT_FOR_A_HELD_CLASS")
 
@@ -515,6 +571,24 @@ def _realized_in_window(ledger: Ledger, holding_id: str, on: date) -> list[Lot]:
     ]
 
 
+#: ¶4's three named figures, and the fields that can state each. Alternatives
+#: WITHIN a group, all three groups REQUIRED — the letter says "support for
+#: proceeds received, INCLUDING per-share consideration and share counts".
+#:
+#: `gross_consideration` or `net_payment` for proceeds, because a notice may
+#: state either and the difference between them is a separate finding that
+#: `packet/` already reports; the question here is only whether the document
+#: says what was received at all.
+_REALIZATION_FIGURES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("NO_PROCEEDS_STATED", frozenset({"gross_consideration", "net_payment"})),
+    (
+        "NO_PER_SHARE_CONSIDERATION_STATED",
+        frozenset({"consideration_per_share", "consideration_per_share_stated"}),
+    ),
+    ("NO_REALIZED_SHARE_COUNT_STATED", frozenset({"shares_of_record"})),
+)
+
+
 def r4(ledger: Ledger, holding_id: str, on: date) -> Outcome:
     """Realisation support, for EVERY lot realised in this window.
 
@@ -542,11 +616,35 @@ def r4(ledger: Ledger, holding_id: str, on: date) -> Outcome:
             else _MISSING
         )
     complete = all(v is _SUFFICIENT for v in per_lot.values())
+    verdict = worst(list(per_lot.values()))
+    reasons = [] if complete else ["NO_REALIZATION_SUPPORT_FOR_LOT"]
+    actions = [] if complete else ["REQUEST_REALIZATION_SUPPORT"]
+
+    # ¶4 NAMES THREE THINGS, and the document class was answering for all of
+    # them. "Merger consideration statements, distribution notices, or other
+    # support for PROCEEDS RECEIVED, including per-share consideration and share
+    # counts" — proceeds is the head noun, and the other two are named after
+    # "including", so a notice that states none of them does not answer the
+    # request even though it is exactly the class of document asked for.
+    #
+    # Latent on this corpus and deliberately landed anyway: Jackpocket's notice
+    # carries all four fields, so nothing moves today. A realisation that
+    # arrives without them would have read `sufficient` on the strength of its
+    # letterhead, which is the same defect as ¶1's settlement limb one paragraph
+    # further down the letter.
+    if verdict is _SUFFICIENT:
+        stated = {name for c in claims for name in c.facts}
+        for missing, needed in _REALIZATION_FIGURES:
+            if not (needed & stated):
+                verdict = _PARTIAL
+                reasons.append(missing)
+                actions.append("REQUEST_REALIZATION_FIGURES")
+
     return Outcome(
         requirement=RequirementCode.R4,
-        verdict=worst(list(per_lot.values())),
-        reasons=() if complete else ("NO_REALIZATION_SUPPORT_FOR_LOT",),
-        next_actions=() if complete else ("REQUEST_REALIZATION_SUPPORT",),
+        verdict=verdict,
+        reasons=tuple(dict.fromkeys(reasons)),
+        next_actions=tuple(dict.fromkeys(actions)),
         relied_on=tuple(c.id for c in claims),
         per_lot=per_lot,
         realized_lots=tuple(lot.id for lot in events),

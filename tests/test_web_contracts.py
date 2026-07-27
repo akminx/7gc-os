@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import fields as dataclass_fields
+from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
 
@@ -41,9 +43,12 @@ import pytest
 from pydantic import BaseModel
 
 from api import routes
-from api.serialize import row_json, totals_json
+from api.serialize import recomputation_json, row_json, totals_json
 from packages.contracts import enums, models
+from packages.contracts.base import Money
 from packages.contracts.fixtures.dream import dream_packet
+from packet.recompute import ClassAmount, Recomputation
+from policy.validators import Outcome
 from scripts import capture_web_fixture
 from scripts.capture_web_fixture import SNAPSHOT, capture, main, render
 
@@ -241,6 +246,78 @@ def test_the_evidence_claim_is_a_claim_plus_what_the_route_adds() -> None:
     """
     extra = {routes.EVIDENCE_CLAIM_EXTRA}
     assert _fields("EvidenceClaim") == set(models.Claim.model_fields) | extra
+
+
+def _a_recomputation() -> Recomputation:
+    """Fluidstack's 25Q4 finding, constructed rather than captured.
+
+    Constructed because the snapshot cannot supply one: the fixture branch has no
+    ledger to derive from, so `recomputations` arrives as `null` and a null
+    agrees with every shape there is — the same reason `EvidenceClaim` above is
+    read off its model instead of off an instance.
+
+    Every field is populated and `per_class` holds an entry, because an empty
+    list agrees with every shape too, and `RecomputedClass` is the interface the
+    per-class working is rendered from.
+    """
+    return Recomputation(
+        holding_id="fluidstack",
+        outcome=Outcome.FAIL,
+        reason="PER_CLASS_SHARES_X_PPS",
+        derived=Money(amount=Decimal("2500000"), currency="USD"),
+        reported=Money(amount=Decimal("6000000"), currency="USD"),
+        difference=Money(amount=Decimal("3500000"), currency="USD"),
+        evidence_claim_ids=("fluidstack_spa",),
+        per_class=(
+            ClassAmount(
+                lot_id="fluidstack_series_a",
+                security_class="series_a",
+                shares=100_000,
+                price_per_share=Decimal("10.000000"),
+                amount=Money(amount=Decimal("1000000"), currency="USD"),
+                cross_class=False,
+            ),
+        ),
+        policy_version="v1",
+    )
+
+
+def test_the_recomputation_is_declared_key_for_key() -> None:
+    """SPEC §8's V2, which reached the browser compared to nothing.
+
+    `Recomputation` and `RecomputedClass` are hand-written TypeScript with no
+    Pydantic model behind them, and `recomputation_json` is a hand-written dict
+    literal. Neither of the two checks above sees them: the model check reads
+    `contracts.ts` against `models.py` and these live in `responses.ts`, and the
+    envelope check walks the captured payloads, where `recomputations` is `null`.
+
+    So renaming `security_class` to `class` in the serialiser left the Python
+    gate green and `tsc` green, and put `undefined` where every class name goes —
+    on the one screen whose entire purpose is showing which half of a mark is
+    wrong. The per-class row is checked as well as the envelope, because the
+    finding is only legible per class: 100,000 Series A at $10.00 plus 100,000
+    Series A-2 at $15.00 against a reported 6,000,000 priced off Series B.
+    """
+    sent = recomputation_json(_a_recomputation())
+    assert set(sent) == _fields("Recomputation")
+    per_class = sent["per_class"]
+    assert per_class, "no per-class row to compare — this check would pass vacuously"
+    assert set(per_class[0]) == _fields("RecomputedClass")
+
+
+def test_the_recomputation_carries_every_field_the_derivation_produced() -> None:
+    """The serialiser against the dataclass, not only against the browser.
+
+    The check above pins the two ends to each other, and two ends renamed
+    together still agree. This one pins the wire to what the derivation actually
+    computed, so a field dropped from `recomputation_json` is a red test rather
+    than a value that stops arriving — `cross_class` is INV-17's flag that a
+    class was priced off evidence for a class the fund does not hold, and its
+    absence renders as a per-class row with nothing wrong with it.
+    """
+    sent = recomputation_json(_a_recomputation())
+    assert set(sent) == {f.name for f in dataclass_fields(Recomputation)}
+    assert set(sent["per_class"][0]) == {f.name for f in dataclass_fields(ClassAmount)}
 
 
 def test_the_source_field_names_the_two_stores_the_routes_can_answer_from() -> None:

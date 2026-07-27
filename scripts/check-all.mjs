@@ -21,6 +21,13 @@ import {
 import { extname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  checkCiParity as ciParity,
+  checkClaudeMd as claudeMd,
+  preCommitHook as findPreCommitHook,
+  markdownPaths,
+  workflowCommands,
+} from "./check-gate-parity.mjs";
 import { checkUiVocabulary, checkWebBoundary } from "./check-web-arch.mjs";
 
 const ROOT = (() => {
@@ -291,108 +298,14 @@ function checkDebt(fix, ratchet) {
   return ["OK", `${hits.length} debt markers <= ceiling ${cap}`];
 }
 
-function checkClaudeMd() {
-  const missing = [];
-  for (const name of ["CLAUDE.md", "AGENTS.md"]) {
-    const cf = join(ROOT, name);
-    if (!existsSync(cf)) continue;
-    const text = readFileSync(cf, "utf8");
-    for (const m of text.matchAll(/`([^`]+)`/g)) {
-      const tok = m[1].trim();
-      if (!tok.includes("/") || tok.includes(" ") || /[*<>]/.test(tok)) continue;
-      if (/^(http|npm |git |localhost)/.test(tok)) continue;
-      if (!existsSync(join(ROOT, tok.replace(/\/$/, "")))) missing.push(`${name}: \`${tok}\``);
-    }
-  }
-  if (missing.length) return ["WARN", "paths referenced but not found:\n" + missing.join("\n")];
-  return ["OK", "referenced paths exist"];
-}
-
-const RUN_KEY = /^(\s*)(?:-\s+)?run:\s*(.*)$/;
-const JOB_KEY = /^ {2}([A-Za-z0-9_.-]+):\s*$/;
-const DISABLED = /^ {4}if:\s*(?:false|'false'|"false")\s*$/;
-const indentOf = (line) => line.length - line.trimStart().length;
-
-// Every shell command a workflow would actually run. Parity used to be
-// `text.includes(gateName)`, which a comment satisfies: a workflow whose whole
-// content was `# Historical names only: check_all.py and check-all.mjs` reported
-// that CI ran the same gate as local. So does a job switched off with
-// `if: false`, and so does a gate named in a step's `name:` while the `run:`
-// below it invokes something else. Comments go, disabled jobs go, and what is
-// left is the text that becomes a shell command.
-export function workflowCommands(text) {
-  const lines = text.split("\n");
-  const live = [];
-  for (let i = 0; i < lines.length; ) {
-    if (!JOB_KEY.test(lines[i])) {
-      live.push(lines[i]);
-      i += 1;
-      continue;
-    }
-    const block = [lines[i]];
-    i += 1;
-    while (i < lines.length && (!lines[i].trim() || indentOf(lines[i]) > 2)) {
-      block.push(lines[i]);
-      i += 1;
-    }
-    if (!block.some((b) => DISABLED.test(b))) live.push(...block);
-  }
-
-  const out = [];
-  for (let i = 0; i < live.length; ) {
-    const line = live[i];
-    const m = line.trimStart().startsWith("#") ? null : RUN_KEY.exec(line);
-    if (!m) {
-      i += 1;
-      continue;
-    }
-    const keyIndent = m[1].length;
-    const rest = m[2].trim();
-    i += 1;
-    if (rest && !["|", ">"].includes(rest.replace(/[+-]+$/, ""))) {
-      out.push(rest);
-      continue;
-    }
-    while (i < live.length) {
-      const body = live[i];
-      if (body.trim() && indentOf(body) <= keyIndent) break;
-      if (!body.trimStart().startsWith("#")) out.push(body);
-      i += 1;
-    }
-  }
-  return out.join("\n");
-}
-
-export function checkCiParity() {
-  const gates = [];
-  if (existsSync(join(ROOT, "scripts", "check_all.py"))) gates.push("check_all.py");
-  if (existsSync(join(ROOT, "scripts", "check-all.mjs"))) gates.push("check-all.mjs");
-  if (!gates.length) return ["SKIP", "no local gate to compare"];
-  const wfDir = join(ROOT, ".github", "workflows");
-  const files = existsSync(wfDir) ? readdirSync(wfDir).filter((f) => /\.ya?ml$/.test(f)) : [];
-  // "There is no CI" and "CI runs the gate" are not the same answer. Deleting
-  // the workflow directory used to produce the first and be counted as the
-  // second.
-  if (!files.length) {
-    return [
-      "FAIL",
-      "a local gate exists but .github/workflows has no workflow to compare it to — " +
-        "parity cannot be verified, which is not the same as parity holding",
-    ];
-  }
-  const commands = files
-    .map((f) => workflowCommands(readFileSync(join(wfDir, f), "utf8")))
-    .join("\n");
-  const absent = gates.filter((g) => !commands.includes(g));
-  if (absent.length) {
-    return [
-      "FAIL",
-      `no enabled CI job RUNS the local gate: ${absent.join(", ")}\n` +
-        "a mention in a comment, a step name or a disabled job is not an invocation",
-    ];
-  }
-  return ["OK", `${files.length} workflow file(s) run the same gate(s) as local`];
-}
+// CLAUDE.md alignment and CI parity live in check-gate-parity.mjs — see the
+// header there for why. They are re-exported under the no-argument signatures
+// the gate's own guards call them by, so the split changes where the code is
+// and nothing about what a caller sees.
+export const checkClaudeMd = () => claudeMd(ROOT);
+export const checkCiParity = () => ciParity(ROOT);
+export const preCommitHook = () => findPreCommitHook(ROOT);
+export { markdownPaths, workflowCommands };
 
 export function checkDeps(projects) {
   let ran = false;

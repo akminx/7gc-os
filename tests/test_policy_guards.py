@@ -47,7 +47,7 @@ from policy.inputs import (
     SupportObservation,
 )
 from policy.reducer import ReducerError, best, worst
-from policy.requirements import assess_row, minus_months, r1, r2, r3
+from policy.requirements import assess_row, minus_months, r1, r2, r3, r4
 from tests.schema_helpers import DSN
 from tests.tracker_helpers import needs_workbooks
 
@@ -726,3 +726,161 @@ def test_expired_support_is_not_reported_as_never_having_existed(policy_ledger: 
 def _r2(ledger: Ledger, holding_id: str, on: date) -> object:
     outcome = assess_row(ledger, holding_id, on)
     return next(o for code, o in outcome.outcomes.items() if code is RequirementCode.R2)
+
+
+# ── R4 · the letter names three figures, not just a document ─────────────
+
+
+def _realized_ledger(**facts: Decimal) -> Ledger:
+    """One lot, realised inside the window, with a merger notice covering it."""
+    return _ledger(
+        lots=(
+            Lot(
+                "l",
+                "h",
+                "series_a",
+                100,
+                Decimal(1),
+                Decimal(100),
+                "USD",
+                date(2020, 1, 1),
+                realized_date=date(2025, 6, 30),
+            ),
+        ),
+        claims=(
+            _claim(
+                "notice",
+                None,
+                None,
+                requirements=frozenset({RequirementCode.R4}),
+                source_class=SourceClass.EXECUTED_TRANSACTION_DOC,
+                execution_status=ExecutionStatus.EXECUTED,
+                facts=dict(facts),
+            ),
+        ),
+    )
+
+
+_R4_COMPLETE = {
+    "gross_consideration": Decimal("3100000"),
+    "consideration_per_share": Decimal("6.20"),
+    "shares_of_record": Decimal(500000),
+}
+
+
+def test_r4_is_sufficient_when_the_notice_states_all_three_figures() -> None:
+    """The control. Jackpocket's notice carries all four fields, so this is the
+    live case and the one that must not have been broken by the check below."""
+    got = r4(_realized_ledger(**_R4_COMPLETE), "h", date(2025, 12, 31))
+    assert got.verdict is RequirementVerdict.SUFFICIENT
+    assert got.reasons == ()
+
+
+@pytest.mark.parametrize(
+    ("drop", "reason"),
+    [
+        ("gross_consideration", "NO_PROCEEDS_STATED"),
+        ("consideration_per_share", "NO_PER_SHARE_CONSIDERATION_STATED"),
+        ("shares_of_record", "NO_REALIZED_SHARE_COUNT_STATED"),
+    ],
+)
+def test_r4_caps_at_partial_when_a_figure_the_letter_names_is_absent(
+    drop: str, reason: str
+) -> None:
+    """¶4 asks for "support for PROCEEDS RECEIVED, including per-share
+    consideration and share counts". The document class was answering for all
+    three, so a notice of exactly the right kind that stated none of them read
+    `sufficient` on its letterhead.
+
+    Latent on this corpus — Jackpocket states all three — which is why it needs
+    a constructed case. An assertion no input can falsify is not a guard, and
+    the mutation harness would have reported this branch as a NO-OP.
+    """
+    figures = {k: v for k, v in _R4_COMPLETE.items() if k != drop}
+    got = r4(_realized_ledger(**figures), "h", date(2025, 12, 31))
+    assert got.verdict is RequirementVerdict.PARTIAL
+    assert reason in got.reasons
+    assert "REQUEST_REALIZATION_FIGURES" in got.next_actions
+
+
+def test_r4_names_every_missing_figure_rather_than_the_first() -> None:
+    """A notice stating none of the three owes three answers, and a report that
+    named one of them would send someone back twice."""
+    got = r4(_realized_ledger(), "h", date(2025, 12, 31))
+    assert got.verdict is RequirementVerdict.PARTIAL
+    assert {
+        "NO_PROCEEDS_STATED",
+        "NO_PER_SHARE_CONSIDERATION_STATED",
+        "NO_REALIZED_SHARE_COUNT_STATED",
+    } <= set(got.reasons)
+
+
+def test_r4_accepts_net_payment_as_proceeds_when_gross_is_not_stated() -> None:
+    """Alternatives within a group. Whether a notice states proceeds gross or
+    net is a real distinction and `packet/` reports it; it is not the question
+    ¶4 asks, which is whether the document says what was received at all."""
+    figures = {k: v for k, v in _R4_COMPLETE.items() if k != "gross_consideration"}
+    got = r4(_realized_ledger(net_payment=Decimal("3100000"), **figures), "h", date(2025, 12, 31))
+    assert got.verdict is RequirementVerdict.SUFFICIENT
+
+
+# ── R1 · ¶1 asks for settlement of funds, not just a signed agreement ────
+
+
+def _acquired_ledger(**facts: Decimal) -> Ledger:
+    """One held lot with an executed SPA covering it."""
+    return _ledger(
+        claims=(
+            _claim(
+                "spa",
+                None,
+                None,
+                requirements=frozenset({RequirementCode.R1}),
+                source_class=SourceClass.EXECUTED_TRANSACTION_DOC,
+                execution_status=ExecutionStatus.EXECUTED,
+                facts=dict(facts),
+            ),
+        ),
+    )
+
+
+def test_r1_needs_evidence_the_money_moved_not_only_that_a_deal_was_signed() -> None:
+    """An executed agreement proves an agreement. ¶1 asks for "executed
+    transaction documents … including share counts, price per share, and
+    settlement of funds", and the document class was answering for all of it —
+    so a signed SPA with no settlement evidence read `sufficient` on existence
+    AND COST, which is the half it does not establish."""
+    got = r1(_acquired_ledger(), "h", date(2025, 12, 31))
+    assert got.verdict is RequirementVerdict.PARTIAL
+    assert "SETTLEMENT_OF_FUNDS_NOT_EVIDENCED" in got.reasons
+    assert "REQUEST_SETTLEMENT_CONFIRMATION" in got.next_actions
+
+
+@pytest.mark.parametrize(
+    "field", ["settlement_amount_received", "contributed_capital", "acquisition_consideration_usd"]
+)
+def test_r1_accepts_settlement_stated_in_the_documents_own_vocabulary(field: str) -> None:
+    """The three ways this corpus says the money moved, and none is preferred.
+
+    A rule naming only the stock-purchase vocabulary would report Jio as lacking
+    settlement evidence while its capital account statement affirms
+    `contributed_capital = $1,000,000.00` against `unfunded_commitment = $0.00`.
+    That is the money having moved, said the way a fund interest says it, and
+    reporting it as absent would be a confident wrong finding rather than a
+    missing one.
+    """
+    got = r1(_acquired_ledger(**{field: Decimal(1000)}), "h", date(2025, 12, 31))
+    assert got.verdict is RequirementVerdict.SUFFICIENT
+    assert "SETTLEMENT_OF_FUNDS_NOT_EVIDENCED" not in got.reasons
+
+
+def test_r1_does_not_invent_a_settlement_gap_where_the_document_is_already_short() -> None:
+    """The reason has to be the finding, not an extra one stacked on top.
+
+    A holding whose R1 is already `missing` for want of any document at all owes
+    an acquisition agreement, not a settlement confirmation, and naming both
+    sends someone looking for the wrong thing first.
+    """
+    got = r1(_ledger(), "h", date(2025, 12, 31))
+    assert got.verdict is not RequirementVerdict.SUFFICIENT
+    assert "SETTLEMENT_OF_FUNDS_NOT_EVIDENCED" not in got.reasons

@@ -183,6 +183,20 @@ field_vocabulary:
   quoted_closing_price: a Level 1 quoted closing price
   position_value: a position value stated alongside a quoted price
   exchange_ratio: a recapitalisation conversion ratio
+  # Four names the facts below already use, added when the comparison was wired
+  # in and the vocabulary check went red on them. Declaring a name a fact
+  # already carries is completing this file, not editing it to make a
+  # comparison pass — no value, passage or source moved.
+  participation_note: whether the 7GC entity took part in the new money of a
+    round, stated as a sentence rather than a figure. Sway's is a
+    non-participation, and it is why the position dilutes.
+  fx_adjustment: the movement in a USD carrying value attributable solely to a
+    change in the exchange rate between two measurement dates
+  delivery_date: the date a statement was delivered to the investor of record.
+    A property of the DELIVERY, stated in the covering email — never in the
+    statement it transmits, which is what the Jio entries exist to separate.
+  attachment_relation: the covering email's naming of the file it attaches, the
+    only place in the corpus that binds one document to another
 
 scope:
   covers: >-
