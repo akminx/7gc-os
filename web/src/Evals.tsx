@@ -205,7 +205,7 @@ function Measured({ data }: { data: EvalsResponse }) {
 
       <Section
         title="The system's own recomputation"
-        hint="SPEC §8's V2 over every holding-date the packets carry. A census of outcomes and not a pass rate: `not_comparable` is not a soft fail and `unconfirmable` is not a weak pass, so one ratio over the six would be a number with no meaning."
+        hint="An independent recomputation over every holding-date the packets carry. A census of outcomes and not a pass rate: `not_comparable` is not a soft fail and `unconfirmable` is not a weak pass, so one ratio over the six would be a number with no meaning."
       >
         <ul className="census">
           {outcomes.map(([outcome, n]) => (

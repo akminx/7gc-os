@@ -493,33 +493,56 @@ class PolicyMixin:
         #
         # `management_carrying_value` is derivable and states a real figure; it
         # simply cannot confirm the mark, because the fund authored both.
+        # AUTHORITY DECIDES, and each tier is its own pass over `relied`.
+        #
+        # This was ONE loop returning on whichever document came first, and
+        # `relied` is ordered by date — so an administrator's NAV issued before
+        # a third party's conclusion won, and INV-1's "the concluded value
+        # stands as concluded" held only while the dates happened to cooperate.
+        # The application had the same defect in the same shape, which is
+        # exactly why no comparison between them could find it: agreement
+        # between two artefacts that encode the same preference is not evidence.
+        # A cross-family review found it in both at once.
+        #
+        # Three passes, in the order authority runs: an independent third
+        # party's conclusion, then the administrator's NAV, then the fund's own
+        # carrying value — which is last because it is the fund speaking about
+        # itself, and is routed to `carried_amount` rather than treated as
+        # confirmation.
         for _, doc in relied:
-            if doc.get("concluded_value") is not None:
-                if doc.get("source_class") == "fund_internal_record":
-                    # The figure is returned, and callers publish it under
-                    # `carried_amount` rather than `validated_amount` — see
-                    # CARRIED_NOT_VALIDATED. INV-13 keeps reported, validated
-                    # and supported apart, and a figure the fund states about
-                    # its own position is the first of those wearing the
-                    # second's clothes.
-                    #
-                    # It used to return None here, on the reasoning that the
-                    # number "IS the reported mark, so it does not need
-                    # repeating". True of this corpus and not of the rule: it
-                    # is true only while the tracker's figure and the memo's
-                    # agree, and the case where they DIVERGE is the one an
-                    # auditor most needs to see. Returning it makes the two
-                    # separately visible; routing it to another key keeps it
-                    # out of the column that means "confirmed".
-                    return (
-                        money(doc["concluded_value"]),
-                        CARRIED_NOT_VALIDATED,
-                        "MANAGEMENT_CARRYING_VALUE",
-                        [],
-                    )
+            if doc.get("concluded_value") is not None and (
+                doc.get("source_class") != "fund_internal_record"
+            ):
                 return money(doc["concluded_value"]), "derivable", "THIRD_PARTY_CONCLUSION", []
+        for _, doc in relied:
             if doc.get("nav") is not None:
                 return money(doc["nav"]), "derivable", "ADMINISTRATOR_NAV", []
+        for _, doc in relied:
+            if (
+                doc.get("concluded_value") is not None
+                and doc.get("source_class") == "fund_internal_record"
+            ):
+                # The figure is returned, and callers publish it under
+                # `carried_amount` rather than `validated_amount` — see
+                # CARRIED_NOT_VALIDATED. INV-13 keeps reported, validated
+                # and supported apart, and a figure the fund states about
+                # its own position is the first of those wearing the
+                # second's clothes.
+                #
+                # It used to return None here, on the reasoning that the
+                # number "IS the reported mark, so it does not need
+                # repeating". True of this corpus and not of the rule: it
+                # is true only while the tracker's figure and the memo's
+                # agree, and the case where they DIVERGE is the one an
+                # auditor most needs to see. Returning it makes the two
+                # separately visible; routing it to another key keeps it
+                # out of the column that means "confirmed".
+                return (
+                    money(doc["concluded_value"]),
+                    CARRIED_NOT_VALIDATED,
+                    "MANAGEMENT_CARRYING_VALUE",
+                    [],
+                )
         priced = [doc for _, doc in relied if doc.get("pps")]
         if not priced:
             return None, "not_derivable", "NO_PRICE_IN_EVIDENCE", []

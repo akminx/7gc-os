@@ -252,7 +252,7 @@ export function Dashboard({
                 <th
                   scope="col"
                   className="col-recheck"
-                  title="SPEC §8's V2, run against the cited evidence when this page was read. An independent recomputation, not an approved value and not written to the ledger."
+                  title="Run against the cited evidence when this page was read. An independent recomputation, not an approved value and not written to the ledger."
                 >
                   Recomputed from evidence
                 </th>

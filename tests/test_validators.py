@@ -894,6 +894,81 @@ def test_v2_takes_a_third_partys_conclusion_over_an_administrators_nav() -> None
     assert got.evidence == ("memo",)
 
 
+def test_v2_prefers_the_third_party_even_when_the_nav_was_issued_first() -> None:
+    """The same rule as above, with the dates the other way round.
+
+    The test above passes on a ledger where the memo happens to pre-date the
+    NAV, and `derive_mark` iterated a DATE-ORDERED list and returned the first
+    entry — so "priority is authority" was true of the docstring and false of
+    the code, and the only test of it agreed by coincidence. Reversing the two
+    dates was enough: a 2025-03-31 NAV of 900,000 beat a 2025-06-30 third-party
+    conclusion of 750,000, and the packet reported the mark as conflicting with
+    evidence it agrees with.
+
+    Found by a cross-family review. The oracle selected the same wrong claim, so
+    no comparison between them could have found it — they encoded the same
+    preference, which is the one kind of agreement that proves nothing.
+    """
+    ledger = _one_holding_ledger(
+        _claim(
+            "nav",
+            _ADMIN,
+            date(2025, 3, 31),
+            stated_amount=Decimal("900000"),
+            stated_currency="USD",
+        ),
+        _claim(
+            "memo",
+            _MEMO,
+            date(2025, 6, 30),
+            stated_amount=Decimal("750000"),
+            stated_currency="USD",
+        ),
+        position_type=PositionType.DIRECT_EQUITY,
+        mark=Decimal("750000"),
+    )
+    got = v2_mark(ledger, "h", date(2025, 12, 31))
+    assert got.outcome is Outcome.PASS
+    assert got.reason == "THIRD_PARTY_CONCLUSION"
+    assert got.computed == Decimal("750000")
+    assert got.evidence == ("memo",)
+
+
+def test_v7_refuses_a_rate_cited_to_another_holding() -> None:
+    """V7 says "directed and cited"; nothing checked who it was cited to.
+
+    A rate carries `source_claim_id` so it can be tied back to the document that
+    stated it. Any rate for the right date passed, whatever it belonged to — so
+    a GBP/USD rate whose source claim named an entirely different position
+    reported that THIS holding's rate had been observed. Found by a cross-family
+    review.
+
+    The directed PAIR is still unchecked, and deliberately so: no holding
+    records the currency it is denominated in — Moonfare's lots carry
+    `cost_currency = USD` — so there is nothing to compare `base`/`quote`
+    against, and a check that passes on a guessed expectation is worse than a
+    named gap.
+    """
+    on = date(2025, 12, 31)
+    ledger = _one_holding_ledger(
+        position_type=PositionType.FX_DENOMINATED_INTEREST,
+        mark=Decimal("1048515"),
+    )
+    foreign = FxRate(
+        base="GBP",
+        quote="USD",
+        rate=Decimal("1.2500"),
+        observed_date=on,
+        effective_for=on,
+        source_claim_id="some_other_holding:gbp_rate",
+        source_document_version_id="dv_other_holding",
+    )
+    got = v7_fx_rate_present(ledger, "h", on, [foreign])
+    assert got.outcome is Outcome.FAIL
+    assert got.computed is None
+    assert got.evidence == ()
+
+
 def test_v2_takes_an_administrators_nav_when_that_is_the_authority_present() -> None:
     ledger = _one_holding_ledger(
         _claim(

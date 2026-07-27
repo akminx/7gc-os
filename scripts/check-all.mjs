@@ -21,7 +21,7 @@ import {
 import { extname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { checkWebBoundary } from "./check-web-arch.mjs";
+import { checkUiVocabulary, checkWebBoundary } from "./check-web-arch.mjs";
 
 const ROOT = (() => {
   try {
@@ -465,6 +465,7 @@ export function main() {
     ["typecheck", () => checkTypecheck(projects), false],
     ["tests + coverage", () => checkTests(projects, fix, ratchet), false],
     ["web boundary §5.3", () => checkWebBoundary(ROOT), false],
+    ["UI vocabulary", () => checkUiVocabulary(ROOT), false],
     ["duplicate code", checkDups, false],
     ["file sizes", () => checkFileSizes(fix), false],
     ["debt markers", () => checkDebt(fix, ratchet), false],

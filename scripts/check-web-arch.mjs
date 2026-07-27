@@ -59,23 +59,48 @@ function isTestFile(file) {
   return /\.test\.tsx?$/.test(file);
 }
 
-export function checkWebBoundary(root) {
+//: Both rules in this file need a real `ts.Program` over `web/**`, and both
+//: must FAIL rather than SKIP when they cannot build one. Returns either
+//: `{ stop }` — the tuple the caller should return verbatim — or the program.
+function loadWebProgram(root, rule) {
   const web = join(root, "web");
-  if (!existsSync(web)) return ["OK", "no web/ project — §5.3 has nothing to constrain"];
+  if (!existsSync(web))
+    return { stop: ["OK", `no web/ project — ${rule} has nothing to constrain`] };
 
   const tsconfig = join(web, "tsconfig.json");
   const tsDir = join(web, "node_modules", "typescript");
   // A required check that cannot run must FAIL, never SKIP. This project has
   // found six separate checks passing because they measured nothing.
-  if (!existsSync(tsconfig)) return ["FAIL", "web/tsconfig.json missing — §5.3 rule cannot run"];
+  if (!existsSync(tsconfig))
+    return { stop: ["FAIL", `web/tsconfig.json missing — ${rule} cannot run`] };
   if (!existsSync(tsDir))
-    return ["FAIL", "typescript not installed in web/ — §5.3 rule cannot run (npm ci)"];
+    return { stop: ["FAIL", `typescript not installed in web/ — ${rule} cannot run (npm ci)`] };
 
   const ts = require(tsDir);
   const raw = ts.readConfigFile(tsconfig, ts.sys.readFile);
-  if (raw.error) return ["FAIL", `web/tsconfig.json unreadable: ${raw.error.messageText}`];
+  if (raw.error)
+    return { stop: ["FAIL", `web/tsconfig.json unreadable: ${raw.error.messageText}`] };
   const parsed = ts.parseJsonConfigFileContent(raw.config, ts.sys, web);
-  const program = ts.createProgram(parsed.fileNames, parsed.options);
+  return { ts, web, program: ts.createProgram(parsed.fileNames, parsed.options) };
+}
+
+//: Every source under `web/**` that is not a declaration file, a dependency or
+//: a test. Tests are exempt for the reason `arch_checks.py` exempts them: they
+//: construct forbidden values deliberately, to prove the guards refuse them.
+function* webSources({ web, program }) {
+  for (const file of program.getSourceFiles()) {
+    if (file.isDeclarationFile) continue;
+    if (file.fileName.includes(`${sep}node_modules${sep}`)) continue;
+    if (!file.fileName.startsWith(web + sep)) continue;
+    if (isTestFile(file.fileName)) continue;
+    yield file;
+  }
+}
+
+export function checkWebBoundary(root) {
+  const loaded = loadWebProgram(root, "§5.3");
+  if (loaded.stop) return loaded.stop;
+  const { ts, program } = loaded;
   const checker = program.getTypeChecker();
 
   const ARITHMETIC = new Map([
@@ -169,11 +194,7 @@ export function checkWebBoundary(root) {
   };
 
   let scanned = 0;
-  for (const file of program.getSourceFiles()) {
-    if (file.isDeclarationFile) continue;
-    if (file.fileName.includes(`${sep}node_modules${sep}`)) continue;
-    if (!file.fileName.startsWith(web + sep)) continue;
-    if (isTestFile(file.fileName)) continue;
+  for (const file of webSources(loaded)) {
     scanned += 1;
     walk(file, file);
   }
@@ -182,4 +203,124 @@ export function checkWebBoundary(root) {
     return ["FAIL", "§5.3 rule matched no web sources — the check measured nothing"];
   if (violations.length > 0) return ["FAIL", violations.join("\n")];
   return ["OK", `${scanned} web source(s) compute nothing the API owns (SPEC §5.3)`];
+}
+
+//: The repository's private vocabulary, in text a reader can see.
+//:
+//: `INV-17` and `SPEC §6.3` are how THIS PROJECT refers to its own decisions.
+//: An auditor has no copy of `INVARIANTS.md`, so on screen they are a citation
+//: to a document the reader does not have — which reads as authority without
+//: supplying any. The rule was stated in CLAUDE.md and nothing checked it, so
+//: five leaked into shipped copy in one night: two tooltips, two constants
+//: rendered by `Why`, and one reason-code gloss. `Why` puts its text in the
+//: expanded body, in the `title` AND in a visually-hidden span, so a screen
+//: reader says "INV-17" out loud.
+//:
+//: The sentences were all worth saying. Only the citation had to go, and every
+//: repair was to delete the reference and keep the sentence.
+const INTERNAL_VOCABULARY = /\bINV-\d+|\bSPEC\s*§/;
+
+//: Every violation in one parsed source. Split out from the check so the
+//: self-test below can run the REAL rule over a synthetic file, rather than a
+//: copy of it that can drift.
+//:
+//: PARSED, NOT GREPPED, and here the reason is sharper than it is for §5.3:
+//: this very file, `INVARIANTS.md` and the comments in `labels.ts` all discuss
+//: `INV-` by name. A line-wise regex over `web/**` flags the prose that
+//: explains the rule, and the obvious repair — reword the comment — puts the
+//: guard at the mercy of how the next person writes English. The AST carries no
+//: comments, so only text that can actually reach a reader is examined.
+function vocabularyViolations(ts, file, name) {
+  const found = [];
+  const walk = (node) => {
+    const speakable =
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node) ||
+      // JSX children are not string literals. Copy written directly between
+      // tags — <p>INV-17 means…</p> — is the most obvious way to leak one and
+      // the easiest kind of node to forget.
+      ts.isJsxText(node);
+    if (speakable && INTERNAL_VOCABULARY.test(node.text)) {
+      const { line } = file.getLineAndCharacterOfPosition(node.getStart(file));
+      found.push(
+        `${name}:${line + 1} says \`${node.text.match(INTERNAL_VOCABULARY)[0]}\`` +
+          " in text a reader can see — name the idea, not the invariant",
+      );
+    }
+    ts.forEachChild(node, walk);
+  };
+  walk(file);
+  return found;
+}
+
+//: A source that MUST be rejected, and the one construct that must not be.
+//:
+//: Green on a clean tree proves nothing — that is this project's most repeated
+//: finding, and `scripts/test_tier_map.mjs` is a guard-on-a-guard that nothing
+//: invokes. So the rule is run against this before it is trusted against
+//: `web/**`, in memory, on every gate run.
+//:
+//: The comment is the control. It names both tokens, and a regex over lines
+//: would fail this fixture — which is precisely the implementation the rule
+//: must not drift back into.
+const PROBE = `
+// A comment naming INV-17 and SPEC §6.3 must NOT be flagged.
+const TOOLTIP = "a valuation-policy act (INV-17)";
+const TEMPLATED = \`bound per SPEC §6.3 to a mark revision\`;
+export function Probe({ n }: { n: number }) {
+  return <div title={TOOLTIP} data-t={TEMPLATED}>INV-9 says a gap is immutable. {n}</div>;
+}
+`;
+
+//: Line 3 is the string literal, 4 the no-substitution template, 6 the JSX
+//: text — one per node kind the rule claims to cover. Line 2, the comment, must
+//: be absent.
+//:
+//: Asserted as the exact SET rather than as a count. A count catches a kind
+//: that stopped being examined but not a kind that started matching the wrong
+//: node, and "3 of something" passing while the something changed is the shape
+//: of every vacuous check this project has found.
+const PROBE_EXPECTS = [3, 4, 6];
+
+function selfTest(ts) {
+  const file = ts.createSourceFile(
+    "probe.tsx",
+    PROBE,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const lines = vocabularyViolations(ts, file, "probe.tsx")
+    .map((v) => Number(v.match(/^probe\.tsx:(\d+)/)[1]))
+    .sort((a, b) => a - b);
+  if (String(lines) !== String(PROBE_EXPECTS))
+    return (
+      `self-test: planted violations on lines ${PROBE_EXPECTS}, rule reported ${lines.length ? lines : "none"}` +
+      " — it does not catch what it claims to, so its green line means nothing"
+    );
+  return null;
+}
+
+export function checkUiVocabulary(root) {
+  const loaded = loadWebProgram(root, "the UI-vocabulary rule");
+  if (loaded.stop) return loaded.stop;
+  const { ts } = loaded;
+
+  const broken = selfTest(ts);
+  if (broken) return ["FAIL", broken];
+
+  const violations = [];
+  let scanned = 0;
+  for (const file of webSources(loaded)) {
+    scanned += 1;
+    violations.push(...vocabularyViolations(ts, file, relative(root, file.fileName)));
+  }
+
+  if (scanned === 0)
+    return ["FAIL", "UI-vocabulary rule matched no web sources — the check measured nothing"];
+  if (violations.length > 0) return ["FAIL", violations.join("\n")];
+  return ["OK", `${scanned} web source(s) cite no INV- or SPEC § in visible text (self-test: 3/3)`];
 }

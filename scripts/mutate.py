@@ -49,6 +49,7 @@ MAPPER = ROOT / "ingest/trackers/to_contracts.py"
 LOTS = ROOT / "ingest/trackers/to_lots.py"
 CLASSIFY = ROOT / "ingest/trackers/classify.py"
 TUPLES = ROOT / "policy/valid_tuples.py"
+VALIDATORS = ROOT / "policy/validators.py"
 REDUCER = ROOT / "policy/reducer.py"
 REQS = ROOT / "policy/requirements.py"
 SEED = ROOT / "ingest/policy_seed.py"
@@ -108,7 +109,46 @@ CASE_STUDY = ROOT / "7GC Audit Case Study"
 #: against a live schema (drop the object, run the schema suites, restore); the
 #: results are recorded in `.captain/review/triage/`. The oracle is checked by
 #: `evals/oracle/anchors.py`, which is a different instrument again.
-UNCOVERED = "supabase/migrations (mutated by hand — see .captain/review/triage/), evals/oracle"
+NOT_MUTATED_HERE = (
+    "supabase/migrations (mutated by hand — see .captain/review/triage/)",
+    "evals/oracle (checked by evals/oracle/anchors.py)",
+)
+
+#: Directories whose Python can move a figure an auditor reads.
+#:
+#: COMPUTED, never listed by hand, and that is the whole point. This line used
+#: to be a hand-written string, and it went stale exactly the way everything
+#: hand-maintained in this repository has: it named two directories while ELEVEN
+#: figure-producing modules joined the repo behind it — `policy/validators.py`,
+#: `packet/recompute.py`, `api/evals.py` and the rest — and the guard count
+#: printed beside it read as full coverage of all of them.
+#:
+#: A boundary that is derived from the mutation list cannot drift from it. Add a
+#: module that can move a figure and it appears in the uncovered list the next
+#: time this runs, without anyone remembering to say so.
+FIGURE_ROOTS = ("api", "evidence", "ingest", "packages/contracts", "packet", "policy")
+
+#: Modules inside those roots that genuinely need no mutation, each with the
+#: reason. Present so an exemption can be argued with rather than assumed; an
+#: entry here is a claim, not a silence.
+NO_FIGURE = {
+    "api/config.py": "reads environment, produces no figure",
+    "api/main.py": "app wiring",
+    "packages/contracts/enums.py": "vocabulary only",
+}
+
+
+def uncovered_modules() -> list[str]:
+    """Figure-producing modules with no mutation in this file."""
+    covered = {m.path for m in MUTATIONS}
+    out = []
+    for root in FIGURE_ROOTS:
+        for path in sorted((ROOT / root).rglob("*.py")):
+            rel = path.relative_to(ROOT).as_posix()
+            if path.name == "__init__.py" or rel in NO_FIGURE or path in covered:
+                continue
+            out.append(rel)
+    return out
 
 
 @dataclass(frozen=True)
@@ -122,6 +162,21 @@ class Mutation:
 
 
 MUTATIONS: list[Mutation] = [
+    # ── whose word a stated figure is (found by a cross-family pass) ─────
+    # Both of these were live defects until this round, in a file the harness
+    # did not cover at all — `policy/validators.py` was one of 32 modules that
+    # can move a reported figure and carried no mutation. They are first in the
+    # list because they are the newest and the least defended.
+    Mutation(
+        "derive_mark: authority gives way to whichever claim is oldest",
+        VALIDATORS,
+        "    with_amount.sort(key=lambda pair: (rank[pair[0].source_class], pair[0].issued_date))",
+    ),
+    Mutation(
+        "V7: any holding's rate will do, so long as the date matches",
+        VALIDATORS,
+        " and r.source_claim_id in of_this_holding",
+    ),
     # ── the two key normalisations ───────────────────────────────────────
     Mutation(
         "fund key: match by prefix again",
@@ -848,6 +903,9 @@ FILE_SUITES: dict[Path, list[str]] = {
         "tests/test_tracker_marks.py",
         "tests/test_real_data_end_to_end.py",
     ],
+    # The validators are pure and their suite is DB-free, so this stays cheap
+    # and still runs under `--ci`.
+    VALIDATORS: ["tests/test_validators.py"],
     MAPPER: ["tests/test_real_data_end_to_end.py", "tests/test_contracts.py"],
     LOTS: ["tests/test_real_data_end_to_end.py"],
     CLASSIFY: ["tests/test_real_data_end_to_end.py", "tests/test_policy_guards.py"],
@@ -963,7 +1021,15 @@ def main() -> int:
     if green or noop:
         return 1
     print(f"\n✓ all {len(red)} guards below go red when removed.")
-    print(f"  Not covered here: {UNCOVERED}.")
+    for what in NOT_MUTATED_HERE:
+        print(f"  Not covered here: {what}.")
+    # Printed in full rather than counted. A count is a number a reader rounds
+    # to "mostly covered"; a list of module names is a decision about each one.
+    absent = uncovered_modules()
+    if absent:
+        print(f"\n  {len(absent)} figure-producing module(s) carry no mutation here:")
+        for rel in absent:
+            print(f"    {rel}")
     return 0
 
 

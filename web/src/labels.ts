@@ -326,7 +326,7 @@ export const REASON_CODE: Record<string, ReasonTerm> = {
     label: "evidence about a class the fund does not hold, not counted",
     origin: "unresolved",
     meaning:
-      "A document on file prices a different security class from the one held. It is named rather than dropped — it is in scope, and it is what makes this holding cross-class — but pricing one class off another's evidence is a valuation-policy act (INV-17) and is not performed until that decision is recorded.",
+      "A document on file prices a different security class from the one held. It is named rather than dropped — it is in scope, and it is what makes this holding cross-class — but pricing one class off another's evidence is a valuation-policy act and is not performed until that decision is recorded.",
   },
   NO_SUPPORT_FOR_A_HELD_CLASS: {
     label: "every document on file prices a class the fund does not hold",

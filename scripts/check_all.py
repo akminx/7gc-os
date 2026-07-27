@@ -821,6 +821,31 @@ def check_deps(projects: Sequence[Path]) -> tuple[str, str]:
 
 def main() -> int:
     fix = "--init-budgets" in sys.argv
+    # --init-budgets IS THE ONE FLAG THAT CAN LOOSEN A RATCHET, and until a
+    # cross-family gate review probed it, "initial baseline only" was a sentence
+    # in the usage text with nothing behind it. The probe injected a single debt
+    # marker, ran `--init-budgets`, and watched the debt ceiling go from 0 to 1 —
+    # on a repository whose budgets were baselined months ago.
+    #
+    # Ratchets only tighten is the rule the whole gate rests on; a flag that
+    # silently reverses it is a hole in every other check at once. So the flag
+    # now refuses once budgets exist and names the tool that IS safe to run.
+    # `--force-init-budgets` keeps the escape hatch, spelled out loud, for the
+    # case the rule is genuinely meant to be broken.
+    if fix and "--force-init-budgets" not in sys.argv:
+        existing = sorted(p.name for p in BUD.glob("*.json"))
+        if existing:
+            print(
+                f"\n✗ --init-budgets refused: {len(existing)} budget file(s) already exist "
+                f"({', '.join(existing)}).\n"
+                "  This flag BASELINES to the current state, so on an established repo it "
+                "LOOSENS\n  whatever has since got worse — the one thing ratchets exist to "
+                "prevent.\n"
+                "  To tighten toward the current state, use --ratchet, which can only "
+                "tighten.\n"
+                "  If re-baselining is genuinely intended, say so: --force-init-budgets.\n"
+            )
+            return 1
     # --ratchet: tighten budgets toward current state, but ONLY tighter, never
     # looser (raise coverage floor, lower error/debt ceilings). Safe to run any
     # time; unlike --init-budgets it can never weaken a budget.
@@ -845,7 +870,14 @@ def main() -> int:
         ("test inventory", lambda: check_test_inventory(fix, ratchet), False),
         ("database guards", check_db_guards, True),
         ("duplicate code", check_dups, False),
-        ("file sizes", lambda: check_file_sizes(fix), False),
+        # NAMED "reported", because it is. The owner's decision is that file
+        # length is measured and never enforced (see `check_file_sizes`), and
+        # that decision stands — but the summary line printed `✓ file sizes OK`
+        # and the detail line saying "(not enforced)" was never shown, because
+        # details print only for statuses other than OK. A cross-family gate
+        # review read the green tick as enforcement, which is what a reader
+        # would do. The name is the one part of the line that always prints.
+        ("file sizes (reported)", lambda: check_file_sizes(fix), False),
         ("debt markers", lambda: check_debt(fix, ratchet), False),
         ("architecture", lambda: arch_checks.check_architecture(ROOT, _SKIP_DIRS), False),
         ("invariant coverage", lambda: arch_checks.check_invariant_matrix(ROOT), False),

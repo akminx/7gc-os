@@ -73,10 +73,10 @@ export function RecomputedCell({ recomputation }: { recomputation: Recomputation
 }
 
 const NOT_AN_APPROVAL =
-  "Computed fresh from the cited evidence each time this page is read, and stored nowhere. It is not an approved value and it is not `mark.validated_amount`, which is still empty for every row in this fund. SPEC §6.3 binds an approval to a mark revision, an evidence set and a policy version precisely so that an approved total cannot follow a figure that moves.";
+  "Computed fresh from the cited evidence each time this page is read, and stored nowhere. It is not an approved value and it is not `mark.validated_amount`, which is still empty for every row in this fund. An approval is bound to a mark revision, an evidence set and a policy version precisely so that an approved total cannot follow a figure that moves.";
 
 const CROSS_CLASS =
-  "The price used for this class came from a class the fund does not hold at this date. Pricing one class off another's evidence is a valuation-policy act (INV-17), and this recomputation flags it rather than performing it silently.";
+  "The price used for this class came from a class the fund does not hold at this date. Pricing one class off another's evidence is a valuation-policy act, and this recomputation flags it rather than performing it silently.";
 
 /**
  * The full form, for the company workspace.

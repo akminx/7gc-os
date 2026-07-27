@@ -404,6 +404,25 @@ def derive_mark(ledger: Ledger, holding_id: str, on: date) -> Derivation:
                 f"Decide whose word that figure is — independent, the "
                 f"administrator's, or the fund's own — and add it deliberately."
             )
+    # AUTHORITY FIRST, chronology only within a tier.
+    #
+    # This loop used to return the first element of `relied`, which is ordered
+    # by date — so the docstring above said "priority is authority, not
+    # convenience" and the code implemented "whichever is oldest".
+    # `test_v2_takes_a_third_partys_conclusion_over_an_administrators_nav` did
+    # not catch it because its memo happens to pre-date its NAV; reverse the two
+    # dates and a 2025-03-31 administrator NAV of 900,000 beat a 2025-06-30
+    # third-party conclusion of 750,000, reporting the mark as conflicting with
+    # evidence it actually agrees with. A cross-family review found it, and the
+    # ORACLE selected the same wrong claim — the two agreed because they encode
+    # the same mistake, which is the one kind of agreement that proves nothing.
+    #
+    # `_STATED_AMOUNT_AUTHORITY` is declared in priority order and that order is
+    # the rule, so the rank is read from the declaration rather than repeated
+    # here where the two could drift apart.
+    rank = {source_class: i for i, source_class in enumerate(_STATED_AMOUNT_AUTHORITY)}
+    with_amount.sort(key=lambda pair: (rank[pair[0].source_class], pair[0].issued_date))
+
     for claim, amount in with_amount:
         reason = _STATED_AMOUNT_AUTHORITY[claim.source_class]
         if reason is None:
@@ -623,7 +642,23 @@ def v7_fx_rate_present(
     if ledger.holdings[holding_id].position_type is not PositionType.FX_DENOMINATED_INTEREST:
         return Result("V7", subject, Outcome.NOT_APPLICABLE, "NOT_AN_FX_DENOMINATED_POSITION")
 
-    for_date = [r for r in observed if r.effective_for == on]
+    # CITED, and cited to THIS holding. A rate carries `source_claim_id`
+    # precisely so it can be tied back to the document that stated it, and
+    # nothing checked that the document was this holding's: a GBP/USD rate whose
+    # source claim belonged to an entirely different position returned `pass`,
+    # reporting that this holding's rate had been observed. Found by a
+    # cross-family review.
+    #
+    # The DIRECTED PAIR is still unchecked, and that is a gap rather than an
+    # oversight: no holding records the currency it is denominated in. Moonfare's
+    # lots carry `cost_currency = USD`, so there is nothing in the ledger to
+    # compare `base`/`quote` against, and inventing an expectation here would be
+    # worse than the hole — it would be a check that passes on a guess. Recording
+    # a per-holding denomination is what would close it.
+    of_this_holding = {c.id for c in ledger.claims if c.holding_id == holding_id}
+    for_date = [
+        r for r in observed if r.effective_for == on and r.source_claim_id in of_this_holding
+    ]
     if not for_date:
         # A claim can only stand in for THIS date's rate if it cites a rate
         # whose own effective date IS this date. Being merely in scope is not
