@@ -559,6 +559,7 @@ class Evidence:
     #: governs. Counted rather than inferred, and reported rather than fixed.
     marks_total: int = 0
     marks_with_basis: int = 0
+    holdings_stating_basis: int = 0
     classes_by_position: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     fields_by_position: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     classes_by_date: dict[tuple[str, str], set[str]] = field(
@@ -632,6 +633,16 @@ def read_ledger(conn: Conn) -> Evidence:
     # as rows of `object`.
     for total, with_basis in conn.execute("select count(*), count(basis) from mark").fetchall():
         ev.marks_total, ev.marks_with_basis = int(str(total)), int(str(with_basis))
+    # And what the DOCUMENTS say, which is a different question from what the
+    # ledger column holds. `valuation_basis_stated` is a cited fact: a sentence
+    # in a source that says what the mark rests on, with a resolving span.
+    stated = conn.execute(
+        "select count(distinct c.holding_id) from extracted_fact f"
+        " join claim c on c.id = f.claim_id"
+        " where f.field_name = 'valuation_basis_stated'"
+    ).fetchone()
+    if stated is not None:
+        ev.holdings_stating_basis = int(str(stated[0]))
 
     for h, cls, status, fname in conn.execute(
         "select c.holding_id, c.source_class::text, c.execution_status::text, x.field_name"
@@ -953,14 +964,30 @@ def basis_caveat(ev: Evidence) -> list[str]:
         return []
     return [
         *wrapped(
-            "The letter's two branches are CONDITIONAL and this ledger cannot tell them"
-            f" apart: `mark.basis` is recorded for {ev.marks_with_basis} of {ev.marks_total}"
-            " marks, so nothing says which branch governs which mark. All four limbs below"
-            " are therefore scored against every held position-date rather than against the"
-            " subset its branch governs, and every denominator is larger than the letter's."
-            " The basis is not inferred from the evidence on file — deciding what evidence"
-            " is required from the evidence present would be circular, and the number it"
-            " produced would look right.",
+            "The letter's two branches are CONDITIONAL and this ledger cannot yet scope"
+            f" them: `mark.basis` is recorded for {ev.marks_with_basis} of {ev.marks_total}"
+            " marks. All four limbs below are therefore scored against every held"
+            " position-date rather than against the subset its branch governs, and every"
+            " denominator is larger than the letter's.",
+            "  ",
+        ),
+        *wrapped(
+            f"What the SOURCES say is now read: {ev.holdings_stating_basis} of"
+            f" {len(ev.holdings)} positions carry a `valuation_basis_stated` fact — a sentence in a"
+            " document, cited to its span, saying what the mark rests on. The remainder"
+            " state none, and that silence is a finding about the corpus rather than a gap"
+            " in this reader.",
+            "  ",
+        ),
+        *wrapped(
+            "Turning a stated basis into a BRANCH is a judgement nobody has made, and it is"
+            " left undone deliberately. Moonfare's is a March 2023 round AND a third-party"
+            " memorandum; Jio's is a round price adjusted for fees and expenses, which no"
+            " branch describes; Banzai states a quoted price for three years and a purchase"
+            " cost for two others. Each mapping is one word, with no error anywhere, and the"
+            " denominator it produced would look right. The basis is never inferred from the"
+            " evidence on file — deciding what evidence is required from the evidence present"
+            " is circular.",
             "  ",
         ),
         "",

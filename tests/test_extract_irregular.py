@@ -277,6 +277,78 @@ def test_a_repeated_quote_row_is_refused_rather_than_resolved_to_the_first(
         )
 
 
+def test_the_banzai_basis_is_the_quoted_price_line_not_the_pre_listing_cost_line(
+    tmp_path: Path,
+) -> None:
+    """Two basis sentences sit one line apart and only one belongs to these claims.
+
+    *"Basis: quoted closing price on the last trading day of each fiscal year
+    (Level 1 input)."* is true of all three rows — "each fiscal year" is what
+    makes it a file-wide fact rather than a row's — so it is cited onto all
+    three claims exactly as the share count is.
+
+    The line under it, *"Pre-listing periods (FY2021, FY2022): held at March
+    2021 purchase price"*, is also a stated basis, and reading it here would put
+    a 2021 cost basis on the FY2023, FY2024 and FY2025 closes: a real sentence,
+    a resolving span, and a wrong answer at all three measurement dates with
+    nothing downstream able to notice. Its figures are read as
+    `original_purchase_pps` and `original_purchase_aggregate`, which is what
+    they are — a recital of history, ¶1's business. A basis for FY2021 and
+    FY2022 would need claims scoped to FY2021 and FY2022, and this file raises
+    none.
+    """
+    claims = banzai_claims(
+        document_version_id="dv", parsed=_doc(tmp_path, QUOTES, "quotes.txt"), holding_id="h"
+    )
+    stated = {_stated(c)["valuation_basis_stated"] for c in claims}
+    assert stated == {
+        ("quoted closing price on the last trading day of each fiscal year (Level 1 input).", None)
+    }
+    for claim in claims:
+        quote = _quote(claim, "valuation_basis_stated")
+        assert quote.startswith("Basis: ")
+        assert "March 2021 purchase price" not in quote
+        assert "Pre-listing" not in quote
+    # The line it must not read is in the document, and is read as cost.
+    assert "Pre-listing periods (FY2021, FY2022): held at March 2021" in QUOTES
+    assert _stated(claims[0])["original_purchase_pps"][0] == "$14.25"
+
+
+def test_the_irregulars_that_state_no_basis_state_none(tmp_path: Path) -> None:
+    """The silence, which is the other half of the deliverable.
+
+    A press rumour, a paying agent's notice, a term sheet and two CEO emails
+    say what a round priced at and never say what the fund's mark rests on.
+    `mark.basis` stays NULL for every position behind them, and that is a
+    finding about the corpus rather than an extractor that has not got round to
+    it yet. It stops being a finding the moment a pattern here infers a basis
+    from the evidence that happens to be on file — a cap table is present,
+    therefore the mark is round-based — which is an answer that cannot come out
+    wrong and is worth nothing for exactly that reason.
+    """
+    silent = [
+        anthropic_claim(
+            document_version_id="dv", parsed=_doc(tmp_path, PRESS, "press.txt"), holding_id="h"
+        ),
+        jackpocket_claim(
+            document_version_id="dv", parsed=_doc(tmp_path, MERGER, "merger.txt"), holding_id="h"
+        ),
+        lucra_term_sheet_claim(
+            document_version_id="dv", parsed=_doc(tmp_path, TERM_SHEET, "ts.txt"), holding_id="h"
+        ),
+        lucra_email_claim(
+            document_version_id="dv", parsed=_doc(tmp_path, CEO_EMAIL, "ceo.txt"), holding_id="h"
+        ),
+        dream_email_claim(
+            document_version_id="dv",
+            parsed=_doc(tmp_path, CLOSING_NOTICE, "cfo.txt"),
+            holding_id="h",
+        ),
+    ]
+    for claim in silent:
+        assert "valuation_basis_stated" not in _stated(claim), claim.claim_key
+
+
 # ── Lucra: the two classifications the letter turns on ───────────────────
 def test_the_term_sheet_is_non_binding_although_it_calls_itself_executed(
     tmp_path: Path,
