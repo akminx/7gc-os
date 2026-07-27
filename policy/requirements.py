@@ -223,7 +223,11 @@ def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
     reasons: set[str] = set()
     relied: list[str] = []
 
-    for lot in ledger.held_lots(holding_id, on):
+    # ¶1's population is "held DURING the periods under audit", not held at the
+    # year end — see `Lot.held_during`. A position realised inside the year still
+    # has a cost the auditor needs, because the gain in that year's statements is
+    # proceeds minus it.
+    for lot in ledger.lots_held_during(holding_id, on):
         held_class = lot.class_at(on)
         candidates: list[RequirementVerdict] = []
         covering: list[EvidenceClaim] = []

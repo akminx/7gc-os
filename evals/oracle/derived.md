@@ -37,7 +37,7 @@ failed on hand-maintained derived cells.
 | because_market | 2024-12-31 | 1000000 | ✗ | ✗ | ✗ | · | · | missing | — |
 | capsule | 2024-12-31 | 600000 | ✗ | ✗ | ✗ | · | · | missing | — |
 | fluidstack | 2024-12-31 | 1000000 | ✓ | ✓ | · | · | · | sufficient | — |
-| jackpocket | 2024-12-31 | — | · | · | · | ✓ | · | sufficient | — |
+| jackpocket | 2024-12-31 | — | ✗ | · | · | ✓ | · | missing | — |
 | jio | 2024-12-31 | 1000000 | ✓ | ✓ | · | · | · | sufficient | — |
 | lucra | 2024-12-31 | 1500000 | ~ | ✗ | · | · | · | insufficient | — |
 | mom_project | 2024-12-31 | 2750000 | ✗ | ✗ | ✗ | · | · | missing | cross_class_policy |

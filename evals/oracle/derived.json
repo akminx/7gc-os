@@ -1565,8 +1565,13 @@
       "validated_matches_reported": null,
       "requirements": {
         "R1": {
-          "verdict": "not_applicable",
-          "next_actions": []
+          "verdict": "missing",
+          "per_lot": {
+            "jack_1": "missing"
+          },
+          "next_actions": [
+            "REQUEST_FROM_COMPANY"
+          ]
         },
         "R2": {
           "verdict": "not_applicable",
@@ -1598,10 +1603,10 @@
           "verdict": "not_applicable"
         }
       },
-      "applicable_count": 1,
+      "applicable_count": 2,
       "sufficient_count": 1,
-      "row_verdict": "sufficient",
-      "fully_supported": true,
+      "row_verdict": "missing",
+      "fully_supported": false,
       "tracker_label": [],
       "unsupported_tracker_labels": [],
       "labels": []
@@ -3087,7 +3092,7 @@
       "reconciliation_delta": "0",
       "unsupported_subtotal": "7548515",
       "unsupported_row_count": 5,
-      "packet_gap_row_count": 5,
+      "packet_gap_row_count": 6,
       "approved_fair_value_total": null,
       "approved_blocked_by": "unsupported_rows",
       "unapproved_marks": [

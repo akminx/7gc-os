@@ -1072,3 +1072,66 @@ def test_a_lot_with_no_shares_is_not_short_of_a_share_count() -> None:
     assert got.verdict is RequirementVerdict.SUFFICIENT
     assert "NO_SHARE_COUNT_STATED" not in got.reasons
     assert "NO_ACQUISITION_PRICE_STATED" not in got.reasons
+
+
+# ── ¶1 · "held DURING the periods under audit" ───────────────────────────
+
+
+def _sold_mid_year() -> Ledger:
+    """One lot acquired years ago and sold in May of the year under audit."""
+    return _ledger(
+        lots=(
+            Lot(
+                "l",
+                "h",
+                "series_a",
+                100,
+                Decimal(1),
+                Decimal(100),
+                "USD",
+                date(2021, 12, 30),
+                realized_date=date(2025, 5, 20),
+            ),
+        ),
+    )
+
+
+def test_r1_asks_about_a_position_sold_inside_the_year_under_audit() -> None:
+    """Jackpocket, and the reason it matters is an arithmetic one.
+
+    The letter asks for its four requests "for each portfolio investment held
+    DURING the periods under audit". Read as held AT the year end, a position
+    sold in May drops out of ¶1 for the very year its realised gain lands in the
+    statements — and a gain is proceeds minus cost. The packet handed an auditor
+    the proceeds under ¶4 and answered `not_applicable` about the cost.
+
+    Worse than silence: the row read `fully_supported` while carrying no
+    existence-and-cost evidence at all.
+    """
+    got = r1(_sold_mid_year(), "h", date(2025, 12, 31))
+    assert got.verdict is not RequirementVerdict.NOT_APPLICABLE
+    assert got.per_lot, "the lot held for five months of the year is not in scope"
+
+
+def test_r1_stops_asking_the_year_after_the_position_is_gone() -> None:
+    """The control, and the half that keeps the rule from being 'always ask'.
+
+    A position sold in May 2025 was not held during 2026 at all, and existence
+    and cost of something the fund no longer owns is not a question the client
+    asked at that date.
+    """
+    got = r1(_sold_mid_year(), "h", date(2026, 12, 31))
+    assert got.verdict is RequirementVerdict.NOT_APPLICABLE
+
+
+def test_r2_still_asks_only_about_a_position_held_at_the_measurement_date() -> None:
+    """Only ¶1 reads the period this way, and that is the load-bearing half.
+
+    ¶2 asks what a position is worth AT a date; a position sold in May is worth
+    nothing to this fund in December. Widening the reading to R2 would demand
+    fair-value support for something the fund does not own — the mirror of the
+    defect being fixed, and the easier one to introduce while fixing it.
+    """
+    assert r2(_sold_mid_year(), "h", date(2025, 12, 31)).verdict is (
+        RequirementVerdict.NOT_APPLICABLE
+    )

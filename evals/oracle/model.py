@@ -186,6 +186,31 @@ class OracleBase:
             return conv["shares"]
         return lot["shares"]
 
+    def lots_held_during(self, holding: str, year_ending: date) -> list[dict]:
+        """Lots held at ANY point in the fiscal year ending here.
+
+        The client asks for its four requests "for each portfolio investment
+        held DURING the periods under audit". Read as held AT the year end, a
+        position sold mid-year drops out of ¶1 for the very year its realised
+        gain lands in the statements — and a gain is proceeds minus cost, so the
+        auditor is handed one half of a figure they must sign and told the other
+        half does not arise.
+
+        Only ¶1 reads the period this way. ¶2 asks what a position is worth AT a
+        date; ¶3 asks about a mark still being carried. Existence and cost is
+        the one request whose subject outlives the holding.
+        """
+        out = []
+        opened = year_ending.replace(year=year_ending.year - 1)
+        for lot in self.lots:
+            if lot["holding"] != holding or d(lot["acquired"]) > year_ending:
+                continue
+            r = d(lot["realized"])
+            if r is not None and r <= opened:
+                continue
+            out.append(lot)
+        return out
+
     def held_lots(self, holding: str, on: date) -> list[dict]:
         out = []
         for lot in self.lots:

@@ -299,14 +299,23 @@ def test_24q4_keeps_a_realised_position_in_the_packet_and_out_of_the_total() -> 
     that reported only held positions would drop the row the audit letter asks
     for by name.
 
-    In the packet and NOT a gap. `packet_gap_positions` read 6 here against the
-    oracle's 5, because `HoldingRow.unsupported_reasons` demanded R1 and R2 on
-    every row — including one whose position did not exist at the measurement
-    date, where `derived.json` states both as `not_applicable` and the row as
-    `fully_supported`. The letter asks for existence and cost for investments
-    HELD during the period (¶1) and for realisation support separately (¶4);
-    counting this row as an open gap sent the auditor after paperwork that
-    cannot exist.
+    In the packet AND a gap, and this test used to assert the opposite.
+
+    It read: "counting this row as an open gap sent the auditor after paperwork
+    that cannot exist." The paperwork can exist. Jackpocket's 2021 purchase
+    agreement is recorded as a declared gap — `not_located`, which is the fund
+    saying it has not found it, not that there is nothing to find.
+
+    And the sentence above it already had the answer: the letter asks about
+    investments "HELD DURING the period". Jackpocket was held for five months of
+    2024, and the FY2024 statements carry the realised gain on its sale. A gain
+    is proceeds minus cost. R4 evidences the proceeds; ¶1 is where the cost
+    lives; and answering `not_applicable` handed an auditor one half of a figure
+    they have to sign and called the other half none of their business.
+
+    So the row is `missing` at 24Q4 rather than `fully_supported`, and the
+    period's gap count is 6 rather than 5. The count that changed is the count
+    that was wrong.
 
     The counts are read from the oracle rather than typed, so this cannot drift
     back to agreeing with the implementation instead of with the answer key.
@@ -322,8 +331,15 @@ def test_24q4_keeps_a_realised_position_in_the_packet_and_out_of_the_total() -> 
     assert line["counts"]["held_at_date"] == totals["positions_held"] == 7
     assert line["counts"]["not_held_at_date"] == 1
     assert line["totals"]["unsupported_positions"] == totals["unsupported_row_count"] == 5
-    assert line["totals"]["packet_gap_positions"] == totals["packet_gap_row_count"] == 5
-    assert line["totals"]["unheld_gap_positions"] == 0
+    assert line["totals"]["packet_gap_positions"] == totals["packet_gap_row_count"] == 6
+    # ONE, and it is Jackpocket. `unheld_gap_positions` is the difference between
+    # every unsupported row and the held ones, and `PacketTotals` has carried
+    # that field since it was written — it had simply never had a member,
+    # because a position not held at the date could not have a gap. The "held
+    # during" reading is what puts one in it: a position sold in May, with a
+    # realised gain in the year's statements and no located acquisition
+    # document. The count existing and being zero forever was the symptom.
+    assert line["totals"]["unheld_gap_positions"] == 1
 
 
 @pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")

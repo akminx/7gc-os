@@ -127,7 +127,8 @@ class PolicyMixin:
         """Existence and cost — evaluated per held lot, worst wins (INV-7)."""
         pt = self.holdings[holding]["position_type"]
         per_lot, actions = {}, set()
-        for lot in self.held_lots(holding, on):
+        # "held DURING the periods under audit" — see `lots_held_during`.
+        for lot in self.lots_held_during(holding, on):
             cls = self.class_at(lot, on)
             candidates = []
             for _, doc in self.applicable_links(holding, "R1", on):

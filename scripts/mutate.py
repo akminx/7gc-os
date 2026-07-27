@@ -55,6 +55,7 @@ DOC_LOAD = ROOT / "ingest/documents/load.py"
 CAP_TABLE = ROOT / "ingest/documents/extract_cap_table.py"
 REDUCER = ROOT / "policy/reducer.py"
 REQS = ROOT / "policy/requirements.py"
+INPUTS = ROOT / "policy/inputs.py"
 SEED = ROOT / "ingest/policy_seed.py"
 MODELS = ROOT / "packages/contracts/models.py"
 #: Step 2's document pipeline. The citation guards land here with the first
@@ -207,6 +208,18 @@ MUTATIONS: list[Mutation] = [
         CAP_TABLE,
         r'        r"7GC Fund II, L\.P\.\s+Series A-2\s+(?P<value>[\d,]+)\s+\$[\d.]+"',
         r'        r"7GC Fund II, L\.P\.\s+Series A(?!-)\s+(?P<value>[\d,]+)\s+\$[\d.]+"',
+    ),
+    Mutation(
+        "R1: a position sold mid-year drops out of the year it was sold in",
+        INPUTS,
+        "        return self.realized_date > year_ending.replace(year=year_ending.year - 1)",
+        "        return self.realized_date > year_ending",
+    ),
+    Mutation(
+        "R1: the period never closes, so a sold position is asked about forever",
+        INPUTS,
+        "        if self.realized_date is None:\n            return True",
+        "        return True\n        if self.realized_date is None:",
     ),
     Mutation(
         "R1: a signed agreement answers for settlement of funds too",
@@ -1005,6 +1018,7 @@ FILE_SUITES: dict[Path, list[str]] = {
     # The validators are pure and their suite is DB-free, so this stays cheap
     # and still runs under `--ci`.
     VALIDATORS: ["tests/test_validators.py"],
+    INPUTS: ["tests/test_policy_guards.py", "tests/test_policy_vs_oracle.py"],
     API_EVALS: ["tests/test_evals.py"],
     # The manifest comparison is the only reader that can tell a right-shaped
     # citation on the wrong passage from a right one, so it defends both of
