@@ -22,6 +22,12 @@ from pathlib import Path
 
 import pytest
 
+# The module, never the test function by name: importing
+# `test_the_product_does_not_import_its_own_answer_key` directly would bind a
+# `test_`-prefixed name here and pytest would collect the same test twice, once
+# against a tree this file controls and once against the real repository.
+from tests import test_policy_vs_oracle as answer_key_suite
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -211,6 +217,61 @@ def test_a_directory_excluded_from_the_scan_may_not_be_imported_by_the_product(
 
 def test_the_real_repository_holds_the_span_rule() -> None:
     assert arch_checks.check_architecture(ROOT, check_all._SKIP_DIRS)[0] == "OK"
+
+
+# ── G7: the answer-key scan reaches the directories it claims ────────────
+#: The polite failure mode was an `import`, and for a while it was the only one
+#: the guard knew. This is the impolite one: a file read, which is not an import
+#: node at all, and which would satisfy every fixed-corpus comparison in the
+#: suite by reading the answers off disk.
+READS_THE_ANSWER_KEY = (
+    'from pathlib import Path\nX = Path("evals/oracle/derived.json").read_text()\n'
+)
+
+
+@pytest.mark.parametrize("directory", ["policy", "api", "packet"])
+def test_the_answer_key_scan_reaches_every_directory_it_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, directory: str
+) -> None:
+    """The real guard, run against a tree this test builds.
+
+    "It scans policy/, api/ and packet/" is three claims, and the scan selects
+    directories with a glob character class — `[apolicyngest]*` — that no
+    reader can verify by eye. Its previous version had a filter that excluded
+    nothing at all for exactly that reason, and nobody noticed until the check
+    grew teeth.
+
+    So the guard is pointed at a synthetic repository rather than re-implemented
+    here. A copy of the walk would agree with itself and drift from the original
+    on the first edit, which is the shared-author error this project has already
+    paid for once.
+    """
+    (tmp_path / directory).mkdir()
+    (tmp_path / directory / "reader.py").write_text(READS_THE_ANSWER_KEY)
+    monkeypatch.setattr(answer_key_suite, "ROOT", tmp_path)
+    with pytest.raises(AssertionError, match="reaches its own answer key"):
+        answer_key_suite.test_the_product_does_not_import_its_own_answer_key()
+
+
+def test_the_answer_key_scan_still_lets_the_product_explain_the_oracle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The control, and it is the half that makes the guard usable.
+
+    Without it every assertion above is satisfied by a check that fails on every
+    tree. And the exemption it pins is load-bearing: the product names
+    `derived.json` in prose constantly, because that is how a reader learns why
+    a rule is what it is. A guard that flagged those would be reworded into
+    uselessness within a day.
+    """
+    (tmp_path / "policy").mkdir()
+    (tmp_path / "policy" / "clean.py").write_text(
+        '"""Checked against evals/oracle/derived.json by the suite, never from here."""\n'
+        "# evals/oracle/derived.json is the answer key.\n"
+        "X = 1\n"
+    )
+    monkeypatch.setattr(answer_key_suite, "ROOT", tmp_path)
+    answer_key_suite.test_the_product_does_not_import_its_own_answer_key()
 
 
 # ── a suite that skipped is not a suite that passed ──────────────────────

@@ -50,6 +50,11 @@ const THREE_PERIODS: FundsResponse = {
 
 beforeEach(() => {
   vi.unstubAllEnvs();
+  // jsdom keeps ONE location per test file, so a case that navigated the app
+  // leaves its trail in the hash and the next mount opens where the last one
+  // finished. That is the right behaviour in a browser and the wrong starting
+  // state for a test, so each case begins on a fresh address bar.
+  window.location.hash = "";
 });
 
 afterEach(() => {

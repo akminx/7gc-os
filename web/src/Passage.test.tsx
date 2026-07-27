@@ -130,6 +130,125 @@ describe("the passage pane", () => {
     expect(container.querySelector(".cited")?.textContent).toBe(QUOTE);
   });
 
+  /**
+   * The owner's finding, from using the product: the pane rendered the ENTIRE
+   * document around a 62-character highlight. Fluidstack's cap table is 3,730
+   * characters of columnar `pdftotext` output and one highlighted line inside it
+   * is indistinguishable from the rest, scrolled to or not.
+   */
+  describe("around a document too long to read", () => {
+    // A cap table shaped like the real ones: the cited figure is part of a ROW,
+    // and the row is the unit of meaning.
+    const ROW = "  7GC Fund II, L.P.        Series A-2      100,000       $15.00";
+    const CITED_ROW_FRAGMENT = "100,000       $15.00";
+    const LONG = [
+      "FLUIDSTACK, INC.",
+      "PRO FORMA CAPITALIZATION — SERIES B",
+      "",
+      "Holder                     Class            Shares        PPS",
+      "  Founders                 Common        20,000,000        —",
+      "  Seed Investors           Series Seed    5,000,000     $1.00",
+      ROW,
+      "  Other Holders            Series A       900,000       $10.00",
+      "  Series B Investors       Series B       5,000,000     $30.00",
+      "",
+      "Fully diluted: 50,000,000 shares",
+      "Executed documents on file with company counsel.",
+    ].join("\n");
+    const LONG_CITATION: Citation = {
+      document_version_id: "dv_long",
+      quote: CITED_ROW_FRAGMENT,
+      span_start: LONG.indexOf(CITED_ROW_FRAGMENT),
+      span_end: LONG.indexOf(CITED_ROW_FRAGMENT) + CITED_ROW_FRAGMENT.length,
+    };
+    const LONG_DOCUMENT: DocumentResponse = {
+      ...DOCUMENT,
+      document_version_id: "dv_long",
+      filename: "Fluidstack - Series B - Pro Forma Capitalization Table Excerpt.pdf",
+      text_length: LONG.length,
+      text: LONG,
+    };
+
+    it("shows the cited lines rather than the whole page, and says what it is holding back", async () => {
+      serve(LONG_DOCUMENT);
+      const { container } = await mount("https://api.example.com", LONG_CITATION);
+      await waitFor(() => {
+        expect(container.querySelector(".cited")).not.toBeNull();
+      });
+      const body = container.querySelector(".paper__body")?.textContent ?? "";
+      expect(body).not.toBe(LONG);
+      expect(body.length).toBeLessThan(LONG.length);
+      // Two lines either side, and nothing from beyond them.
+      expect(body).toContain("Seed Investors");
+      expect(body).toContain("Series B Investors");
+      expect(body).not.toContain("FLUIDSTACK, INC.");
+      expect(body).not.toContain("Executed documents on file");
+      expect(screen.getByText(/4 lines above and 3 below are not on screen/)).toBeDefined();
+    });
+
+    /**
+     * Line-scoped, not character-scoped. A cap table's unit of meaning is the
+     * ROW, and ±300 characters cuts it mid-row — which reads as a different
+     * number against a different holder.
+     */
+    it("keeps the cited row whole rather than cutting it at the span", async () => {
+      serve(LONG_DOCUMENT);
+      const { container } = await mount("https://api.example.com", LONG_CITATION);
+      await waitFor(() => {
+        expect(container.querySelector(".cited")).not.toBeNull();
+      });
+      expect(container.querySelector(".paper__body")?.textContent).toContain(ROW);
+      expect(container.querySelector(".cited")?.textContent).toBe(CITED_ROW_FRAGMENT);
+    });
+
+    it("offers the whole document, and takes it back", async () => {
+      serve(LONG_DOCUMENT);
+      const { container } = await mount("https://api.example.com", LONG_CITATION);
+      await waitFor(() => {
+        expect(container.querySelector(".cited")).not.toBeNull();
+      });
+      screen.getByRole("button", { name: /Show the whole document/ }).click();
+      await waitFor(() => {
+        expect(container.querySelector(".paper__body")?.textContent).toBe(LONG);
+      });
+      expect(screen.getByText(new RegExp(`${LONG.length} characters`))).toBeDefined();
+      screen.getByRole("button", { name: /Show just the cited lines/ }).click();
+      await waitFor(() => {
+        expect(container.querySelector(".paper__body")?.textContent).not.toBe(LONG);
+      });
+    });
+
+    /**
+     * The pane's refusal to highlight when the offsets do not select the stored
+     * quote is load-bearing and had to survive the change. It compares the slice
+     * of the WHOLE stored text, so narrowing what is displayed cannot make a
+     * drifted citation resolve.
+     */
+    it("still refuses a drifted span inside a narrowed window", async () => {
+      serve({ ...LONG_DOCUMENT, text: `PREFIX${LONG}` });
+      const { container } = await mount("https://api.example.com", LONG_CITATION);
+      await waitFor(() => {
+        expect(screen.getByText(/do not select the stored quote/)).toBeDefined();
+      });
+      expect(container.querySelector(".cited--unresolved")).not.toBeNull();
+      expect(container.querySelector(".cited")?.textContent).not.toBe(CITED_ROW_FRAGMENT);
+    });
+
+    /**
+     * A document that fits is not narrowed, and does not claim to be. A reader
+     * has to be able to tell "this is the whole file" from "this has been cut".
+     */
+    it("says nothing about a window on a document short enough to show entire", async () => {
+      serve(DOCUMENT);
+      const { container } = await mount("https://api.example.com", CITATION);
+      await waitFor(() => {
+        expect(container.querySelector(".cited")).not.toBeNull();
+      });
+      expect(container.querySelector(".paper__window")).toBeNull();
+      expect(container.querySelector(".paper__body")?.textContent).toBe(TEXT);
+    });
+  });
+
   it("shows a skeleton of the page while the document is in flight", async () => {
     vi.stubGlobal(
       "fetch",

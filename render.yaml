@@ -67,3 +67,28 @@ services:
       # schema is a green health check over an empty demo.
       - key: LEDGER_SCHEMA
         value: demo
+      # WHO MAY RECORD A DECISION. Unset, `api/decisions.py` refuses every write
+      # with 403 and the frontend renders no control at all, which is how the
+      # PUBLIC deployment stays read-only without the code having two versions.
+      #
+      # It is also how the best moment in the system stays switched off. With
+      # actors named, trying to approve Anthropic's 8,000,000 valuation is
+      # refused BY THE DATABASE — a Postgres constraint from
+      # `0003_approval_prerequisites.sql`, not a form check — reporting that the
+      # approval cites no sufficient existence-and-cost assessment. That single
+      # click is the project's whole thesis, and a demo that cannot reach it is
+      # showing the half that only reads.
+      #
+      # `sync: false` so the names are set in the Render dashboard rather than
+      # committed here: these are people, and the repository is not where a
+      # deployment's roster belongs.
+      #
+      # TWO VARIABLES, AND THEY MUST AGREE. The browser lists actors from
+      # `VITE_DECISION_ACTORS` (built into the bundle, so it is a REBUILD and not
+      # a restart) and sends the chosen one as `X-Actor-Id`; this variable is
+      # what the API validates it against. Set one and not the other and the
+      # control renders and every decision comes back 403 — which reads on
+      # screen exactly like the constraint refusing an unsupported approval, and
+      # is the one failure that would spoil the moment it exists to show.
+      - key: DECISION_ACTORS
+        sync: false

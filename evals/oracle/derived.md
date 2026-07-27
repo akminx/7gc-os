@@ -29,7 +29,7 @@ failed on hand-maintained derived cells.
 | jackpocket | 2023-12-31 | 2000000 | ✗ | ✗ | · | · | · | missing | — |
 | jio | 2023-12-31 | 1000000 | ✓ | ✓ | · | · | · | sufficient | — |
 | mom_project | 2023-12-31 | 2750000 | ✗ | ✗ | · | · | · | missing | cross_class_policy |
-| moonfare | 2023-12-31 | 1000000 | ✗ | ✓ | · | · | · | missing | — |
+| moonfare | 2023-12-31 | 1000000 | ✗ | ~ | · | · | · | missing | — |
 | roofstock | 2023-12-31 | 1500000 | ✓ | ✓ | ✗ | · | · | missing | — |
 | sway | 2023-12-31 | 2000000 | ~ | ~ | · | · | · | partial | — |
 | anthropic | 2024-12-31 | 2000000 | ✗ | ✗ | · | · | · | insufficient | — |
@@ -49,15 +49,15 @@ failed on hand-maintained derived cells.
 | banzai | 2025-12-31 | 31000 | ~ | ✓ | · | · | · | partial | — |
 | because_market | 2025-12-31 | 1000000 | ✗ | ✗ | ✗ | · | · | missing | — |
 | capsule | 2025-12-31 | 600000 | ✗ | ✗ | ✗ | · | · | missing | — |
-| dream | 2025-12-31 | 5000000 | ✗ | ~ | · | · | ✓ | missing | cross_class_policy, pro_forma |
+| dream | 2025-12-31 | 5000000 | ✗ | ✗ | · | · | ✓ | missing | cross_class_policy, pro_forma |
 | fluidstack | 2025-12-31 | 6000000 | ~ | ~ | · | · | ✓ | partial | cross_class_policy, pro_forma |
 | jio | 2025-12-31 | 1000000 | ✓ | ✓ | · | · | · | sufficient | subsequent_evidence |
-| lucra | 2025-12-31 | 2250000 | ~ | ~ | · | · | · | partial | cross_class_policy |
+| lucra | 2025-12-31 | 2250000 | ~ | ✗ | · | · | · | insufficient | cross_class_policy |
 | mom_project | 2025-12-31 | 2750000 | ✗ | ✗ | ✗ | · | · | missing | cross_class_policy |
 | moonfare | 2025-12-31 | 1048515 | ✗ | ✗ | ✗ | · | · | missing | — |
 | poolside | 2025-12-31 | 2000000 | ✓ | ✓ | ✗ | · | · | missing | — |
 | roofstock | 2025-12-31 | 1500000 | ✓ | ✓ | ✗ | · | · | missing | — |
-| sway | 2025-12-31 | 350000 | ~ | ~ | · | · | ✓ | partial | pro_forma |
+| sway | 2025-12-31 | 350000 | ~ | ✓ | · | · | ✓ | partial | pro_forma |
 
 ## Calibration required (R3)
 

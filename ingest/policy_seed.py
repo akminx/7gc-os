@@ -491,6 +491,176 @@ def seed_components(conn: Conn) -> tuple[int, int]:
     return len(COMPONENTS), supports
 
 
+#: SPEC §6.3. The version an approval is bound to; an assessment at a different
+#: version does not satisfy the approval prerequisite, which is the point.
+POLICY_VERSION = "v1"
+
+
+def seed_assessments(conn: Conn) -> tuple[int, int, int]:
+    """Materialise the five requirement verdicts per packet row.
+
+    Unlike the three seeds above, **nothing here is a judgement** — every value
+    is `assess_row()`'s output, written down. It is in this loader anyway because
+    it is the same "the ledger must carry it before anything can read it" step,
+    and because `0003`'s approval prerequisites join these tables: without them
+    EVERY valuation approval is refused with `INV-10: valuation approval N names
+    no evidence set`. That is a real Postgres refusal and it is plumbing, not the
+    audit finding — it makes an ACCEPTED approval unreachable and hides the
+    refusal the walkthrough is actually about.
+
+    Three rows the schema will not let us store, each skipped deliberately:
+
+    * **A holding with no mark at the date.** `evidence_assessment.mark_id` is
+      `not null` and bound to `mark (id, holding_id, period_id)`. Jackpocket at
+      24Q4 is realised and has no mark, so its R4 verdict cannot be stored beside
+      a mark that does not exist. It still reaches the packet — `api/ledger.py`
+      assesses live — so this is a limit on the STORED prerequisite set, not on
+      what the auditor sees.
+    * **A row whose R1 or R2 is `not_applicable`.** `0001`'s
+      `always_applicable_requirements_are_applicable` refuses it, because a
+      holding with no existence-and-cost evidence reading as fully supported is
+      the defect that constraint exists for.
+    * **Lineage-only periods.** `requirement_is_packet_scope` refuses them
+      (INV-20).
+
+    `pbc_requirement` and `evidence_assessment` are append-only by design — the
+    schema refuses a DELETE — so this is written once into a freshly built
+    schema. `scripts/localdb.sh` drops and rebuilds, and the Supabase reload does
+    the same; there is no in-place re-run and there should not be one, because a
+    second assessment of the same mark revision is what `unique (requirement_id,
+    mark_id, revision)` exists to refuse.
+    """
+    from packages.contracts.enums import AuditScope, RequirementVerdict
+    from policy.from_ledger import load as load_policy
+    from policy.requirements import assess_row
+
+    ledger = load_policy(conn)
+    requirements = assessments = links = 0
+    out_of_window: list[str] = []
+
+    periods = sorted(
+        (p for p in ledger.periods.values() if p.audit_scope is AuditScope.PACKET),
+        key=lambda p: (p.fund_id, p.period_date),
+    )
+    for period in periods:
+        for holding_id, holding in sorted(ledger.holdings.items()):
+            if holding.fund_id != period.fund_id:
+                continue
+            found = conn.execute(
+                "select id from mark where holding_id = %s and period_id = %s"
+                " order by revision desc limit 1",
+                (holding_id, period.id),
+            ).fetchone()
+            if found is None:
+                continue
+            mark_id = found[0]
+
+            row = assess_row(ledger, holding_id, period.period_date)
+            always = (RequirementCode.R1, RequirementCode.R2)
+            if any(row.outcomes[c].verdict is RequirementVerdict.NOT_APPLICABLE for c in always):
+                continue
+
+            for code in sorted(row.outcomes):
+                outcome = row.outcomes[code]
+                applicable = outcome.verdict is not RequirementVerdict.NOT_APPLICABLE
+                got = conn.execute(
+                    "insert into pbc_requirement (holding_id, period_id, requirement, applicable)"
+                    " values (%s, %s, %s, %s) returning id",
+                    (holding_id, period.id, code.value, applicable),
+                ).fetchone()
+                assert got is not None
+                requirement_id = got[0]
+                requirements += 1
+
+                got = conn.execute(
+                    "insert into evidence_assessment (requirement_id, mark_id, holding_id,"
+                    " period_id, verdict, reason_codes, next_actions, pro_forma, policy_version)"
+                    " values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning id",
+                    (
+                        requirement_id,
+                        mark_id,
+                        holding_id,
+                        period.id,
+                        outcome.verdict.value,
+                        list(outcome.reasons),
+                        list(outcome.next_actions),
+                        outcome.pro_forma,
+                        POLICY_VERSION,
+                    ),
+                ).fetchone()
+                assert got is not None
+                assessment_id = got[0]
+                assessments += 1
+
+                stored = 0
+                for claim_id in outcome.relied_on:
+                    claim = next((c for c in ledger.claims if c.id == claim_id), None)
+                    if claim is None:
+                        continue
+                    # `0002`'s `check_link_applicability` enforces INV-16's
+                    # window on EVERY link. `policy/requirements.py` applies it
+                    # to R2 only (`WINDOWED`), because INV-5 says an acquisition
+                    # does not un-happen: R1 keeps relying on a document after
+                    # the date its valuation reliance closes.
+                    #
+                    # The two rules disagree, and only for a claim that has a
+                    # CLOSED window and is also relied upon for R1 — which in
+                    # this corpus is Jio's administrator statements, accepted as
+                    # the existence-and-cost equivalent for a feeder interest by
+                    # the matrix's owner determination. Nothing had ever written
+                    # an `evidence_link` outside the tests, so the combination
+                    # was unreachable and the disagreement invisible.
+                    #
+                    # Skipped rather than forced: widening the trigger is an
+                    # invariant change and belongs to the owner, and writing the
+                    # link anyway is not available — the database refuses it.
+                    # The verdict, its reasons and its actions are unaffected;
+                    # only the STORED citation set is narrower than
+                    # `outcome.relied_on`, and the count is printed so the
+                    # divergence is reported rather than absorbed.
+                    if period.period_date < claim.applicable_from or (
+                        claim.applicable_to is not None and period.period_date > claim.applicable_to
+                    ):
+                        out_of_window.append(f"{code.value} {holding_id}@{period.id} {claim_id}")
+                        continue
+                    # INV-3 · verified against the dates by `0004`'s trigger, not
+                    # trusted. Computed the same way `api/ledger.py` computes it,
+                    # from the claim's effective date rather than its issue date,
+                    # so a January-delivered December statement is labelled.
+                    conn.execute(
+                        "insert into evidence_link (assessment_id, claim_id, is_subsequent)"
+                        " values (%s, %s, %s)",
+                        (assessment_id, claim_id, claim.effective_date > period.period_date),
+                    )
+                    stored += 1
+                    links += 1
+
+                # `0003` refuses an approval citing a `sufficient` R1 or R2 that
+                # links no claim. Caught here rather than at approval time: a row
+                # stored now and refused during the demo is the same defect with
+                # a worse audience.
+                if (
+                    code in always
+                    and outcome.verdict is RequirementVerdict.SUFFICIENT
+                    and stored == 0
+                ):
+                    raise SeedError(
+                        f"{code.value} for {holding_id} at {period.id} is sufficient but every "
+                        f"claim it relies on is outside its own reliance window, so no evidence "
+                        f"link can be stored. `0003` would refuse any approval citing it."
+                    )
+
+    if out_of_window:
+        print(
+            f"  note: {len(out_of_window)} relied-upon claims were NOT stored as evidence "
+            f"links — outside their own reliance window, which `0002` enforces on every "
+            f"link while `policy/` enforces it for R2 only:"
+        )
+        for entry in out_of_window:
+            print(f"    {entry}")
+    return requirements, assessments, links
+
+
 def main(argv: list[str] | None = None) -> int:
     from api.config import dsn, ledger_schema
 
@@ -518,10 +688,13 @@ def main(argv: list[str] | None = None) -> int:
         links = seed_claim_requirements(conn)
         gaps = seed_document_gaps(conn, read_master_notes(MASTER))
         components, supports = seed_components(conn)
+        # Last: it reads the ledger the three seeds above have just written.
+        reqs, assessed, cited = seed_assessments(conn)
         print(
             f"{links} claim-requirement links, {gaps} document gaps, "
             f"{components} components with {supports} support observations"
         )
+        print(f"{reqs} pbc requirements, {assessed} assessments, {cited} evidence links")
         if not args.commit:
             print("dry run — rolling back; pass --commit to write")
             raise psycopg.Rollback(outer)

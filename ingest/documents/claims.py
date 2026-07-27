@@ -29,6 +29,7 @@ from decimal import Decimal
 
 import psycopg
 
+from ingest.documents.field_requirements import requirements_for
 from ingest.documents.parse import ParsedDocument
 from packages.contracts.citations import (
     CitationError,
@@ -190,6 +191,13 @@ def store_claim(conn: Conn, version_id: str, draft: ClaimDraft, canonical_text: 
     """
     for fact in draft.facts:
         verify(fact.citation, canonical_text)
+        # Which of the client's requests this figure answers has to have been
+        # decided before it can be stored. `requirements_for` raises on a field
+        # nobody has ruled on, so an extractor cannot add a figure that the
+        # evidence trail then files by accident — see
+        # `ingest/documents/field_requirements.py` for why neither available
+        # default is safe.
+        requirements_for(fact.field_name)
         if fact.citation.document_version_id != version_id:
             raise CitationError(
                 f"{fact.field_name} cites {fact.citation.document_version_id} "

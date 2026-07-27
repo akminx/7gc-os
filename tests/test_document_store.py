@@ -63,7 +63,15 @@ def _draft(holding_id: str, facts: tuple[FactDraft, ...] = ()) -> ClaimDraft:
         # 0009 refuses a claim whose price no fact on it states, so the price is
         # set only when a fact states it. These drafts mostly carry a share
         # count, so most of them state no price at all.
-        price_per_share=next((f.value_numeric for f in facts if f.field_name == "price"), None),
+        #
+        # The two field names here are `fund_shares` and `round_price_per_share`
+        # rather than anything convenient because `store_claim` now refuses a
+        # figure whose relevance to the client's requests is undeclared, and a
+        # synthetic document inventing a field name is exactly the case that
+        # guard exists to catch.
+        price_per_share=next(
+            (f.value_numeric for f in facts if f.field_name == "round_price_per_share"), None
+        ),
         facts=facts,
     )
 
@@ -257,7 +265,7 @@ def test_nothing_is_stored_when_one_fact_of_several_fails(
     bad = cited_fact(
         document_version_id="dv_elsewhere",
         canonical_text=doc.canonical_text,
-        field_name="price",
+        field_name="round_price_per_share",
         pattern=re.compile(r"issued at (?P<value>\$[\d.]+)"),
     )
     with pytest.raises(CitationError):
@@ -284,7 +292,7 @@ def test_a_claim_records_the_class_it_prices_not_the_class_held(
     price = cited_fact(
         document_version_id=version_id,
         canonical_text=doc.canonical_text,
-        field_name="price",
+        field_name="round_price_per_share",
         pattern=re.compile(r"issued at (?P<value>\$[\d.]+) per share"),
     )
     claim_id = store_claim(conn, version_id, _draft(seed["h"], (price,)), doc.canonical_text)
@@ -395,7 +403,7 @@ def test_the_writer_refuses_a_claim_price_no_fact_states(
     price = cited_fact(
         document_version_id=version_id,
         canonical_text=doc.canonical_text,
-        field_name="price",
+        field_name="round_price_per_share",
         pattern=re.compile(r"issued at (?P<value>\$[\d.]+) per share"),
     )
     assert price.value_numeric == Decimal("8.00")

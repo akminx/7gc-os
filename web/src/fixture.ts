@@ -66,11 +66,11 @@ export const FIXTURE_ROW: HoldingRow = {
     },
     {
       requirement: "R2",
-      verdict: "partial",
+      verdict: "insufficient",
       reason_codes: [
-        "CLOSING_SET_PENDING",
         "CROSS_CLASS_POLICY_DECISION_REQUIRED",
-        "PRO_FORMA_PENDING_EXECUTION",
+        "NO_SUPPORT_FOR_A_HELD_CLASS",
+        "OFF_CLASS_EVIDENCE_NOT_RELIED",
       ],
       next_actions: ["RECORD_VALUATION_POLICY_DECISION"],
       evidence: [
@@ -168,7 +168,7 @@ export const FIXTURE_ROW: HoldingRow = {
   ],
   approval: null,
   supported: false,
-  unsupported_reasons: { R1: "missing", R2: "partial" },
+  unsupported_reasons: { R1: "missing", R2: "insufficient" },
   approved: false,
 };
 
@@ -192,6 +192,10 @@ export const FIXTURE_PACKET: PacketResponse = {
   schema_version: "1",
   policy_version: "v1",
   generated_at: "2026-01-15T12:00:00Z",
+  // `null`, not `{}`. The fixture branch has no ledger to derive FROM, so no
+  // recomputation was attempted — which is a different fact from a recomputation
+  // that ran and had nothing to say about any row.
+  recomputations: null,
   totals: {
     kind: "held_at_date_reported",
     label: "Tracker-reported amounts for positions held at this date, unaudited",

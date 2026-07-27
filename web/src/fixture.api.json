@@ -26,6 +26,7 @@
       "period_date": "2025-12-31"
     },
     "policy_version": "v1",
+    "recomputations": null,
     "rows": [
       {
         "approval": null,
@@ -96,13 +97,13 @@
             "policy_version": "v1",
             "pro_forma": true,
             "reason_codes": [
-              "CLOSING_SET_PENDING",
               "CROSS_CLASS_POLICY_DECISION_REQUIRED",
-              "PRO_FORMA_PENDING_EXECUTION"
+              "NO_SUPPORT_FOR_A_HELD_CLASS",
+              "OFF_CLASS_EVIDENCE_NOT_RELIED"
             ],
             "requirement": "R2",
             "tracker_label": null,
-            "verdict": "partial"
+            "verdict": "insufficient"
           },
           {
             "applicable": false,
@@ -176,7 +177,7 @@
         "supported": false,
         "unsupported_reasons": {
           "R1": "missing",
-          "R2": "partial"
+          "R2": "insufficient"
         }
       }
     ],

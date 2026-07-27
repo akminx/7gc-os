@@ -39,10 +39,13 @@ from fastapi import APIRouter, HTTPException
 from api import ledger
 from api.config import SchemaNameError, dsn, resolve_schema
 from api.decisions import decisions_router
+from api.evals import evals
 from api.reconciliation import router as reconciliation_router
-from api.serialize import packet_json, totals_json
+from api.serialize import fact_json, packet_json, totals_json
 from packages.contracts.fixtures.dream import DREAM_ROW, dream_packet
 from packages.contracts.models import Packet
+from packet.recompute import Recomputation, for_packet
+from policy.from_ledger import load as load_policy
 
 router = APIRouter()
 router.include_router(decisions_router)
@@ -163,7 +166,7 @@ def get_holding(holding_id: str) -> dict[str, Any]:
                 # Each figure, with the passage that states it — not a detached
                 # list of quotes. An auditor needs to know which citation
                 # supports which number, and `field_name` is that link.
-                EVIDENCE_CLAIM_EXTRA: [f.model_dump(mode="json") for f in facts],
+                EVIDENCE_CLAIM_EXTRA: [fact_json(f) for f in facts],
             }
             for claim, facts in ledger.claims_for(conn, holding_id)
         ]
@@ -175,24 +178,101 @@ def get_holding(holding_id: str) -> dict[str, Any]:
         }
 
 
-def _packet_or_404(fund_id: str, period_id: str) -> tuple[str, Packet]:
+def _packet_or_404(
+    fund_id: str, period_id: str, *, recompute: bool = False
+) -> tuple[str, Packet, dict[str, Recomputation] | None]:
+    """The packet, and optionally SPEC §8's V2 over the same ledger.
+
+    `recompute` is a parameter rather than always-on because it is not free —
+    but it no longer costs a second ledger load. `policy/from_ledger.py::load` is
+    fourteen statements, and this route used to run it once inside
+    `ledger.packet` and again for the validators, taking the packet route from 19
+    round trips to 33. That was about half a second deployed, on the one screen a
+    demo opens.
+
+    `ledger.packet` now accepts the `PolicyLedger`, so it is loaded once here and
+    used twice. `/totals` is a number and asks for nothing derived, so it still
+    does not pay for it.
+    """
     conn = _connect()
     if conn is None:
         p = dream_packet()
         if fund_id != p.fund_id or period_id != p.period.id:
             raise HTTPException(status_code=404, detail=f"no packet {fund_id}/{period_id}")
-        return "fixture", p
+        # No ledger, so nothing to derive FROM. Sent as `null` rather than as an
+        # empty result: "the evidence derives nothing" and "no derivation was
+        # attempted" are opposite findings, and the fixture branch is the second.
+        return "fixture", p, None
     with conn:
-        built = ledger.packet(conn, fund_id, period_id)
+        policy = load_policy(conn) if recompute else None
+        built = ledger.packet(conn, fund_id, period_id, policy=policy)
+        recomputed = (
+            None if built is None or policy is None or not recompute else for_packet(policy, built)
+        )
     if built is None:
         raise HTTPException(status_code=404, detail=f"no packet {fund_id}/{period_id}")
-    return "ledger", built
+    return "ledger", built, recomputed
 
 
 @router.get("/funds/{fund_id}/periods/{period_id}/packet")
 def get_packet(fund_id: str, period_id: str) -> dict[str, Any]:
-    source, built = _packet_or_404(fund_id, period_id)
-    return {"source": source, **packet_json(built)}
+    """The packet, with the system's own recomputation of every mark beside it.
+
+    SPEC §8's validators were computed in the test suite and in the oracle and
+    reached no served surface: nothing in `api/` imported `v2_mark`, and all 72
+    `mark` rows carry `validated_amount = null` because the tracker loader writes
+    it as a literal. So the packet reported what the tracker said and never what
+    the evidence derives — and the two disagree on two rows by 3,500,000 and
+    750,000, which is the finding this product exists to produce.
+
+    It is a RECOMPUTATION and is labelled as one everywhere it appears. Nothing
+    is written to `mark.validated_amount`: SPEC §6.3 binds an approval to
+    `(mark_revision, evidence_set_hash, policy_version)` so an approved total
+    cannot follow a moving figure, and storing a read-time derivation in that
+    column reopens exactly that question.
+    """
+    source, built, recomputed = _packet_or_404(fund_id, period_id, recompute=True)
+    return {"source": source, **packet_json(built, recomputed)}
+
+
+@router.get("/evals")
+def get_evals() -> dict[str, Any]:
+    """What this system has been measured to do, measured when you asked.
+
+    Handoff 7a · no query parameters that change what is measured, and no figure
+    transcribed from a previous run. Recall@K is produced by running the
+    retrieval, the citation census by re-resolving citations against the stored
+    text, the validator census by running the validators, and the extraction
+    figures by replaying a recorded fixture — never a live model call, because
+    CI has no key and must not need one.
+
+    It is the slowest route this service serves and that is inherent: it runs
+    eighty retrievals and re-resolves every stored citation. `retrievals_run` is
+    in the response so the cost is legible rather than mysterious.
+
+    No fixture branch. Every number here is a measurement OF THE LEDGER, and the
+    one-holding stub would produce a page of real-looking figures about a corpus
+    that is not the fund — which is the failure `source` exists to prevent,
+    arriving somewhere `source` cannot help. With no database this route says
+    so and returns 503.
+    """
+    conn = _connect()
+    if conn is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "SPEC §11 · this deployment has no ledger configured, and every figure on "
+                "the evaluation page is a measurement of one. The bundled fixture would "
+                "produce real-looking numbers about a corpus that is not the fund."
+            ),
+        )
+    with conn:
+        built = {
+            period_id: packet
+            for fund_id, period_id, _ in ledger.packet_periods(conn)
+            if (packet := ledger.packet(conn, fund_id, period_id)) is not None
+        }
+        return {"source": "ledger", **evals(conn, load_policy(conn), built)}
 
 
 @router.get("/funds/{fund_id}/periods/{period_id}/totals")
@@ -203,5 +283,5 @@ def get_totals(fund_id: str, period_id: str) -> dict[str, Any]:
     value" has to read past the qualification to get it, rather than receiving an
     unqualified figure and having to remember there was a caveat somewhere.
     """
-    source, built = _packet_or_404(fund_id, period_id)
+    source, built, _ = _packet_or_404(fund_id, period_id)
     return {"source": source, **totals_json(built.totals())}

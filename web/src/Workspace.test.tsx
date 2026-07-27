@@ -25,16 +25,24 @@ function held(container: HTMLElement): string | undefined {
 }
 
 describe("the mark", () => {
-  it("presents reported, validated and support as three facts", () => {
+  it("presents reported, stored, recomputed and support as four facts", () => {
     const { container } = show(FIXTURE_ROW);
     expect(screen.getByText("The mark", { selector: "h2" })).toBeDefined();
     expect(screen.getByText("Reported — tracker")).toBeDefined();
-    expect(screen.getByText("Validated — independently derived")).toBeDefined();
+    // "Validated — confirmed and stored", not "independently derived": the
+    // recomputed column is what derives independently, and two captions
+    // claiming the same job — one of them empty on every row in this fund —
+    // is the collapse the four-way split exists to prevent.
+    expect(screen.getByText("Validated — confirmed and stored")).toBeDefined();
+    // The fourth: what the cited evidence derives when the page is READ. It is
+    // neither the tracker's figure nor a stored confirmation, and merging it
+    // into either would be the collapse the caption exists to prevent.
+    expect(screen.getByText(/Recomputed from the evidence/)).toBeDefined();
     expect(screen.getByText("Support — evidence verdicts")).toBeDefined();
-    // Three captions carry the distinction; INV-13's argument for it is on the
+    // Four captions carry the distinction; INV-13's argument for it is on the
     // mark beside the heading rather than in a paragraph under it.
     expect(container.querySelector(".section__head .why")?.getAttribute("title")).toMatch(
-      /Three facts, not one/,
+      /Four facts, not one/,
     );
   });
 
@@ -53,7 +61,9 @@ describe("the mark", () => {
   it("renders the API's support verdict as the third fact, with its reasons", () => {
     const { container } = show(FIXTURE_ROW);
     expect(screen.getByText("unsupported")).toBeDefined();
-    expect(container.querySelector(".support__reasons")?.textContent).toBe("R1 missingR2 partial");
+    expect(container.querySelector(".support__reasons")?.textContent).toBe(
+      "R1 missingR2 insufficient",
+    );
     expect(container.querySelector(".figure--support .sub")?.getAttribute("title")).toMatch(
       /Decided by the API/,
     );
@@ -105,7 +115,7 @@ describe("the mark", () => {
   it("states that a realised row has no mark instead of showing a figure", () => {
     const { container } = show(REALISED_ROW);
     expect(container.querySelectorAll(".no-mark")).toHaveLength(2);
-    expect(screen.getByText("Reported and validated — neither exists")).toBeDefined();
+    expect(screen.getByText("Reported and stored — neither exists")).toBeDefined();
     expect(screen.getAllByText(/Not zero, and not the last mark carried forward/).length).toBe(1);
     expect(screen.queryByText("Reported — tracker")).toBeNull();
     expect(container.querySelector(".figure--validated")).toBeNull();

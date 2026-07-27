@@ -6,8 +6,15 @@ import type {
   HoldingRow,
   RequirementAssessment,
 } from "./contracts";
+import EVALS_SNAPSHOT from "./evals.api.json";
 import { FIXTURE_MARK, FIXTURE_PACKET, FIXTURE_ROW } from "./fixture";
-import type { EvidenceClaim, HoldingResponse, PacketResponse } from "./responses";
+import type {
+  EvalsResponse,
+  EvidenceClaim,
+  HoldingResponse,
+  PacketResponse,
+  Recomputation,
+} from "./responses";
 
 /**
  * Variants of the captured fixture, for the states the Dream slice does not
@@ -337,6 +344,11 @@ export const THREE_ROW_TOTALS = THREE_ROW_PACKET.totals;
  * One fact carries a `value_numeric` and one does not, because both are real:
  * a share count parses and a narrative phrase does not, and a surface that only
  * ever meets the first renders `null` as a blank the first time it meets it.
+ *
+ * The two facts answer DIFFERENT requests, which is the case the evidence trail
+ * has to get right: this claim is relied upon for existence and for fair value,
+ * and before `answers_requirements` existed both requests rendered both figures
+ * and opened the same passage.
  */
 export const CITED_CLAIM: EvidenceClaim = {
   ...SUBSEQUENT_EVIDENCE.claim,
@@ -354,6 +366,8 @@ export const CITED_CLAIM: EvidenceClaim = {
       value_text: "$2.50",
       value_numeric: "2.500000",
       state: "canonical",
+      answers_requirements: ["R2"],
+      answer_rank: { R2: 11 },
       citation: {
         document_version_id: "dv_poolside_spa",
         quote: "the Purchase Price shall be $2.50 per share of Series B Preferred Stock",
@@ -368,6 +382,8 @@ export const CITED_CLAIM: EvidenceClaim = {
       value_text: "Series B Preferred Stock",
       value_numeric: null,
       state: "candidate",
+      answers_requirements: ["R1"],
+      answer_rank: { R1: 12 },
       citation: {
         document_version_id: "dv_poolside_spa",
         quote: "1,000,000 shares of Series B Preferred Stock",
@@ -405,3 +421,81 @@ export const HOLDING_WITHOUT_EVIDENCE: HoldingResponse = {
   company_name: "Anthropic",
   evidence: [],
 };
+
+/**
+ * The finding the recomputation exists to surface: Fluidstack's 25Q4 mark.
+ *
+ * 100,000 Series A at $10.00 plus 100,000 Series A-2 at $15.00 is 2,500,000.
+ * The reported 6,000,000 is 200,000 shares at the $30.00 Series B price applied
+ * to every class. Neither figure is asserted here to be the correct one — the
+ * 3,500,000 difference is the finding, and until the API served it nobody could
+ * see it anywhere.
+ */
+export const DISAGREEING_RECOMPUTATION: Recomputation = {
+  holding_id: "dream",
+  outcome: "fail",
+  reason: "PER_CLASS_SHARES_X_PPS",
+  derived: { amount: "2500000.0000", currency: "USD" },
+  reported: { amount: "6000000.0000", currency: "USD" },
+  difference: { amount: "3500000.0000", currency: "USD" },
+  evidence_claim_ids: ["fluidstack:series_a_price"],
+  per_class: [
+    {
+      lot_id: "lot_a",
+      security_class: "series_a",
+      shares: 100000,
+      price_per_share: "10.000000",
+      amount: { amount: "1000000.0000", currency: "USD" },
+      cross_class: false,
+    },
+    {
+      lot_id: "lot_a2",
+      security_class: "series_a2",
+      shares: 100000,
+      price_per_share: "15.000000",
+      amount: { amount: "1500000.0000", currency: "USD" },
+      cross_class: false,
+    },
+  ],
+  policy_version: "v1",
+};
+
+/**
+ * Moonfare FY2024: a real cited figure of 1,048,515, read off a document the
+ * fund wrote about its own position. `mark.derivation_status` has no word for
+ * this — it is `derivable | not_derivable` — so the packet described it as "not
+ * derivable · no validated amount could be derived from the evidence" while the
+ * evidence had spoken, in the voice under audit. SPEC §8's `not_comparable` is
+ * that word, and it already exists.
+ */
+export const CIRCULAR_RECOMPUTATION: Recomputation = {
+  ...DISAGREEING_RECOMPUTATION,
+  outcome: "not_comparable",
+  reason: "MANAGEMENT_CARRYING_VALUE",
+  derived: { amount: "1048515.0000", currency: "USD" },
+  reported: { amount: "1048515.0000", currency: "USD" },
+  difference: { amount: "0.0000", currency: "USD" },
+  per_class: [],
+};
+
+/** The evidence is silent. Because Market holds no document of any kind. */
+export const SILENT_RECOMPUTATION: Recomputation = {
+  ...DISAGREEING_RECOMPUTATION,
+  outcome: "unconfirmable",
+  reason: "NO_APPLICABLE_EVIDENCE",
+  derived: null,
+  difference: null,
+  evidence_claim_ids: [],
+  per_class: [],
+};
+
+/**
+ * A real `GET /evals` payload, captured from the running API against the loaded
+ * fund and trimmed to one miss and one refusal.
+ *
+ * Captured rather than hand-written, for the reason `fixture.ts` gives: a
+ * hand-written fixture agrees with whatever the page expects, which makes it
+ * useless as evidence that the wire shape is what the browser thinks it is.
+ * The blind figure in it — 24 of 40 — is the measurement, not a target.
+ */
+export const EVALS: EvalsResponse = EVALS_SNAPSHOT as unknown as EvalsResponse;

@@ -36,6 +36,8 @@ from packet import tables as tables_module
 from packet import workbook as workbook_module
 from packet.evidence import Evidence, gather
 from packet.layout import Layout, plan
+from packet.recompute import Recomputation, for_packet
+from policy.from_ledger import load as load_policy
 
 Conn = psycopg.Connection[tuple[object, ...]]
 
@@ -159,7 +161,14 @@ def _verify_entries(root: Path, entries: Iterable[manifest_module.Entry]) -> Non
         )
 
 
-def _build(root: Path, packet: Packet, evidence: Evidence, at: datetime, repo: Path) -> Written:
+def _build(
+    root: Path,
+    packet: Packet,
+    evidence: Evidence,
+    at: datetime,
+    repo: Path,
+    recomputed: dict[str, Recomputation],
+) -> Written:
     layout = plan(packet, evidence)
     held = packet.totals()
     approved = tables_module.approved_fair_value(packet)
@@ -175,6 +184,11 @@ def _build(root: Path, packet: Packet, evidence: Evidence, at: datetime, repo: P
     built = [
         cover_module.cover(packet, evidence, provenance, held, approved, tally),
         tables_module.holdings(packet),
+        # Directly after the holdings, and before the requirement verdicts: the
+        # auditor's first question about a reported figure is whether it is
+        # right, and their second is whether the evidence for it is sufficient.
+        # Those are different questions and this table answers the first.
+        tables_module.recomputation(packet, recomputed),
         tables_module.requirements(packet),
         tables_module.evidence_index(packet, evidence, layout),
         tables_module.approval_log(packet, evidence),
@@ -227,8 +241,20 @@ def export(
     *,
     at: datetime | None = None,
     repo: Path | None = None,
+    recomputed: dict[str, Recomputation] | None = None,
 ) -> Written:
-    """Write the packet to `destination`, atomically. Raises rather than half-publishing."""
+    """Write the packet to `destination`, atomically. Raises rather than half-publishing.
+
+    `recomputed` is SPEC §8's V2 over the same ledger, and it is a parameter
+    rather than something computed here because this function takes no database:
+    a table is a pure function of the packet, its evidence and its layout, which
+    is what lets the honest cases be exercised without one. `export_packet`
+    below has the connection and supplies it.
+
+    Omitted, the recomputation table is EMPTY rather than absent — the packet
+    keeps the same shape, and a reader sees a table with no rows instead of
+    wondering which version of the exporter produced their copy.
+    """
     at = at or datetime.now(UTC)
     repo = repo or Path(__file__).resolve().parents[1]
     destination = destination.resolve()
@@ -236,7 +262,7 @@ def export(
     superseded = destination.parent / f".superseded-{destination.name}-{uuid.uuid4().hex[:8]}"
     staging.mkdir(parents=True)
     try:
-        written = _build(staging, packet, evidence, at, repo)
+        written = _build(staging, packet, evidence, at, repo, recomputed or {})
     except Exception as exc:
         shutil.rmtree(staging, ignore_errors=True)
         if isinstance(exc, PacketExportError):
@@ -308,4 +334,9 @@ def export_packet(
     if packet is None:
         raise PacketExportError(f"no packet for {fund_id} at {period_id}")
     evidence = gather(conn, packet)
-    return export(packet, evidence, destination, at=at)
+    # The one place with a connection, so the one place that can run the
+    # validators over the same ledger the packet was read from. Reading the
+    # policy inputs a second time costs fourteen statements and this path has no
+    # latency budget — it writes a directory of files.
+    recomputed = for_packet(load_policy(conn), packet)
+    return export(packet, evidence, destination, at=at, recomputed=recomputed)

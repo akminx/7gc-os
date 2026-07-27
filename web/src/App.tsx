@@ -4,6 +4,9 @@ import { Company } from "./Company";
 import { Dashboard } from "./Dashboard";
 import type { Async } from "./data";
 import { failureDetail, loadFunds, loadPacket } from "./data";
+import type { Surface } from "./deeplink";
+import { readTrail, updateTrail } from "./deeplink";
+import { Evals } from "./Evals";
 import { ExportPacket } from "./Export";
 import { GapInventory } from "./GapInventory";
 import type { FundPeriod, FundsResponse, PacketResponse } from "./responses";
@@ -34,12 +37,11 @@ import { SourceBadge, Why } from "./ui";
  * exactly one, forever, whatever the ledger held.
  */
 
-type Surface = "dashboard" | "company" | "gaps";
-
 const SURFACES: { id: Surface; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
   { id: "company", label: "Company evidence" },
   { id: "gaps", label: "Gap inventory" },
+  { id: "evals", label: "How well does it work" },
 ];
 
 function keyOf(period: FundPeriod): string {
@@ -83,12 +85,28 @@ function PeriodPicker({
 }
 
 function Surfaces({ packet }: { packet: PacketResponse }) {
-  const [surface, setSurface] = useState<Surface>("dashboard");
-  const [selected, setSelected] = useState<string | null>(null);
+  // Opened from the address bar, so a link a partner sent lands on the surface
+  // and the company it names rather than on the dashboard with a note about
+  // where to click next. Read ONCE, at mount: after that the reader's clicks
+  // own the URL, and re-reading it on every render would make the app fight
+  // whoever moved last.
+  const [surface, setSurface] = useState<Surface>(() => readTrail().surface ?? "dashboard");
+  const [selected, setSelected] = useState<string | null>(() => readTrail().holdingId ?? null);
+
+  const show = (next: Surface) => {
+    setSurface(next);
+    updateTrail({ surface: next });
+  };
+
+  const choose = (holdingId: string) => {
+    setSelected(holdingId);
+    updateTrail({ holdingId });
+  };
 
   const open = (holdingId: string) => {
     setSelected(holdingId);
     setSurface("company");
+    updateTrail({ surface: "company", holdingId });
   };
 
   return (
@@ -101,7 +119,7 @@ function Surfaces({ packet }: { packet: PacketResponse }) {
             className={tab.id === surface ? "tab tab--on" : "tab"}
             aria-current={tab.id === surface}
             onClick={() => {
-              setSurface(tab.id);
+              show(tab.id);
             }}
           >
             {tab.label}
@@ -110,16 +128,29 @@ function Surfaces({ packet }: { packet: PacketResponse }) {
       </nav>
       {surface === "dashboard" && <Dashboard packet={packet} onOpenCompany={open} />}
       {surface === "company" && (
-        <Company rows={packet.rows} selected={selected} onSelect={setSelected} />
+        <Company
+          rows={packet.rows}
+          recomputations={packet.recomputations}
+          selected={selected}
+          onSelect={choose}
+        />
       )}
       {surface === "gaps" && <GapInventory packet={packet} />}
+      {surface === "evals" && <Evals />}
     </>
   );
 }
 
 export function App() {
   const [funds, setFunds] = useState<Async<FundsResponse>>({ kind: "loading" });
-  const [chosen, setChosen] = useState<string | null>(null);
+  // The fund-period a link names, if it names one. `keyOf` is the same shape
+  // the picker uses, so a link and a click produce one value and not two.
+  const [chosen, setChosen] = useState<string | null>(() => {
+    const trail = readTrail();
+    return trail.fundId === undefined || trail.periodId === undefined
+      ? null
+      : `${trail.fundId}/${trail.periodId}`;
+  });
   const [packet, setPacket] = useState<Async<PacketResponse>>({ kind: "loading" });
 
   useEffect(() => {
@@ -141,6 +172,14 @@ export function App() {
   const current = periods.find((p) => keyOf(p) === chosen) ?? first;
   const fundId = current === undefined ? null : current.fund_id;
   const periodId = current === undefined ? null : current.period_id;
+
+  // The fund-period the app actually landed on, written back to the address bar
+  // — including when a link named one the ledger does not hold and `current`
+  // fell back to the first. A URL that keeps naming a period nobody is looking
+  // at is a link that sends the next reader somewhere the sender never was.
+  useEffect(() => {
+    if (fundId !== null && periodId !== null) updateTrail({ fundId, periodId });
+  }, [fundId, periodId]);
 
   useEffect(() => {
     if (fundId === null || periodId === null) return;

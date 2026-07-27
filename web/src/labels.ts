@@ -98,17 +98,56 @@ export const VERDICT: Record<RequirementVerdict, Term & { glyph: string }> = {
   },
 };
 
-/** SPEC §7.1. */
-export const REQUIREMENT: Record<RequirementCode, Term> = {
-  R1: { label: "R1 · existence and cost", meaning: "Applies to every holding at every date." },
-  R2: { label: "R2 · fair-value support", meaning: "Applies to every holding at every date." },
+/**
+ * SPEC §7.1, and the paragraph of the client's letter each requirement answers.
+ *
+ * `meaning` says when the requirement ARISES; `letter` says what the client
+ * asked for. They are different questions and the second was missing from every
+ * screen: the dashboard's columns read `R1`…`R5`, and an auditor asked "which of
+ * Harwell & Kent's four requests does this packet answer" had to hover five
+ * headers to find out — on a project whose stated rule is to measure against the
+ * audit letter rather than against itself.
+ *
+ * `letter` is TRANSCRIBED from `packet/tables.py::REQUIREMENTS`, which is where
+ * the exported packet states the same mapping, and
+ * `tests/test_label_coverage.py` asserts the two are identical. Two independent
+ * descriptions of what the client asked for is exactly the drift this project
+ * refuses everywhere else; one source and a checked mirror is the shape it uses
+ * instead.
+ */
+export const REQUIREMENT: Record<RequirementCode, Term & { paragraph: string; letter: string }> = {
+  R1: {
+    label: "R1 · existence and cost",
+    paragraph: "¶1",
+    letter:
+      "Letter ¶1 — executed transaction documents supporting acquisition, share counts, price per share and settlement of funds",
+    meaning: "Applies to every holding at every date.",
+  },
+  R2: {
+    label: "R2 · fair-value support",
+    paragraph: "¶2",
+    letter: "Letter ¶2 — fair value support as of this measurement date",
+    meaning: "Applies to every holding at every date.",
+  },
   R3: {
     label: "R3 · unchanged-mark calibration",
+    paragraph: "¶3",
+    letter:
+      "Letter ¶3 — management's assessment that the last round price remains representative at this date",
     meaning: "Applies when the mark did not move and material support is stale.",
   },
-  R4: { label: "R4 · realization support", meaning: "Applies to realised lots only." },
+  R4: {
+    label: "R4 · realization support",
+    paragraph: "¶4",
+    letter:
+      "Letter ¶4 — merger consideration, distribution notices or other support for proceeds received",
+    meaning: "Applies to realised lots only.",
+  },
   R5: {
     label: "R5 · pro-forma identification",
+    paragraph: "closing ¶",
+    letter:
+      "Letter, closing paragraph — identify any positions marked on a pro forma basis pending executed documentation",
     meaning: "A labelling requirement for pro-forma marks. Labelling correctly is not support.",
   },
 };
@@ -262,6 +301,39 @@ export const REASON_CODE: Record<string, ReasonTerm> = {
     meaning:
       "R3 · an unchanged carrying value needs a calibration statement once the evidence under it has aged.",
   },
+  // ── Reachable since today's rulings on the audit letter ──────────────
+  // Added here in the same pass that found them on screen. An unglossed code
+  // renders as "no gloss is recorded for this code", and `OFF_CLASS_EVIDENCE_
+  // NOT_RELIED` was doing exactly that on Fluidstack's fair-value pane — which
+  // is a stop on the five-minute walkthrough.
+  //
+  // Every gloss below is written from the policy's own reasoning at the cell
+  // that raises it, not from the code's name. A label invented from a constant
+  // is a translation of a string rather than of a finding.
+  NO_MANAGEMENT_BASIS_MEMO: {
+    label: "the third party's memo, and no memo from management",
+    origin: "insufficient_authority",
+    meaning:
+      "Letter ¶2 asks for two things where a mark is based on something other than a financing round: the underlying source AND management's memo describing the basis of the mark. The valuer's memo is a real and authoritative half of that conjunction. The other half does not exist anywhere in this fund's records.",
+  },
+  SETTLEMENT_WITHOUT_SHARE_TERMS: {
+    label: "settlement confirmed, share terms not",
+    origin: "insufficient_authority",
+    meaning:
+      "Letter ¶1 asks for share counts, price per share AND settlement of funds. This evidences the third limb only: it proves the fund paid and says nothing about what the fund received. On its own an auditor could not establish the position from it.",
+  },
+  OFF_CLASS_EVIDENCE_NOT_RELIED: {
+    label: "evidence about a class the fund does not hold, not counted",
+    origin: "unresolved",
+    meaning:
+      "A document on file prices a different security class from the one held. It is named rather than dropped — it is in scope, and it is what makes this holding cross-class — but pricing one class off another's evidence is a valuation-policy act (INV-17) and is not performed until that decision is recorded.",
+  },
+  NO_SUPPORT_FOR_A_HELD_CLASS: {
+    label: "every document on file prices a class the fund does not hold",
+    origin: "insufficient_authority",
+    meaning:
+      "Not an absence of evidence: there are documents and they state prices, for a class this position is not. `insufficient` rather than `missing` for that reason. The derivation has always refused this case — no price for the held class — and the verdict now agrees with it.",
+  },
 };
 
 export function reasonGloss(code: string): ReasonTerm {
@@ -334,6 +406,12 @@ export const NEXT_ACTION: Record<string, ActionTerm> = {
     label: "draft a management assessment",
     recipient: "fund management",
     meaning: "R3 · the unchanged mark needs a written calibration before it can close.",
+  },
+  REQUEST_MANAGEMENT_BASIS_MEMO: {
+    label: "request management's memo on the basis of the mark",
+    recipient: "fund management",
+    meaning:
+      "Letter ¶2 · what the mark is BASED ON. Deliberately not the same request as R3's calibration assessment, which is ¶3(b) and asks whether a last round price remains representative at a later date. Different paragraphs, different documents, different questions.",
   },
 };
 

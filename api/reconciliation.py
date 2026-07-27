@@ -34,21 +34,26 @@ SPEC §3.1 · the public surface is read-only. Both routes are GETs.
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import re
+import tempfile
+import zipfile
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import psycopg
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from api import ledger
 from api.config import dsn, ledger_schema
 from api.serialize import totals_json
 from packages.contracts.fixtures.dream import dream_packet
 from packages.contracts.models import Packet
-from packet.export import PacketExportError, export_packet
+from packet.export import MANIFEST_NAME, PacketExportError, Written, export_packet
 
 router = APIRouter()
 
@@ -445,3 +450,109 @@ def export_auditor_packet(fund_id: str, period_id: str) -> dict[str, Any]:
         #: who assumes a browser download gets a silent no-op.
         "recorded_in_ledger": False,
     }
+
+
+# ── The packet as a download ─────────────────────────────────────────────
+# SPEC §1: "The deliverable is the assembled package." Until this route, the
+# package was only ever written to the API host's disk. On Render that disk is
+# ephemeral and unreachable, so the deliverable of the whole project could not
+# be obtained by the person it is for, and it vanished at the next deploy.
+#
+# **This does not violate SPEC §3.1**, and the reasoning is recorded here so
+# that nobody has to re-derive it. §3.1 keeps the public surface read-only about
+# the LEDGER. This route records nothing, supersedes nothing and touches no
+# table: it calls `export_packet`, never `packet.export.record()`, which is the
+# same line the JSON route above already holds. Streaming bytes to a client
+# writes no row — `packet_manifest_entry` still has zero rows after a download,
+# and every response says so in `X-Recorded-In-Ledger`.
+#
+# **The JSON route above is not superseded and must not be removed.**
+# `export_packet` REFUSES rather than publishing a partial packet, and the
+# refusal names which citation would not resolve, or which approved position is
+# unsupported. That sentence is itself a deliverable, and it must not be buried
+# inside a download that either works or does not. Both routes therefore report
+# a refusal identically: 409, carrying the refusal text verbatim.
+
+#: The packet is assembled under this fixed name inside a per-request temporary
+#: directory. Fixed rather than `period_id`, because `period_id` arrives from the
+#: URL and interpolating a path parameter into a filesystem path is the one way a
+#: caller could write outside the directory this route owns.
+DOWNLOAD_DIR_NAME = "packet"
+
+#: What may survive into `Content-Disposition`. The ids reach that header from
+#: the URL, and a raw newline in a response header is a split response rather
+#: than an odd filename.
+_UNSAFE_IN_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _download_name(fund_id: str, period_id: str) -> str:
+    """A filename for the archive, built from ids that came in over the wire."""
+    stem = _UNSAFE_IN_FILENAME.sub("-", f"{fund_id}-{period_id}").strip("-")
+    return f"{stem or 'auditor-packet'}.zip"
+
+
+def _zip_bytes(written: Written) -> bytes:
+    """The published packet as one archive, in manifest order.
+
+    Built from `written.paths` rather than by walking the directory, so the
+    archive holds exactly what the manifest attests to: a file that appeared on
+    disk without being manifested cannot ride along, and the entry count is the
+    manifest's count rather than whatever `os.walk` happened to find.
+
+    `MANIFEST.json` leads. It is the index for everything after it and it is not
+    one of its own entries, which is why the archive holds one more member than
+    `file_count` reports.
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(written.root / MANIFEST_NAME, MANIFEST_NAME)
+        for path in written.paths:
+            archive.write(written.root / path, path)
+    return buffer.getvalue()
+
+
+@router.get("/funds/{fund_id}/periods/{period_id}/export.zip")
+def download_auditor_packet(fund_id: str, period_id: str) -> StreamingResponse:
+    """Generate the auditor packet for one fund-period and stream it. Nothing persists."""
+    conn = _connect()
+    if conn is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "no database is configured, so there is no ledger to export. "
+                "A packet built from the demo stub would carry the fund's name over one holding."
+            ),
+        )
+    with tempfile.TemporaryDirectory(prefix="packet-download-") as staging:
+        with conn:
+            try:
+                written = export_packet(conn, fund_id, period_id, Path(staging) / DOWNLOAD_DIR_NAME)
+            except PacketExportError as exc:
+                # 409, not 500, and the same wording as the JSON route: the
+                # export did not fail, it refused, and the refusal is the answer.
+                raise HTTPException(status_code=409, detail=str(exc)) from None
+        payload = _zip_bytes(written)
+    # The temporary directory is already gone here, which is why the archive is
+    # materialised whole rather than streamed off disk: a lazy stream would be
+    # reading files this block has deleted. A packet is a few hundred kilobytes,
+    # so holding one in memory costs less than the bug would.
+    return StreamingResponse(
+        io.BytesIO(payload),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_download_name(fund_id, period_id)}"',
+            #: Known, so it is sent. `StreamingResponse` omits it otherwise, and
+            #: a download with no length is a progress bar that cannot move.
+            "Content-Length": str(len(payload)),
+            "X-Packet-Id": written.packet_id,
+            "X-Manifest-Hash": written.manifest_hash,
+            #: The manifest's count, matching `file_count` from the JSON route.
+            #: The archive holds this many members plus `MANIFEST.json`.
+            "X-File-Count": str(len(written.paths)),
+            #: The sentence the JSON route carries in its body, on every
+            #: download. Generating a packet is not registering one:
+            #: `packet_manifest_entry` has no rows, and a download implying
+            #: otherwise would be the product claiming something it has not done.
+            "X-Recorded-In-Ledger": "false",
+        },
+    )

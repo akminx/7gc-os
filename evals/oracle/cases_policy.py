@@ -612,18 +612,176 @@ def run(snap: dict, o: Oracle) -> None:
             check(f"wrong {key} raises", True, True)
 
     print("\n── Q1-7: authority lives on the claim, not the artifact ──")
-    jio = [
-        d_
-        for n, d_ in Oracle(HERE / "primitives.yaml").docs.items()
-        if d_["source_file"] == "Jio statement 2025.pdf"
+    docs = Oracle(HERE / "primitives.yaml").docs
+    # INV-15 · "Email is an envelope." Meridian speaks as Administrator in the
+    # covering email exactly as it does in the statement it attaches, so both
+    # FY2025 claims are `administrator_statement`.
+    #
+    # This anchor asserted DIFFERENT classes once, and passed only because the
+    # delivery email was filed `company_communication` — the exact mis-tier
+    # INV-15 names. Authority is read from the speaker.
+    jio_fy25 = [
+        d_ for d_ in docs.values() if d_["claim"] in ("jio/fy2025_nav", "jio/fy2025_delivery")
     ]
-    check("one artifact carries two claims", len(jio), 2)
-    # This asserted DIFFERENT classes, and passed only because the delivery
-    # email was filed `company_communication` — the exact mis-tier INV-15 names.
-    # The anchor was locking the defect in. Authority is read from the speaker,
-    # and Meridian speaks as Administrator in both.
     check(
         "both read from the speaker, not the envelope",
-        sorted(x["source_class"] for x in jio),
+        sorted(x["source_class"] for x in jio_fy25),
         ["administrator_statement", "administrator_statement"],
+    )
+    # ...and they sit on two DIFFERENT artifacts. Same class, separate files:
+    # authority travelling with the speaker is not the same question as
+    # provenance travelling with the file, and the previous binding answered the
+    # second with the first — filing the delivery claim against the statement
+    # PDF, which states neither the delivery date nor the attachment relation.
+    #
+    # That put a fact in a document that does not contain it. No citation check
+    # can catch it: offsets and quote would still agree with each other, which
+    # is the whole of what they verify.
+    check(
+        "the envelope is its own artifact",
+        sorted({x["source_file"] for x in jio_fy25}),
+        ["Jio delivery email.txt", "Jio statement 2025.pdf"],
+    )
+    # INV-15's granularity clause needs a real case of ONE artifact carrying two
+    # claims, and the Jio pair is no longer it. Fluidstack's cap table is: note
+    # (a) of the same PDF asserts the Series A-2 close on different terms — a
+    # different class, a different as-of date, a different execution status.
+    fluidstack_cap = [
+        d_ for d_ in docs.values() if d_["source_file"] == "Fluidstack B captable.pdf"
+    ]
+    check("one artifact carries two claims", len(fluidstack_cap), 2)
+    check(
+        "and they carry different authority",
+        sorted(x["execution_status"] for x in fluidstack_cap),
+        ["pro_forma", "unexecuted_referenced"],
+    )
+
+    # `scripts/mutate.py` does not cover this package — see its UNCOVERED note —
+    # so every ruling below is anchored here or it is anchored nowhere.
+    print("\n── the audit letter's ¶2, branch A: 'or' (owner ruling, 2026-07-26) ──")
+    r2_of = {(x["holding"], x["date"]): x["requirements"]["R2"] for x in snap["rows"]}
+    # "the round's executed documents OR pro forma capitalization table
+    # evidencing price per share." Sway's recapitalisation table states its
+    # converted share count and $0.40 outright, and nothing else supports the
+    # position, so the disjunct carries the row on its own.
+    check(
+        "Sway 25Q4 is sufficient on its pro forma table",
+        r2_of[("sway", "2025-12-31")]["verdict"],
+        "sufficient",
+    )
+    check(
+        "and R5 still discloses the pro forma basis",
+        row(snap, "sway", "2025-12-31")["requirements"]["R5"]["verdict"],
+        "sufficient",
+    )
+    # The qualifier is load-bearing and no corpus document fails it, so it is
+    # injected. A pro forma table stating no price per share is not the document
+    # ¶2 accepts.
+    # The REAL cell from primitives.yaml, not a copy declared here. Reverting the
+    # ruling in the matrix must redden this anchor; a locally-declared cell would
+    # keep passing while the corpus answer moved underneath it.
+    #
+    # Linked to R2 only: the synthetic matrix enumerates no R1 cell for a cap
+    # table, and an unenumerated tuple correctly raises rather than guessing.
+    # Read from the file rather than from `o` — `o` is rebound to a synthetic
+    # oracle earlier in this function, and reading its matrix would silently
+    # anchor on SYNTH_BASE instead of on the corpus.
+    pro_forma_cell = next(
+        c
+        for c in Oracle(HERE / "primitives.yaml").matrix
+        if (c["req"], c["source_class"], c["execution_status"], c["position_type"])
+        == ("R2", "company_cap_table", "pro_forma", "direct_equity")
+    )
+
+    def _pro_forma_table(pps: str | None) -> Oracle:
+        return synth(
+            documents={
+                "d1": {
+                    **SYNTH_BASE["documents"]["d1"],
+                    "source_class": "company_cap_table",
+                    "execution_status": "pro_forma",
+                    "pps": pps,
+                }
+            },
+            evidence_links=[{"holding": "h", "requirement": "R2", "document": "d1"}],
+            policy_matrix=[*SYNTH_BASE["policy_matrix"], pro_forma_cell],
+        )
+
+    check(
+        "a pro forma table WITH a price is sufficient",
+        _pro_forma_table("10.00").run()["rows"][0]["requirements"]["R2"]["verdict"],
+        "sufficient",
+    )
+    ur = _pro_forma_table(None).run()["rows"][0]["requirements"]["R2"]
+    check("a pro forma table WITHOUT one is not", ur["verdict"], "partial")
+    check(
+        "and says which half of ¶2 is missing",
+        "PRO_FORMA_WITHOUT_PRICE_PER_SHARE" in ur["reasons"],
+        True,
+    )
+
+    print("\n── the audit letter's ¶2, branch B: 'and' (owner ruling, 2026-07-26) ──")
+    # "For marks based on other information: the underlying source AND
+    # management's memo describing the basis of the mark." No management memo
+    # exists in this corpus, so Moonfare FY2023 holds one half of an "and". This
+    # was the only row where the packet claimed MORE support than the letter
+    # allows.
+    mf = r2_of[("moonfare", "2023-12-31")]
+    check("Moonfare FY2023 is not sufficient on the memo alone", mf["verdict"], "partial")
+    check("and names the absent half", "NO_MANAGEMENT_BASIS_MEMO" in mf["reasons"], True)
+    check(
+        "asking for ¶2's memo, not ¶3(b)'s assessment",
+        "REQUEST_MANAGEMENT_BASIS_MEMO" in mf["next_actions"]
+        and "DRAFT_MANAGEMENT_ASSESSMENT" not in mf["next_actions"],
+        True,
+    )
+
+    print("\n── INV-17: off-class evidence does not raise a verdict (the letter is SILENT) ──")
+    # Lucra holds Series A-1. The CEO's email about the Series A-2 close was
+    # lifting R2 from `insufficient` to `partial` through best(). The cross-class
+    # rule could not catch it — it only lowers `sufficient`.
+    lu = r2_of[("lucra", "2025-12-31")]
+    check("Lucra 25Q4 is not raised by the A-2 email", lu["verdict"], "insufficient")
+    check("the email stays reported", lu["relied_on"], ["lucra_term_sheet", "lucra_ceo_email"])
+    check(
+        "and the decision is still requested",
+        "RECORD_VALUATION_POLICY_DECISION" in lu["next_actions"],
+        True,
+    )
+    # Dream holds Series A-1 and both relied documents price Series B, so nothing
+    # in scope prices a held class. `validated_amount` always refused this row;
+    # the verdict used to say `partial` beside it.
+    dr = r2_of[("dream", "2025-12-31")]
+    check("Dream 25Q4 has no support for a held class", dr["verdict"], "insufficient")
+    check(
+        "and the derivation already said so",
+        row(snap, "dream", "2025-12-31")["derivation_reason"],
+        "NO_PRICE_FOR_CLASS:series_a1",
+    )
+
+    # The gate is the RECORDED decision, not the document's strength or its age.
+    # One holding, one lot in class `sa`, one document pricing `sb`.
+    def _off_class_only(decisions: list[dict]) -> dict:
+        return synth(
+            documents={"d1": {**SYNTH_BASE["documents"]["d1"], "priced_class": "sb"}},
+            valuation_policy_decisions=decisions,
+        ).run()["rows"][0]["requirements"]["R2"]
+
+    without = _off_class_only([])
+    check("without a decision the evidence is excluded", without["verdict"], "insufficient")
+    check("and says so", "OFF_CLASS_EVIDENCE_NOT_RELIED" in without["reasons"], True)
+    with_ = _off_class_only([{"holding": "h", "date": "2025-12-31", "method": "last_round"}])
+    # Readmitted: both off-class reasons are gone and the verdict rises. It stops
+    # at `partial` rather than `sufficient` because UNCOVERED_SECURITY_CLASS is a
+    # separate rule and still applies — class `sa` has no covering document, with
+    # or without a policy decision. Two independent caps, and asserting the
+    # verdict alone would let either one silently do the other's job.
+    check("a scoped decision readmits off-class evidence", with_["verdict"], "partial")
+    check(
+        "and the off-class exclusion no longer fires",
+        [r for r in with_["reasons"] if "OFF_CLASS" in r or r == "NO_SUPPORT_FOR_A_HELD_CLASS"],
+        [],
+    )
+    check(
+        "the remaining cap is the uncovered class", with_["reasons"], ["UNCOVERED_SECURITY_CLASS"]
     )

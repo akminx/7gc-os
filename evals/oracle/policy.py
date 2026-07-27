@@ -168,15 +168,64 @@ class PolicyMixin:
         pt = self.holdings[holding]["position_type"]
         links = self.supersede(self.applicable_links(holding, "R2", on))
         verdicts, reasons, actions, relied = [], set(), set(), []
+        held_now = {self.class_at(lt, on) for lt in self.held_lots(holding, on)}
+        # INV-17 · a recorded valuation-policy decision is what licenses pricing
+        # one class off another class's evidence. One reader, used twice below.
+        authorized = bool(self.scoped_decisions(holding, on))
+        off_class = []
 
         for name, doc in links:
             row = self.matrix_lookup("R2", doc, pt)
-            verdicts.append(row["verdict"])
             relied.append((name, doc))
-            if row.get("reason"):
-                reasons.add(row["reason"])
-            if row.get("next_action"):
-                actions.add(row["next_action"])
+            # ¶2 branch A conditions its pro-forma disjunct on the table
+            # "evidencing price per share". A table stating no price is not the
+            # document the letter accepts, so the cell's fallback governs.
+            if row.get("without_pps_verdict") and not doc.get("pps"):
+                verdict_, reason_, action_ = (
+                    row["without_pps_verdict"],
+                    row.get("without_pps_reason"),
+                    row.get("without_pps_next_action"),
+                )
+            else:
+                verdict_, reason_, action_ = (
+                    row["verdict"],
+                    row.get("reason"),
+                    row.get("next_action"),
+                )
+            # Owner ruling, 2026-07-26 · evidence about a class the fund does not
+            # hold may not RAISE the verdict before a valuation-policy decision
+            # is recorded. The letter is SILENT on this; it rests on INV-17, and
+            # citing ¶2 for it would be citing a sentence that does not exist.
+            #
+            # Lucra: the fund holds Series A-1, and the CEO's Series A-2 email was
+            # lifting R2 from `insufficient` to `partial` through `best()`. The
+            # cross-class rule below could not catch it — it only lowers
+            # `sufficient`, so it never observed the raise.
+            if doc.get("priced_class") and doc["priced_class"] not in held_now and not authorized:
+                off_class.append(doc["priced_class"])
+                continue
+            verdicts.append(verdict_)
+            if reason_:
+                reasons.add(reason_)
+            if action_:
+                actions.add(action_)
+
+        if off_class:
+            # The claim stays in `relied_on`: it is in scope, it is what makes
+            # the holding cross-class, and hiding declined evidence makes the
+            # packet say less than the derivation knows.
+            reasons.add("OFF_CLASS_EVIDENCE_NOT_RELIED")
+
+        if links and not verdicts:
+            # Every document in scope prices a class the fund does not hold.
+            # Evidence exists and says something, so `insufficient`.
+            #
+            # Dream reaches this: the fund holds Series A-1 and both relied-upon
+            # documents price Series B. `validated_amount` already refused it —
+            # `NO_PRICE_FOR_CLASS:series_a1` — while the verdict read `partial`.
+            # The derivation and the verdict now agree.
+            verdicts.append("insufficient")
+            reasons.add("NO_SUPPORT_FOR_A_HELD_CLASS")
 
         if not links:
             # Never-had and had-and-expired are different findings. Because
@@ -272,11 +321,10 @@ class PolicyMixin:
         # Equality catches both, and a position whose every class carries its own
         # claim still passes — which the previous rule denied, because each claim
         # "differs from" some other held class.
-        held_classes = {self.class_at(lt, on) for lt in self.held_lots(holding, on)}
+        held_classes = held_now
         priced_classes = {doc.get("priced_class") for _, doc in relied if doc.get("priced_class")}
         cross = bool(priced_classes) and held_classes != priced_classes
-        scoped = self.scoped_decisions(holding, on)
-        if cross and not scoped:
+        if cross and not authorized:
             if VERDICT_ORDER.index(verdict) > VERDICT_ORDER.index("partial"):
                 verdict = "partial"
             reasons.add("CROSS_CLASS_POLICY_DECISION_REQUIRED")

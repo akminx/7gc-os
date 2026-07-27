@@ -19,9 +19,16 @@ meta:
   corpus: "7GC Audit Case Study"
   positions: 14
   # Q1-10: these were one conflated number. Banzai's single saved-quote PDF
-  # carries three dated observations; Jio's delivery email is an attribute of
-  # the statement it transmits. _validate() now asserts both counts.
-  physical_source_files: 19
+  # carries three dated observations, so records exceed files there.
+  #
+  # It said 19, because Jio's delivery email was filed against the statement PDF
+  # on the reasoning that the email "is an attribute of the statement it
+  # transmits". That is true of RELIANCE — `ingest/documents/reliance.py` excludes
+  # it with a deliberate `frozenset()` — and it is not true of PROVENANCE. The
+  # delivery date and the attachment relation are asserted in the email and
+  # nowhere in the PDF, so the email is its own physical artifact and the pack
+  # holds 20. Reproducible by counting: `find` returns 20 portfolio files.
+  physical_source_files: 20
   evidence_records: 23
   packet_periods: 6
   lot_count: 17
@@ -151,10 +158,17 @@ documents:
   # F10 is precisely that the FY2023 close is dated 12/29, the last trading day.
   # Collapsing them into one document dated 2025-12-31 made the FY2023 quote
   # read as subsequent evidence, which it is not.
-  # One artifact, two claims, two authority classes (INV-15, Q1-7): the email is
-  # a company communication; the statement it transmits is an administrator
-  # statement. Authority belongs to the claim, never to the container.
-  jio_delivery_email: {source_file: "Jio statement 2025.pdf", claim: jio/fy2025_delivery, holding: jio, source_class: administrator_statement, execution_status: not_applicable, date: "2026-01-30", applicable_from: "2026-01-30", applicable_to: null, priced_class: null, pps: null}
+  # A SEPARATE artifact carrying a separate claim. INV-15 · "Email is an
+  # envelope": Meridian speaks as Administrator in the covering email exactly as
+  # it does in the statement, so both claims are `administrator_statement` —
+  # authority is read from the speaker, never from the container.
+  #
+  # The envelope is still its own file. It states the delivery date and the
+  # attachment relation, and the statement PDF states neither; binding this
+  # claim to the PDF put a fact in a document that does not contain it, which is
+  # the one error the citation layer cannot detect, because offsets and quote
+  # would still agree with each other.
+  jio_delivery_email: {source_file: "Jio delivery email.txt", claim: jio/fy2025_delivery, holding: jio, source_class: administrator_statement, execution_status: not_applicable, date: "2026-01-30", applicable_from: "2026-01-30", applicable_to: null, priced_class: null, pps: null}
   banzai_quote_23:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2023_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2023-12-29", applicable_from: "2023-12-29", applicable_to: "2023-12-31", priced_class: common, pps: "2.40"}
   banzai_quote_24:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2024_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2024-12-31", applicable_from: "2024-12-31", applicable_to: "2024-12-31", priced_class: common, pps: "1.10"}
   banzai_quote_25:   {source_file: "Banzai quotes.pdf", claim: banzai/fy2025_close, holding: banzai,     source_class: public_market_quote,       execution_status: not_applicable,       date: "2025-12-31", applicable_from: "2025-12-31", applicable_to: "2025-12-31", priced_class: common, pps: "0.62"}
@@ -287,15 +301,44 @@ policy_matrix:
   - {req: R1, source_class: company_communication,      execution_status: non_binding,           position_type: direct_equity,           verdict: insufficient, reason: NON_BINDING_TERM_SHEET, next_action: REQUEST_EXECUTED_DOC}
 
   - {req: R2, source_class: executed_transaction_doc,   execution_status: executed,              position_type: direct_equity,           verdict: sufficient}
-  - {req: R2, source_class: company_cap_table,          execution_status: pro_forma,             position_type: direct_equity,           verdict: partial,      reason: PRO_FORMA_PENDING_EXECUTION}
+  # Owner ruling, 2026-07-26. ¶2 branch A: "the round's executed documents **or**
+  # pro forma capitalization table evidencing price per share." The letter says
+  # "or", so the pro forma table stands on its own and this cell is `sufficient`;
+  # it read `partial`, which is stricter than the client asked. The separate
+  # closing request — "identify any positions marked on a pro forma basis pending
+  # receipt of executed documentation" — is R5, and R5 derives from execution
+  # status rather than from this verdict, so the disclosure survives the raise.
+  #
+  # `without_pps_*` keeps the letter's qualifier load-bearing: a pro forma table
+  # that does not state a price per share is not the document ¶2 accepts. Nothing
+  # in this corpus fails it, so the branch is exercised by an injected case.
+  - {req: R2, source_class: company_cap_table,          execution_status: pro_forma,             position_type: direct_equity,           verdict: sufficient, without_pps_verdict: partial, without_pps_reason: PRO_FORMA_WITHOUT_PRICE_PER_SHARE, without_pps_next_action: REQUEST_EXECUTED_DOC}
   - {req: R2, source_class: company_cap_table,          execution_status: unexecuted_referenced, position_type: direct_equity,           verdict: partial,      reason: CLOSING_SET_PENDING}
   - {req: R1, source_class: company_communication,      execution_status: not_applicable,        position_type: direct_equity,           verdict: partial,      reason: SETTLEMENT_WITHOUT_SHARE_TERMS}
   - {req: R2, source_class: company_communication,      execution_status: unexecuted_referenced, position_type: direct_equity,           verdict: partial,      reason: CLOSING_SET_PENDING}
   - {req: R2, source_class: company_communication,      execution_status: non_binding,           position_type: direct_equity,           verdict: insufficient, reason: NON_BINDING_TERM_SHEET}
   - {req: R2, source_class: public_market_quote,        execution_status: not_applicable,        position_type: public_listed,           verdict: sufficient}
   - {req: R2, source_class: administrator_statement,    execution_status: not_applicable,        position_type: indirect_feeder,         verdict: sufficient}
-  - {req: R2, source_class: third_party_valuation_memo, execution_status: not_applicable,        position_type: fx_denominated_interest, verdict: sufficient}
-  - {req: R2, source_class: third_party_valuation_memo, execution_status: not_applicable,        position_type: direct_equity,           verdict: sufficient}
+  # Owner ruling, 2026-07-26. ¶2 branch B: "For marks based on **other
+  # information**: the underlying source **and** management's memo describing the
+  # basis of the mark." A third-party valuation memorandum is a mark based on
+  # other information, not on a financing round, so the conjunction governs. The
+  # memo is the underlying source; no management memo describing the basis of the
+  # mark exists anywhere in this corpus, so these rows read `sufficient` on one
+  # half of an "and". Moonfare FY2023 is the case, and it is the only place the
+  # packet claimed MORE support than the letter allows.
+  #
+  # `partial`: the memo is a real leg of the conjunction, unlike the
+  # fund_internal_record cell below where neither leg stands alone.
+  # REQUEST_MANAGEMENT_BASIS_MEMO, not DRAFT_MANAGEMENT_ASSESSMENT — ¶2 asks what
+  # the mark is based on, ¶3(b) asks whether a last round price remains
+  # representative. Two paragraphs, two documents.
+  #
+  # public_market_quote and administrator_statement are deliberately NOT moved:
+  # a strict reading would carry branch B to Banzai and Jio, and the ruling names
+  # the third-party memorandum only. Recorded as inference in policy/valid_tuples.py.
+  - {req: R2, source_class: third_party_valuation_memo, execution_status: not_applicable,        position_type: fx_denominated_interest, verdict: partial, reason: NO_MANAGEMENT_BASIS_MEMO, next_action: REQUEST_MANAGEMENT_BASIS_MEMO}
+  - {req: R2, source_class: third_party_valuation_memo, execution_status: not_applicable,        position_type: direct_equity,           verdict: partial, reason: NO_MANAGEMENT_BASIS_MEMO, next_action: REQUEST_MANAGEMENT_BASIS_MEMO}
   - {req: R2, source_class: press,                      execution_status: not_applicable,        position_type: direct_equity,           verdict: insufficient, reason: PRESS_CANNOT_SUPPORT_FAIR_VALUE, next_action: REQUEST_PRIMARY_EVIDENCE}
   # Management's own paperwork about management's own position. The letter asks for
   # "the underlying source AND management's memo describing the basis of the mark" —

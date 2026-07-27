@@ -4,6 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>7GC OS — Valuation Evidence Ledger</title>
+
+    <!--
+      This file sat outside every agent's list until now, so it carried a title
+      and nothing else: no description, and a tab showing the browser's default
+      icon beside whatever else the viewer had open.
+
+      The description is what a link preview shows, and the sentence it needs to
+      make is this product's rather than a category's: it assembles the evidence
+      behind a valuation mark and states its own gaps. "Audit tooling" would say
+      nothing an auditor could not already assume.
+    -->
+    <meta
+      name="description"
+      content="For each holding at each measurement date: the evidence behind its valuation mark, every figure traced to the exact passage that states it, and a plain statement of what is missing."
+    />
+    <!-- The app honours both, and says so to the browser before React loads, so
+         a dark-mode viewer does not get a white flash on first paint. -->
+    <meta name="color-scheme" content="light dark" />
+    <!-- A private case-study dataset behind it. Not for an index. -->
+    <meta name="robots" content="noindex" />
+
+    <!--
+      An inline SVG data URI rather than a file, for two reasons: it cannot 404
+      on a static host that failed to copy it, and it is readable — a binary
+      nobody in this repository can diff is a strange thing to ship in a project
+      whose whole argument is that a figure must be traceable to its source.
+
+      The mark is a document with one highlighted line, which is the single
+      moment this application exists for, drawn at sixteen pixels. The amber is
+      `--hi` from `styles.css`, so the tab and the highlight in the passage pane
+      are the same colour rather than two ideas of the same colour.
+    -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23f7f2e6'/%3E%3Cg fill='%235b616c'%3E%3Crect x='7' y='6.5' width='18' height='2.6' rx='1'/%3E%3Crect x='7' y='11.5' width='18' height='2.6' rx='1'/%3E%3Crect x='7' y='22' width='11' height='2.6' rx='1'/%3E%3C/g%3E%3Crect x='7' y='16.5' width='18' height='2.6' rx='1' fill='%23ffe8a1'/%3E%3Crect x='7' y='19.1' width='18' height='1.1' fill='%23a97d06'/%3E%3C/svg%3E"
+    />
   </head>
   <body>
     <div id="root"></div>

@@ -4,8 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HoldingRow } from "./contracts";
 import { Dashboard } from "./Dashboard";
 import { FIXTURE_ROW } from "./fixture";
-import type { PacketResponse } from "./responses";
+import type { PacketResponse, Recomputation } from "./responses";
 import {
+  CIRCULAR_RECOMPUTATION,
+  DISAGREEING_RECOMPUTATION,
   FOUR_ROW_PACKET,
   POOLSIDE_ROW,
   REALISED_ROW,
@@ -87,10 +89,15 @@ describe("totals", () => {
 });
 
 describe("holding rows", () => {
-  it("keeps reported, validated and support in three separate columns", () => {
+  it("keeps reported, stored, recomputed and support in four separate columns", () => {
     show();
     expect(screen.getByText("Reported (tracker)")).toBeDefined();
-    expect(screen.getByText("Validated (derived)")).toBeDefined();
+    // "Validated (stored)" and "Recomputed from evidence" are different facts
+    // and the header used to promise the second while showing the first: the
+    // column read "Validated (derived)" and rendered `mark.validated`, which is
+    // null for all 72 rows in this fund because nothing has ever written to it.
+    expect(screen.getByText("Validated (stored)")).toBeDefined();
+    expect(screen.getByText("Recomputed from evidence")).toBeDefined();
     expect(screen.getByText("Row support")).toBeDefined();
   });
 
@@ -179,9 +186,75 @@ describe("holding rows", () => {
       (list) => list.textContent,
     );
     expect(reasons).toEqual([
-      "R1 missingR2 partial",
+      "R1 missingR2 insufficient",
       "R1 not assessedR2 not assessedR3 insufficient",
     ]);
+  });
+
+  /**
+   * The wiring, not the cell.
+   *
+   * `RecomputedCell` is covered on its own and `test_recompute.py` proves the
+   * API's figures against the oracle. Neither says the dashboard hands each row
+   * ITS OWN recomputation: `recomputations` is a map keyed by holding, and a
+   * lookup keyed on the wrong thing — a row index, the previous row's id —
+   * would put Lucra's 750,000 discrepancy on Fluidstack's line and leave every
+   * other test in this suite green.
+   *
+   * The serialiser's own note says it is "keyed by holding rather than
+   * positional, so a caller cannot pair the recomputation of one row with the
+   * mark of another by mis-indexing". This is that sentence, checked at the
+   * only layer where the mis-pairing would be visible.
+   *
+   * Three rows, three DIFFERENT outcomes, one of them absent — so a lookup that
+   * returned the same entry for everything, or shifted by one, cannot pass.
+   */
+  it("gives each row its own recomputation, keyed by holding and never by position", () => {
+    const forDream: Recomputation = {
+      ...DISAGREEING_RECOMPUTATION,
+      holding_id: FIXTURE_ROW.holding_id,
+      difference: { amount: "111.0000", currency: "USD" },
+      derived: { amount: "222.0000", currency: "USD" },
+    };
+    const forPoolside: Recomputation = {
+      ...CIRCULAR_RECOMPUTATION,
+      holding_id: POOLSIDE_ROW.holding_id,
+      derived: { amount: "333.0000", currency: "USD" },
+    };
+    const { container } = show({
+      ...THREE_ROW_PACKET,
+      // Sway is deliberately ABSENT from the map: a row the API sent no
+      // recomputation for must say so rather than borrowing a neighbour's.
+      recomputations: {
+        [FIXTURE_ROW.holding_id]: forDream,
+        [POOLSIDE_ROW.holding_id]: forPoolside,
+      },
+    });
+    const byCompany = new Map(
+      [...container.querySelectorAll("tbody tr")].map((tr) => [
+        tr.querySelector("th")?.textContent?.replace(/\s+/g, " ") ?? "",
+        tr.querySelector(".cell--recheck")?.textContent ?? "",
+      ]),
+    );
+    const cellFor = (name: string) =>
+      [...byCompany.entries()].find(([company]) => company.startsWith(name))?.[1] ?? "";
+
+    expect(cellFor("Dream")).toContain("222.0000 USD");
+    expect(cellFor("Dream")).toContain("off by 111.0000 USD");
+    // Poolside's is `not_comparable`: a real figure, and NOT a discrepancy — so
+    // no delta, even though one is present on the object.
+    expect(cellFor("Poolside")).toContain("333.0000 USD");
+    expect(cellFor("Poolside")).not.toContain("off by");
+    // And neither of the two leaked onto the row the API said nothing about.
+    expect(cellFor("Sway")).toContain("not supplied by API");
+    expect(cellFor("Sway")).not.toContain("USD");
+  });
+
+  it("says the derivation did not run rather than showing nothing", () => {
+    const { container } = show({ ...THREE_ROW_PACKET, recomputations: null });
+    const cells = [...container.querySelectorAll(".cell--recheck")].map((c) => c.textContent);
+    expect(cells).toHaveLength(3);
+    for (const cell of cells) expect(cell).toContain("not supplied by API");
   });
 
   it("opens the company workspace when a company is clicked", async () => {

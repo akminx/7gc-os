@@ -73,6 +73,20 @@ class PolicyResult:
     verdict: RequirementVerdict
     reason_code: str | None = None
     next_actions: tuple[str, ...] = field(default_factory=tuple)
+    #: The audit letter's ¶2 qualifier, and the only conditional cell in the
+    #: matrix. Branch A accepts "the round's executed documents **or** pro forma
+    #: capitalization table **evidencing price per share**" — the disjunct is
+    #: conditioned on that phrase, so the code conditions on it too.
+    #:
+    #: Set only where the letter attaches the qualifier. `None` everywhere else
+    #: means the cell's verdict is unconditional, which is the fail-closed
+    #: default: a cell says what it says unless a rule was deliberately written.
+    #:
+    #: A nested `PolicyResult` rather than a second table keyed by the same
+    #: tuple. Two hand-maintained lists of one set is the ~200-cell drift that
+    #: failed two fixer cycles; the alternative keeps the qualifier and its
+    #: consequence in the cell they belong to.
+    without_price_per_share: PolicyResult | None = None
 
 
 PolicyKey = tuple[RequirementCode, SourceClass, ExecutionStatus, PositionType]
@@ -143,12 +157,42 @@ MATRIX: dict[PolicyKey, PolicyResult] = {
         ExecutionStatus.EXECUTED,
         PositionType.DIRECT_EQUITY,
     ): PolicyResult(verdict=_SUFFICIENT),
+    # Owner ruling, 2026-07-26 · the letter's ¶2 says "or", so this is SUFFICIENT.
+    #
+    #   "For marks based on a financing round: the round's executed documents
+    #    **or** pro forma capitalization table evidencing price per share."
+    #
+    # A pro forma capitalization table is a financing-round document by
+    # construction — it states the post-money structure of a named round — so
+    # branch A governs it and the disjunct is available. This cell read `partial`
+    # for four rounds of review, which is stricter than the client asked.
+    #
+    # The cap was also counting one concern twice. The letter's closing asks
+    # separately to "identify any positions marked on a pro forma basis pending
+    # receipt of executed documentation" — that is R5, R5 already reports it, and
+    # R5 is derived from execution status rather than from this verdict, so
+    # raising the cell does not silence the disclosure. Support and disclosure
+    # are two obligations in the letter and are two mechanisms here.
+    #
+    # `without_price_per_share` is the qualifier kept load-bearing: a pro forma
+    # table that does not state price per share is not what ¶2 accepts. No
+    # document in this corpus fails it — Dream, Sway and Fluidstack all state a
+    # price — so the branch is exercised by `cases_policy.py` rather than by the
+    # corpus, deliberately: an unreachable branch is the failure mode this
+    # project exists to avoid.
     (
         _R2,
         SourceClass.COMPANY_CAP_TABLE,
         ExecutionStatus.PRO_FORMA,
         PositionType.DIRECT_EQUITY,
-    ): PolicyResult(verdict=_PARTIAL, reason_code="PRO_FORMA_PENDING_EXECUTION"),
+    ): PolicyResult(
+        verdict=_SUFFICIENT,
+        without_price_per_share=PolicyResult(
+            verdict=_PARTIAL,
+            reason_code="PRO_FORMA_WITHOUT_PRICE_PER_SHARE",
+            next_actions=("REQUEST_EXECUTED_DOC",),
+        ),
+    ),
     # A cap table asserting a round CLOSED at a stated price, with the closing
     # set stated to be elsewhere. Fluidstack's Series A-2: "The Series A-2
     # tranche closed May 30, 2025 at $15.00 per share ($750,000,000
@@ -182,6 +226,19 @@ MATRIX: dict[PolicyKey, PolicyResult] = {
         ExecutionStatus.NON_BINDING,
         PositionType.DIRECT_EQUITY,
     ): PolicyResult(verdict=_INSUFFICIENT, reason_code="NON_BINDING_TERM_SHEET"),
+    # NOT changed by the 2026-07-26 ruling, and that is a decision rather than an
+    # omission. A strict reading of ¶2 puts an exchange closing price and an
+    # administrator's capital account statement on the "other information" side
+    # too, which would carry branch B's conjunction to Banzai and Jio and take
+    # six more rows off `sufficient`. The owner's ruling names the third-party
+    # valuation memorandum and only that, and the reading that fits both the
+    # ruling and the letter is that these two are determinations of value made by
+    # an independent party in its own right — an exchange, an administrator —
+    # rather than information management selected and applied, which is what ¶2's
+    # second branch asks management to describe the basis of.
+    #
+    # It is inference, and it is recorded as inference. Widening branch B to
+    # these classes is the owner's call, not this file's.
     (
         _R2,
         SourceClass.PUBLIC_MARKET_QUOTE,
@@ -194,23 +251,63 @@ MATRIX: dict[PolicyKey, PolicyResult] = {
         ExecutionStatus.NOT_APPLICABLE,
         PositionType.INDIRECT_FEEDER,
     ): PolicyResult(verdict=_SUFFICIENT),
-    # Sufficient only WITHIN the memo's own stated reliance window. The window
-    # is INV-16 and is enforced before this table is consulted, in
-    # `applicable_claims()`: Capsule's memo forbids later reliance in a sentence
-    # that is a cited fact, so the boundary is traceable to the source rather
-    # than to a setting here.
+    # Owner ruling, 2026-07-26 · branch B is an AND, and only half of it exists.
+    #
+    #   "For marks based on **other information**: the underlying source **and**
+    #    management's memo describing the basis of the mark."
+    #
+    # A third-party valuation memorandum is a mark based on other information,
+    # not on a financing round, so branch B governs and the conjunction applies.
+    # The memo is the underlying source. No management memo describing the basis
+    # of the mark exists anywhere in this corpus — not for Moonfare, not for
+    # anyone — so the row read `sufficient` on one half of an "and".
+    #
+    # This is the correction that mattered most of the four, because it is the
+    # only one where the packet claimed MORE support than the letter allows. The
+    # others risk under-reporting; this one over-reported.
+    #
+    # `partial`, not `insufficient`: the memo is a real and authoritative leg of
+    # the conjunction, which is exactly what `partial` means everywhere else here
+    # (the R1 settlement cell evidences one limb of three). It is NOT the
+    # `fund_internal_record` case below, where neither leg stands on its own.
+    #
+    # `REQUEST_MANAGEMENT_BASIS_MEMO`, deliberately not `DRAFT_MANAGEMENT_
+    # ASSESSMENT`. R3's assessment is ¶3(b) — that a last round price *remains
+    # representative* at a later date. This is ¶2 — what the mark is *based on*.
+    # Different paragraphs, different documents, different questions. Collapsing
+    # them because both are "a memo from management" is the kind of distinction
+    # INVARIANTS.md exists to keep apart.
+    #
+    # NOTE · scope. `best()` is a disjunction and cannot express an "and", so a
+    # genuine management memo arriving alongside this one would still reduce to
+    # `partial` (§7.4 rule 3 — two partials never compose). That is correct
+    # today, since no such document exists; if one is ever added, branch B needs
+    # a composition rule, and it needs to be decided rather than discovered.
+    #
+    # The reliance window still applies first and independently: INV-16 is
+    # enforced in `applicable_claims()` before this table is consulted, so
+    # Capsule's memo — which forbids later reliance in a sentence that is itself
+    # a cited fact — is out of scope after its own date whatever this cell says.
     (
         _R2,
         SourceClass.THIRD_PARTY_VALUATION_MEMO,
         ExecutionStatus.NOT_APPLICABLE,
         PositionType.FX_DENOMINATED_INTEREST,
-    ): PolicyResult(verdict=_SUFFICIENT),
+    ): PolicyResult(
+        verdict=_PARTIAL,
+        reason_code="NO_MANAGEMENT_BASIS_MEMO",
+        next_actions=("REQUEST_MANAGEMENT_BASIS_MEMO",),
+    ),
     (
         _R2,
         SourceClass.THIRD_PARTY_VALUATION_MEMO,
         ExecutionStatus.NOT_APPLICABLE,
         PositionType.DIRECT_EQUITY,
-    ): PolicyResult(verdict=_SUFFICIENT),
+    ): PolicyResult(
+        verdict=_PARTIAL,
+        reason_code="NO_MANAGEMENT_BASIS_MEMO",
+        next_actions=("REQUEST_MANAGEMENT_BASIS_MEMO",),
+    ),
     (
         _R2,
         SourceClass.PRESS,

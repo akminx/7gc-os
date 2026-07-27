@@ -33,6 +33,7 @@ _NA = RequirementVerdict.NOT_APPLICABLE
 _MISSING = RequirementVerdict.MISSING
 _SUFFICIENT = RequirementVerdict.SUFFICIENT
 _PARTIAL = RequirementVerdict.PARTIAL
+_INSUFFICIENT = RequirementVerdict.INSUFFICIENT
 
 
 @dataclass(frozen=True)
@@ -204,22 +205,105 @@ def _pro_forma(relied: list[EvidenceClaim]) -> bool:
 
 
 def r2(ledger: Ledger, holding_id: str, on: date) -> Outcome:
-    """Fair value support at this measurement date — the audit letter's ¶2."""
+    """Fair value support at this measurement date — the audit letter's ¶2.
+
+    **¶2 is two branches, not one rule**, and which one applies depends on what
+    the mark is based on:
+
+        "For marks based on a financing round: the round's executed documents
+         **or** pro forma capitalization table evidencing price per share. For
+         marks based on other information: the underlying source **and**
+         management's memo describing the basis of the mark."
+
+    Using the "and" on a round-based mark, or the "or" on an other-information
+    mark, is wrong in a different direction each time. Both branches are carried
+    by the matrix cell for the source class, since the source class is what says
+    which branch a document belongs to; `policy/valid_tuples.py` quotes the
+    letter at each of them.
+
+    The one thing the matrix key cannot express is ¶2's qualifier on the
+    pro-forma disjunct — "evidencing price per share" is a property of the claim,
+    not of the tuple — so the cell carries a `without_price_per_share` fallback
+    and it is applied here.
+
+    Off-class evidence is excluded from the reduction rather than capped after
+    it. That is INV-17 and **not** ¶2: the letter says nothing about whether
+    evidence for a class you do not hold may support one you do.
+    """
     if not ledger.held_lots(holding_id, on):
         return Outcome(requirement=RequirementCode.R2, verdict=_NA)
 
     position = ledger.holdings[holding_id].position_type
     relied = supersede(applicable_claims(ledger, holding_id, RequirementCode.R2, on))
+    held = ledger.held_lots(holding_id, on)
+    held_classes = {lot.class_at(on) for lot in held}
+    # INV-17 · a recorded valuation-policy decision is what licenses pricing one
+    # class off another class's evidence. Read once, here, because two readers of
+    # the same gate is how a decision recorded for one position starts clearing
+    # another. Used by the off-class exclusion below and the cross-class cap.
+    authorized = bool(ledger.decisions_for(holding_id, on))
     verdicts: list[RequirementVerdict] = []
     reasons: set[str] = set()
     actions: set[str] = set()
+    off_class: list[str] = []
 
     for claim in relied:
         cell = lookup(RequirementCode.R2, claim.source_class, claim.execution_status, position)
+        # ¶2's qualifier on the pro-forma disjunct: "pro forma capitalization
+        # table **evidencing price per share**". A table that states no price is
+        # not the document the letter accepts, so the cell's fallback applies.
+        if cell.without_price_per_share is not None and claim.price_per_share is None:
+            cell = cell.without_price_per_share
+        # Owner ruling, 2026-07-26 · evidence about a class the fund does NOT
+        # hold may not RAISE this requirement's verdict until a valuation-policy
+        # decision is recorded.
+        #
+        # The letter is SILENT on this and the decision rests on INV-17, not on
+        # ¶2. There is no sentence about whether evidence concerning a class you
+        # do not hold may support one you do; the nearest thing is the framing of
+        # the request itself — "for each portfolio investment **held** during the
+        # periods under audit" — which leans against it, but that is inference.
+        # A future reader who disagrees is disagreeing with an inference, so say
+        # so rather than citing ¶2 at them.
+        #
+        # Lucra is the case: the fund holds Series A-1, and the CEO's email about
+        # the Series A-2 close was lifting R2 from `insufficient` to `partial`
+        # through `best()`. The cross-class cap below could not stop it — it only
+        # lowers `sufficient` to `partial`, so it never saw the raise happen.
+        # Pricing one class off another's evidence is a policy act (INV-17), and
+        # it was arriving through the reducer instead of through pricing.
+        if (
+            claim.priced_class is not None
+            and claim.priced_class not in held_classes
+            and not authorized
+        ):
+            off_class.append(claim.priced_class)
+            continue
         verdicts.append(cell.verdict)
         if cell.reason_code:
             reasons.add(cell.reason_code)
         actions.update(cell.next_actions)
+
+    if off_class:
+        # Named, not silently dropped. The claim stays in `relied_on` — it is in
+        # scope, it is what makes the holding cross-class, and a packet that
+        # hides the evidence it declined to count says less than the system
+        # knows.
+        reasons.add("OFF_CLASS_EVIDENCE_NOT_RELIED")
+
+    if relied and not verdicts:
+        # Everything in scope prices a class the fund does not hold. There is
+        # evidence and it says something, so `insufficient` rather than
+        # `missing` — the same reading as the `fund_internal_record` cell.
+        #
+        # Dream is the case, and it is worth stating because it looks like an
+        # edge and is not: the fund holds Series A-1, and both relied-upon
+        # documents price Series B. `validated_amount` has ALWAYS refused this
+        # one — `not_derivable, NO_PRICE_FOR_CLASS:series_a1` — while the verdict
+        # read `partial`. Two layers of the same system disagreeing about whether
+        # the held class had support. They now agree.
+        verdicts.append(_INSUFFICIENT)
+        reasons.add("NO_SUPPORT_FOR_A_HELD_CLASS")
 
     if not relied:
         # Nothing in scope. WHY nothing is in scope is the finding: a document
@@ -273,8 +357,6 @@ def r2(ledger: Ledger, holding_id: str, on: date) -> Outcome:
 
     verdict = reduce_links(verdicts)
 
-    held = ledger.held_lots(holding_id, on)
-    held_classes = {lot.class_at(on) for lot in held}
     covered = {c.priced_class for c in relied}
     # A document covering ONE class must not mark a multi-lot holding
     # sufficient. `None in covered` means some relied-upon claim is not
@@ -299,7 +381,7 @@ def r2(ledger: Ledger, holding_id: str, on: date) -> Outcome:
     #                   the C price. This is what INV-17 was written for.
     priced_classes = {c.priced_class for c in relied if c.priced_class is not None}
     cross_class = bool(priced_classes) and held_classes != priced_classes
-    if cross_class and not ledger.decisions_for(holding_id, on):
+    if cross_class and not authorized:
         if verdict is _SUFFICIENT:
             verdict = _PARTIAL
         reasons.add("CROSS_CLASS_POLICY_DECISION_REQUIRED")

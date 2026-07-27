@@ -18,8 +18,11 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
+from api import ledger as api_ledger
 from api import main, routes
+from api.config import resolve_schema
 from api.main import app
+from policy.from_ledger import load as load_policy
 from tests.schema_helpers import DSN
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -271,3 +274,97 @@ def test_the_ledger_connection_never_prepares_statements() -> None:
         )
     finally:
         conn.close()
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_packet_route_loads_the_policy_ledger_once_not_twice() -> None:
+    """`from_ledger.load` is fourteen statements, and this route needs it twice —
+    once to assemble the packet and once to run SPEC §8's validators over it.
+
+    It used to load it twice, which took `GET …/packet` from 18 round trips to
+    32. Nothing there is slow on the server: every one of those queries executes
+    in 0.1-15 ms, and the cost is entirely the round trip. Deployed, across a
+    continent, it is about half a second on the one screen a demo opens.
+
+    The bound is on the COUNT, not on the clock. `test_retrieval.py` carried a
+    wall-clock assertion of this shape and it failed three runs in five on an
+    unchanged tree, because the denominator was network jitter. A query count is
+    what the fix actually changed, and it is deterministic.
+
+    A ceiling of 24 rather than a pin at 18: this notices a reintroduced N+1 or a
+    second ledger load, without going red every time a plan shifts by a query.
+    A per-holding query would add eight at once and blow through it.
+
+    `psycopg.connect(..., cursor_factory=...)` is not used to count because the
+    subclass hook is on the connection. It is a local class rather than a
+    module-level one so nothing else can accidentally connect through it.
+    """
+    counted: list[str] = []
+    base = psycopg.Connection
+
+    class Counting(base):
+        def execute(self, query, *args, **kwargs):
+            counted.append(str(query))
+            return super().execute(query, *args, **kwargs)
+
+    conn = Counting.connect(DSN, prepare_threshold=None)
+    try:
+        with conn:
+            conn.execute(f"set search_path to {resolve_schema(None)}")
+            counted.clear()
+            built = api_ledger.packet(conn, FUND, PERIOD, policy=load_policy(conn))
+            assert built is not None, f"no packet for {FUND}/{PERIOD}"
+            rows = len(built.rows)
+    finally:
+        conn.close()
+
+    assert len(counted) <= 24, (
+        f"the packet route ran {len(counted)} queries for {rows} holdings. Fourteen "
+        f"of them are one `from_ledger.load`; a count near 32 means the caller is "
+        f"loading a second ledger instead of sharing the one it already has."
+    )
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_both_approval_outcomes_are_reachable_in_the_loaded_schema() -> None:
+    """`0003`'s approval prerequisites join `pbc_requirement`,
+    `evidence_assessment` and `evidence_link`. While all three were empty, EVERY
+    valuation approval — supported or not — was refused with `INV-10: valuation
+    approval N names no evidence set`.
+
+    That is a real Postgres refusal, and it is the wrong one: it is plumbing
+    rather than the audit finding, and it made an ACCEPTED approval unreachable.
+    A demo where every click fails identically cannot show that the database
+    refuses the UNSUPPORTED mark specifically.
+
+    So the property is that BOTH outcomes exist in the loaded corpus: at least
+    one mark whose every applicable requirement is `sufficient` (approvable) and
+    at least one where some applicable requirement is not (refused). Asserting
+    only the refusal is what the empty tables already satisfied.
+
+    `ingest/policy_seed.py::seed_assessments` is what writes them, so this goes
+    red if that step is dropped from the loader or if it stops running last.
+    """
+    conn = psycopg.connect(DSN, prepare_threshold=None)
+    try:
+        conn.execute(f"set search_path to {resolve_schema(None)}")
+        rows = conn.execute(
+            "select ea.mark_id,"
+            "       bool_and(ea.verdict = 'sufficient') as every_one_sufficient"
+            "  from evidence_assessment ea"
+            "  join pbc_requirement pr on pr.id = ea.requirement_id"
+            " where pr.applicable"
+            " group by ea.mark_id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert rows, (
+        "no evidence assessments in the loaded schema — every valuation approval "
+        "will be refused with INV-10 for want of an evidence set, which hides the "
+        "refusal the walkthrough is about"
+    )
+    approvable = [m for m, every in rows if every]
+    refused = [m for m, every in rows if not every]
+    assert approvable, "no mark is fully supported, so no approval can ever be ACCEPTED"
+    assert refused, "every mark is fully supported, so the database's refusal is unreachable"

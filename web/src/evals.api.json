@@ -1,0 +1,395 @@
+{
+  "by_holding": [
+    {
+      "claims": 3,
+      "company_name": "Banzai",
+      "documents": 1,
+      "facts": 12,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_i_banzai",
+      "packet_appearances": 3,
+      "recomputation_outcomes": {
+        "pass": 3
+      },
+      "requirements_applicable": 6,
+      "requirements_sufficient": 3
+    },
+    {
+      "claims": 1,
+      "company_name": "Capsule",
+      "documents": 1,
+      "facts": 12,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_i_capsule",
+      "packet_appearances": 3,
+      "recomputation_outcomes": {
+        "unconfirmable": 3
+      },
+      "requirements_applicable": 8,
+      "requirements_sufficient": 0
+    },
+    {
+      "claims": 4,
+      "company_name": "Jio (Indirect)",
+      "documents": 4,
+      "facts": 45,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_i_jio_indirect",
+      "packet_appearances": 3,
+      "recomputation_outcomes": {
+        "pass": 3
+      },
+      "requirements_applicable": 6,
+      "requirements_sufficient": 6
+    },
+    {
+      "claims": 3,
+      "company_name": "Roofstock",
+      "documents": 1,
+      "facts": 16,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_i_roofstock",
+      "packet_appearances": 3,
+      "recomputation_outcomes": {
+        "pass": 3
+      },
+      "requirements_applicable": 9,
+      "requirements_sufficient": 6
+    },
+    {
+      "claims": 1,
+      "company_name": "The Mom Project",
+      "documents": 1,
+      "facts": 11,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_i_the_mom_project",
+      "packet_appearances": 3,
+      "recomputation_outcomes": {
+        "blocked_incomplete": 3
+      },
+      "requirements_applicable": 8,
+      "requirements_sufficient": 0
+    },
+    {
+      "claims": 1,
+      "company_name": "Anthropic",
+      "documents": 1,
+      "facts": 5,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_anthropic",
+      "packet_appearances": 2,
+      "recomputation_outcomes": {
+        "unconfirmable": 2
+      },
+      "requirements_applicable": 4,
+      "requirements_sufficient": 0
+    },
+    {
+      "claims": 0,
+      "company_name": "Because Market",
+      "documents": 0,
+      "facts": 0,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_because_market",
+      "packet_appearances": 3,
+      "recomputation_outcomes": {
+        "unconfirmable": 3
+      },
+      "requirements_applicable": 8,
+      "requirements_sufficient": 0
+    },
+    {
+      "claims": 2,
+      "company_name": "Dream",
+      "documents": 2,
+      "facts": 15,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_dream",
+      "packet_appearances": 1,
+      "recomputation_outcomes": {
+        "unconfirmable": 1
+      },
+      "requirements_applicable": 3,
+      "requirements_sufficient": 1
+    },
+    {
+      "claims": 4,
+      "company_name": "Fluidstack",
+      "documents": 2,
+      "facts": 33,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_fluidstack",
+      "packet_appearances": 2,
+      "recomputation_outcomes": {
+        "fail": 1,
+        "pass": 1
+      },
+      "requirements_applicable": 5,
+      "requirements_sufficient": 3
+    },
+    {
+      "claims": 1,
+      "company_name": "Jackpocket",
+      "documents": 1,
+      "facts": 11,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_jackpocket",
+      "packet_appearances": 2,
+      "recomputation_outcomes": {
+        "not_applicable": 1,
+        "unconfirmable": 1
+      },
+      "requirements_applicable": 3,
+      "requirements_sufficient": 1
+    },
+    {
+      "claims": 2,
+      "company_name": "Lucra",
+      "documents": 2,
+      "facts": 16,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_lucra",
+      "packet_appearances": 2,
+      "recomputation_outcomes": {
+        "fail": 1,
+        "pass": 1
+      },
+      "requirements_applicable": 4,
+      "requirements_sufficient": 0
+    },
+    {
+      "claims": 2,
+      "company_name": "Moonfare",
+      "documents": 2,
+      "facts": 22,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_moonfare",
+      "packet_appearances": 3,
+      "recomputation_outcomes": {
+        "not_comparable": 1,
+        "pass": 1,
+        "unconfirmable": 1
+      },
+      "requirements_applicable": 7,
+      "requirements_sufficient": 0
+    },
+    {
+      "claims": 3,
+      "company_name": "Poolside",
+      "documents": 1,
+      "facts": 17,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_poolside",
+      "packet_appearances": 2,
+      "recomputation_outcomes": {
+        "pass": 2
+      },
+      "requirements_applicable": 5,
+      "requirements_sufficient": 4
+    },
+    {
+      "claims": 1,
+      "company_name": "Sway",
+      "documents": 1,
+      "facts": 22,
+      "facts_with_a_failing_citation": 0,
+      "holding_id": "fund_ii_sway",
+      "packet_appearances": 3,
+      "recomputation_outcomes": {
+        "pass": 1,
+        "unconfirmable": 2
+      },
+      "requirements_applicable": 8,
+      "requirements_sufficient": 2
+    }
+  ],
+  "citations": {
+    "failures": [],
+    "resolving": 237,
+    "total": 237
+  },
+  "corpus": {
+    "claims": 28,
+    "companies": 14,
+    "documents": 20,
+    "facts": 237,
+    "holdings": 14,
+    "packet_periods": 6
+  },
+  "extraction": {
+    "accepted": 3,
+    "accepted_fields": [
+      "email_date",
+      "post_money_valuation",
+      "closing_set_status"
+    ],
+    "document": "Lucra - Email from CEO re Series A-2 Close (October 17, 2025).txt",
+    "measured": true,
+    "model": "anthropic/claude-opus-5",
+    "proposed": 5,
+    "provider": "Anthropic",
+    "refused": [
+      {
+        "field_name": "price_per_share",
+        "reason": "the cited passage does not state '$3.00 per share' as a figure in its own right, exactly once",
+        "value_text": "$3.00 per share"
+      }
+    ],
+    "replayed_from_recording": true
+  },
+  "measured_at": "2026-07-27T00:00:00+00:00",
+  "not_measured": [
+    {
+      "measured_by": ".venv/bin/python -m pytest tests/test_oracle.py tests/test_recompute.py",
+      "what": "Whether the packet agrees with the independent oracle derivation",
+      "why": "The product is not permitted to see its own answer key. tests/test_gate_guards.py refuses any reference to the oracle snapshot from api/, policy/ and packet/, by import OR by file read \u2014 so a route that reported its own agreement with it would be the exact thing that guard exists to prevent."
+    },
+    {
+      "measured_by": "a hand transcription of the corpus made WITHOUT reading the extractors, checked by the suite. Until it lands this is an open blind spot and is reported as one.",
+      "what": "Whether a citation that resolves is the RIGHT passage",
+      "why": "Everything on this page verifies that the stored offsets select the stored quote. That proves the offsets and the quote agree WITH EACH OTHER. An exporter can select a real but wrong passage and remain internally consistent, and nothing here would notice."
+    },
+    {
+      "measured_by": "human review of the map itself",
+      "what": "Whether the declared figure-to-requirement map is correct",
+      "why": "ingest/documents/field_requirements.py is a reviewed judgement, not a measurement. The guards prove every extracted figure is DECLARED and that an undeclared one is refused; no ground truth says the declarations are right."
+    },
+    {
+      "measured_by": "REQUIRE_DB_TESTS=1 .venv/bin/python scripts/mutate.py",
+      "what": "Whether every guard in the suite can actually fail",
+      "why": "A test that passes because it measures nothing is this project's most expensive recurring defect. Mutation coverage answers it and cannot be computed inside a request: it moves the corpus out of the tree and edits sources in place."
+    },
+    {
+      "measured_by": "ingest/documents/reliance.py, which is a reviewed judgement",
+      "what": "Retrieval quality against anything but the ledger's own reliance",
+      "why": "The gold set is read out of claim_requirement \u2014 the table recording which requirement each document is relied upon for. So this measures whether retrieval finds what the ledger already relies on, not whether the ledger relies on the right documents."
+    }
+  ],
+  "retrieval": {
+    "blind": {
+      "k1": {
+        "candidate_documents": 40,
+        "cases": 40,
+        "found_every_relied_on": 5,
+        "found_some_relied_on": 6,
+        "k": 1,
+        "mean_candidates_per_case": 1.0
+      },
+      "k3": {
+        "candidate_documents": 120,
+        "cases": 40,
+        "found_every_relied_on": 14,
+        "found_some_relied_on": 15,
+        "k": 3,
+        "mean_candidates_per_case": 3.0
+      },
+      "k5": {
+        "candidate_documents": 192,
+        "cases": 40,
+        "found_every_relied_on": 23,
+        "found_some_relied_on": 24,
+        "k": 5,
+        "mean_candidates_per_case": 4.8
+      }
+    },
+    "gold_cases": 40,
+    "k_reported": [
+      1,
+      3,
+      5
+    ],
+    "misses": [
+      {
+        "company_name": "Lucra",
+        "holding_id": "fund_ii_lucra",
+        "k": 1,
+        "measurement_date": "2025-12-31",
+        "relied_on": [
+          "dv_b80f5364fa2beda041e7cd6e"
+        ],
+        "requirement": "R1",
+        "retrieved": [
+          "dv_78f7e1cdbb2be00400719d05"
+        ],
+        "scope": "scoped"
+      }
+    ],
+    "retrievals_run": 80,
+    "scoped": {
+      "k1": {
+        "candidate_documents": 40,
+        "cases": 40,
+        "found_every_relied_on": 36,
+        "found_some_relied_on": 39,
+        "k": 1,
+        "mean_candidates_per_case": 1.0
+      },
+      "k3": {
+        "candidate_documents": 45,
+        "cases": 40,
+        "found_every_relied_on": 40,
+        "found_some_relied_on": 40,
+        "k": 3,
+        "mean_candidates_per_case": 1.125
+      },
+      "k5": {
+        "candidate_documents": 45,
+        "cases": 40,
+        "found_every_relied_on": 40,
+        "found_some_relied_on": 40,
+        "k": 5,
+        "mean_candidates_per_case": 1.125
+      }
+    }
+  },
+  "source": "ledger",
+  "validators": {
+    "disagreements": [
+      {
+        "company_name": "Fluidstack",
+        "derived": {
+          "amount": "2500000.0000",
+          "currency": "USD"
+        },
+        "difference": {
+          "amount": "3500000.0000",
+          "currency": "USD"
+        },
+        "holding_id": "fund_ii_fluidstack",
+        "measurement_date": "2025-12-31",
+        "reason": "PER_CLASS_SHARES_X_PPS",
+        "reported": {
+          "amount": "6000000.0000",
+          "currency": "USD"
+        }
+      },
+      {
+        "company_name": "Lucra",
+        "derived": {
+          "amount": "1500000.0000",
+          "currency": "USD"
+        },
+        "difference": {
+          "amount": "750000.0000",
+          "currency": "USD"
+        },
+        "holding_id": "fund_ii_lucra",
+        "measurement_date": "2025-12-31",
+        "reason": "PER_CLASS_SHARES_X_PPS",
+        "reported": {
+          "amount": "2250000.0000",
+          "currency": "USD"
+        }
+      }
+    ],
+    "holding_dates": 35,
+    "outcomes": {
+      "blocked_incomplete": 3,
+      "fail": 2,
+      "not_applicable": 1,
+      "not_comparable": 1,
+      "pass": 15,
+      "unconfirmable": 13
+    }
+  }
+}

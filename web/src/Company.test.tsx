@@ -3,17 +3,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HoldingRow } from "./contracts";
 import { FIXTURE_ROW } from "./fixture";
-import { HOLDING_WITH_EVIDENCE, SWAY_ROW } from "./testdata";
+import type { Recomputation } from "./responses";
+import { DISAGREEING_RECOMPUTATION, HOLDING_WITH_EVIDENCE, SWAY_ROW } from "./testdata";
 
 /**
  * `VITE_API_BASE_URL` is read at module scope in the data seam, so each case
  * re-imports the component after stubbing the environment.
  */
-async function mount(apiBase: string, rows: HoldingRow[], selected: string | null = null) {
+async function mount(
+  apiBase: string,
+  rows: HoldingRow[],
+  selected: string | null = null,
+  recomputations: Record<string, Recomputation> | null = null,
+) {
   vi.stubEnv("VITE_API_BASE_URL", apiBase);
   vi.resetModules();
   const { Company } = await import("./Company");
-  return render(<Company rows={rows} selected={selected} onSelect={() => {}} />);
+  return render(
+    <Company rows={rows} recomputations={recomputations} selected={selected} onSelect={() => {}} />,
+  );
 }
 
 function serve(body: unknown): string[] {
@@ -47,6 +55,58 @@ describe("Company", () => {
     });
     expect(calls).toEqual(["https://api.example.com/holdings/dream"]);
     expect(screen.getByText("characters 4821–4891")).toBeDefined();
+  });
+
+  /**
+   * The workspace's figure must be the SELECTED holding's.
+   *
+   * `recomputations` is a map keyed by holding, and the company screen looks up
+   * one entry from it. A lookup keyed on anything else — the first entry, a row
+   * index, the previously selected id — would show Fluidstack's 3,500,000
+   * discrepancy under Lucra's name, which is worse than showing nothing: it is
+   * a specific, checkable, wrong finding about a named company.
+   *
+   * Two rows and two different derived amounts, so returning either one
+   * unconditionally fails. `Dashboard.test.tsx` guards the same property on the
+   * table; this guards it on the screen the walkthrough actually stops at.
+   */
+  it("shows the selected holding's own recomputation, never another row's", async () => {
+    serve(HOLDING_WITH_EVIDENCE);
+    const forDream: Recomputation = {
+      ...DISAGREEING_RECOMPUTATION,
+      holding_id: FIXTURE_ROW.holding_id,
+      derived: { amount: "222.0000", currency: "USD" },
+    };
+    const forSway: Recomputation = {
+      ...DISAGREEING_RECOMPUTATION,
+      holding_id: SWAY_ROW.holding_id,
+      derived: { amount: "999.0000", currency: "USD" },
+    };
+    const { container } = await mount(
+      "https://api.example.com",
+      [FIXTURE_ROW, SWAY_ROW],
+      SWAY_ROW.holding_id,
+      { [FIXTURE_ROW.holding_id]: forDream, [SWAY_ROW.holding_id]: forSway },
+    );
+    await waitFor(() => {
+      expect(container.querySelector(".figure--recheck")).not.toBeNull();
+    });
+    const shown = container.querySelector(".figure--recheck .figure__amount")?.textContent;
+    expect(shown).toBe("999.0000 USD");
+    expect(shown).not.toBe("222.0000 USD");
+  });
+
+  it("says so when the packet carried no recomputation for this holding", async () => {
+    serve(HOLDING_WITH_EVIDENCE);
+    const { container } = await mount("https://api.example.com", [FIXTURE_ROW], null, {});
+    await waitFor(() => {
+      expect(container.querySelector(".figure--recheck")).not.toBeNull();
+    });
+    // A missing response, stated as one — not a finding that the mark could not
+    // be checked, which is a different thing entirely.
+    expect(container.querySelector(".figure--recheck")?.textContent).toContain(
+      "not supplied by API",
+    );
   });
 
   it("re-asks when the holding changes, so the panel is never the previous company's", async () => {

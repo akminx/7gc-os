@@ -398,13 +398,25 @@ def _approvals(conn: Conn, fund_id: str, period_id: str) -> dict[int, Approval]:
     return latest
 
 
-def packet(conn: Conn, fund_id: str, period_id: str) -> Packet | None:
-    """The packet for one fund-period, assembled from the ledger."""
+def packet(
+    conn: Conn, fund_id: str, period_id: str, policy: PolicyLedger | None = None
+) -> Packet | None:
+    """The packet for one fund-period, assembled from the ledger.
+
+    `policy` is accepted rather than always loaded because `from_ledger.load` is
+    fourteen statements and a caller that also runs SPEC §8's validators needs
+    the same ledger. Loading it twice took `GET …/packet` from 19 round trips to
+    33 — about half a second deployed, on the one screen a demo opens.
+
+    A parameter rather than a second return value: `packet()` has three callers
+    and only one of them wants the ledger, so widening the return type would make
+    the other two unpack something they discard.
+    """
     period = _period(conn, fund_id, period_id)
     if period is None:
         return None
 
-    policy = load_policy(conn)
+    policy = load_policy(conn) if policy is None else policy
     claims = all_claims(conn)
 
     # Membership comes from the LOTS, not from the marks. Anchoring on marks

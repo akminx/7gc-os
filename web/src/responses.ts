@@ -2,8 +2,10 @@ import type {
   Claim,
   DecisionStatus,
   DecisionType,
+  Money,
   Packet,
   PacketTotals,
+  RequirementCode,
   SourceFact,
 } from "./contracts";
 
@@ -57,6 +59,69 @@ export interface FundsResponse {
 export interface PacketResponse extends Packet {
   source: Source;
   totals: PacketTotals;
+  /**
+   * SPEC §8's V2 over the same ledger, keyed by holding — what the cited
+   * evidence independently derives for each mark.
+   *
+   * BESIDE the rows, not inside them, because it is a second opinion about a
+   * row rather than a property of one. Folding it into `HoldingRow` would put a
+   * derived figure where the reported ones live, and that collapse is exactly
+   * what the label exists to prevent: "validated: 2,500,000" is a claim this
+   * system has not earned, while "derived 2,500,000 against a reported
+   * 6,000,000" is a finding.
+   *
+   * `null` when no derivation ran at all — the fixture branch has no ledger to
+   * derive from. That is not the same as an empty object, which would mean the
+   * derivation ran and found nothing to say about any row.
+   */
+  recomputations: Record<string, Recomputation> | null;
+}
+
+/**
+ * One class of shares, priced by its OWN class (INV-17).
+ *
+ * Per class rather than one total because that is the granularity at which the
+ * finding is legible: Fluidstack is 100,000 Series A at $10.00 plus 100,000
+ * Series A-2 at $15.00, and the reported 6,000,000 is 200,000 shares at the
+ * $30.00 Series B price applied to every class. One number hides which half is
+ * wrong.
+ */
+export interface RecomputedClass {
+  lot_id: string;
+  security_class: string;
+  shares: number;
+  price_per_share: string;
+  amount: Money;
+  /** The price came from a class the fund does not hold at this date. */
+  cross_class: boolean;
+}
+
+/**
+ * What the cited evidence derives for one mark, against what was reported.
+ *
+ * Computed on read and stored nowhere. `mark.validated_amount` is a stored
+ * column, and SPEC §6.3 binds an approval to `(mark_revision,
+ * evidence_set_hash, policy_version)` precisely so an approved total cannot
+ * follow a moving figure — so a read-time derivation written into that column
+ * would reopen the question the binding exists to close.
+ *
+ * `difference` arrives computed, because §5.3 forbids the browser subtracting
+ * two canonical figures. It is `null` and never zero when either side is
+ * absent: the distance between a figure that exists and one that does not is
+ * not nothing.
+ */
+export interface Recomputation {
+  holding_id: string;
+  /** SPEC §8's six-value vocabulary, unordered. Glossed by `outcomeGloss`. */
+  outcome: string;
+  /** HOW the figure was reached, or the named reason there is none. */
+  reason: string;
+  derived: Money | null;
+  reported: Money | null;
+  difference: Money | null;
+  evidence_claim_ids: string[];
+  per_class: RecomputedClass[];
+  policy_version: string;
 }
 
 /** `GET /funds/{fund}/periods/{period}/totals` — the same totals, alone. */
@@ -75,7 +140,46 @@ export interface TotalsResponse extends PacketTotals {
  * one passage that states it.
  */
 export interface EvidenceClaim extends Claim {
-  facts: SourceFact[];
+  facts: EvidenceFact[];
+}
+
+/**
+ * One extracted figure, with the client's requests it answers.
+ *
+ * `answers_requirements` is added by `api/serialize.py`; it is not a field of
+ * `SourceFact`. The ledger binds a CLAIM to a requirement, never a FIGURE, so
+ * Fluidstack's Series A purchase agreement — legitimately relied upon for both
+ * existence and fair value — rendered all twelve of its figures under both, and
+ * clicking R1 then R2 showed the same window twice.
+ *
+ * The judgement is the API's and stays the API's. `scripts/check-web-arch.mjs`
+ * refuses a browser that derives what the API owns, and it is right to: a
+ * component deciding `fund_shares` is about existence would be writing evidence
+ * policy in TypeScript. This array is read, grouped and labelled here, never
+ * computed here.
+ *
+ * An empty array is a declaration, not a lookup that failed. The API raises on
+ * a field name nobody has ruled on rather than returning one, so the empty case
+ * always means "reviewed, and it answers none of the four requests" — which is
+ * why the trail shows those figures under the document rather than dropping
+ * them.
+ */
+export interface EvidenceFact extends SourceFact {
+  answers_requirements: RequirementCode[];
+  /**
+   * How directly this figure answers each request it answers. Lower leads.
+   *
+   * The second half of the same judgement `answers_requirements` carries, and it
+   * is the API's for the same reason: which of ten relevant figures an auditor
+   * should be shown FIRST is a statement about evidence, not a display
+   * preference. Fluidstack's Series A agreement answers existence and cost with
+   * ten figures, and only one of them answers "what did the fund pay".
+   *
+   * The browser orders by this and never computes it — ordering a display is the
+   * permitted half of §5.3. Keyed only by the requests the figure answers, so a
+   * rank cannot be read for a request it has nothing to do with.
+   */
+  answer_rank: Partial<Record<RequirementCode, number>>;
 }
 
 /**
@@ -167,4 +271,146 @@ export interface DecisionRequest {
   subject_id: string;
   policy_version: string | null;
   reason: string | null;
+}
+
+/**
+ * `GET /evals` — what this system has been measured to do, measured on request.
+ *
+ * Every number arrives computed. None is transcribed: the figures in the
+ * handoff's table came from agent reports and triage files, and typing one into
+ * the page would make it a claim about a run nobody can reproduce — the same
+ * defect as a hand-maintained derived value, which this project has already
+ * failed at twice.
+ *
+ * Rates arrive as a numerator and a denominator, never as a percentage. A count
+ * is auditable; a percentage is a conclusion, and §5.3 refuses a browser that
+ * divides one count by another. Where a mean is the readable form — candidates
+ * per case — the API sends it WITH its two counts.
+ */
+export interface EvalsResponse {
+  source: Source;
+  measured_at: string;
+  corpus: CorpusCounts;
+  retrieval: RetrievalMeasurement;
+  citations: CitationCensus;
+  extraction: ExtractionMeasurement;
+  validators: ValidatorCensus;
+  by_holding: HoldingMeasurement[];
+  /** What this page does NOT measure, and where each gap IS measured. */
+  not_measured: BlindSpot[];
+}
+
+export interface CorpusCounts {
+  holdings: number;
+  companies: number;
+  documents: number;
+  claims: number;
+  facts: number;
+  packet_periods: number;
+}
+
+/**
+ * One cutoff, as counts.
+ *
+ * `found_some_relied_on` and `found_every_relied_on` are different questions and
+ * neither is "recall" on its own: one document out of two relied upon is a hit
+ * for the first and a miss for the second, and an auditor asking "did you find
+ * the support" means the second.
+ */
+export interface RecallAtK {
+  k: number;
+  cases: number;
+  found_some_relied_on: number;
+  found_every_relied_on: number;
+  candidate_documents: number;
+  mean_candidates_per_case: number;
+}
+
+export interface RetrievalMiss {
+  scope: string;
+  k: number;
+  holding_id: string;
+  company_name: string;
+  requirement: RequirementCode;
+  measurement_date: string;
+  relied_on: string[];
+  retrieved: string[];
+}
+
+export interface RetrievalMeasurement {
+  gold_cases: number;
+  retrievals_run: number;
+  k_reported: number[];
+  /** Keyed `k1` / `k3` / `k5`; absent keys are handled, never assumed. */
+  scoped: Record<string, RecallAtK | undefined>;
+  blind: Record<string, RecallAtK | undefined>;
+  misses: RetrievalMiss[];
+}
+
+export interface CitationCensus {
+  total: number;
+  resolving: number;
+  failures: {
+    fact_id: number;
+    claim_id: string;
+    field_name: string;
+    document_version_id: string;
+    /** `[start, end)` — the auditor's own unit, and the one the passage pane shows. */
+    chars: [number, number];
+  }[];
+}
+
+/**
+ * The recorded model call, replayed. Never a live one — CI has no key and must
+ * not need one, and a page that called a model would report a different number
+ * every time it was opened.
+ *
+ * `measured` is false when the recording cannot be re-bound, and `why` says so.
+ * That is not the same as a model that proposed nothing.
+ */
+export interface ExtractionMeasurement {
+  measured: boolean;
+  why?: string;
+  document?: string;
+  model?: string;
+  provider?: string;
+  replayed_from_recording?: boolean;
+  proposed?: number;
+  accepted?: number;
+  accepted_fields?: string[];
+  refused?: { field_name: string; value_text: string; reason: string }[];
+}
+
+export interface ValidatorCensus {
+  holding_dates: number;
+  /** SPEC §8's six outcomes, counted. Never reduced to a pass rate. */
+  outcomes: Record<string, number | undefined>;
+  disagreements: {
+    holding_id: string;
+    company_name: string;
+    measurement_date: string;
+    reported: Money;
+    derived: Money;
+    difference: Money;
+    reason: string;
+  }[];
+}
+
+export interface HoldingMeasurement {
+  holding_id: string;
+  company_name: string;
+  documents: number;
+  claims: number;
+  facts: number;
+  facts_with_a_failing_citation: number;
+  packet_appearances: number;
+  requirements_applicable: number;
+  requirements_sufficient: number;
+  recomputation_outcomes: Record<string, number | undefined>;
+}
+
+export interface BlindSpot {
+  what: string;
+  why: string;
+  measured_by: string;
 }

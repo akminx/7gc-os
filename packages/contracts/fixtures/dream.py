@@ -145,13 +145,24 @@ DREAM_ASSESSMENTS = [
         next_actions=["REQUEST_FROM_COMPANY"],
         policy_version="v1",
     ),
+    # `insufficient`, not `partial`. The fund holds Series A-1 and BOTH relied-upon
+    # documents price Series B, so nothing in scope prices a class the fund holds.
+    #
+    # Owner ruling, 2026-07-26 (INV-17, and the audit letter is silent on it):
+    # evidence about a class the fund does not hold may not raise a verdict until
+    # a valuation-policy decision is recorded. The cross-class rule could not
+    # catch this on its own — it only lowers `sufficient`.
+    #
+    # `derivation_reason` above has said `NO_PRICE_FOR_CLASS:series_a1` all along.
+    # The verdict now agrees with the derivation instead of reading `partial`
+    # beside it — which is the disagreement this fixture exists to expose.
     RequirementAssessment(
         requirement=RequirementCode.R2,
-        verdict=RequirementVerdict.PARTIAL,
+        verdict=RequirementVerdict.INSUFFICIENT,
         reason_codes=[
-            "CLOSING_SET_PENDING",
             "CROSS_CLASS_POLICY_DECISION_REQUIRED",
-            "PRO_FORMA_PENDING_EXECUTION",
+            "NO_SUPPORT_FOR_A_HELD_CLASS",
+            "OFF_CLASS_EVIDENCE_NOT_RELIED",
         ],
         next_actions=["RECORD_VALUATION_POLICY_DECISION"],
         evidence=[

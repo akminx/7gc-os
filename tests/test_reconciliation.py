@@ -19,16 +19,22 @@ can be wrong in exactly one consistent way.
 
 from __future__ import annotations
 
+import io
 import json
+import tempfile
+import zipfile
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api import ledger, reconciliation
+from api.config import ledger_schema
+from packet.export import MANIFEST_NAME
 from tests.schema_helpers import DSN
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -331,3 +337,145 @@ def test_the_two_gap_counts_are_derived_twice_and_agree() -> None:
         assert counts["positions"] == counts["held_at_date"] + counts["not_held_at_date"]
         assert counts["fully_supported"] + counts["open_gap_positions"] == counts["positions"]
         assert counts["open_gap_positions"] == totals["packet_gap_positions"]
+
+
+# ── The packet as a download ─────────────────────────────────────────────
+# SPEC §1 calls the assembled package the deliverable. It was written to the API
+# host's disk, which on Render is ephemeral and unreachable, so the deliverable
+# could not be obtained by the person it is for. `export.zip` streams it.
+#
+# The guard below is deliberately not "the response was 200". A 200 carrying an
+# empty archive is the failure worth catching, because it is what a download
+# button would render as success.
+
+#: A fund-period that exists in the demo ledger and is in the auditor's packet.
+DOWNLOADABLE = ("fund_ii", "fund_ii_24q4")
+
+
+def _archive_matches_manifest(payload: bytes, expected_files: list[str]) -> bool:
+    """The guard, as one predicate, so a mutation can be shown to turn it red.
+
+    Three conditions, and an empty archive fails all three: the bytes open as a
+    zip, `MANIFEST.json` is present, and the members other than the manifest are
+    exactly the files the JSON route reported. Set equality rather than a count,
+    because two wrong files and two right ones is the same number.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            if archive.testzip() is not None:
+                return False
+            names = set(archive.namelist())
+    except zipfile.BadZipFile:
+        return False
+    return MANIFEST_NAME in names and names - {MANIFEST_NAME} == set(expected_files)
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_download_carries_every_file_the_json_route_manifested() -> None:
+    """The deliverable arrives whole. The file list is taken from the JSON route
+    rather than written down here, so the two routes cannot drift: if the
+    exporter starts emitting a table, both move together or this fails."""
+    fund_id, period_id = DOWNLOADABLE
+    listing = _client().get(f"/funds/{fund_id}/periods/{period_id}/export").json()
+    response = _client().get(f"/funds/{fund_id}/periods/{period_id}/export.zip")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert _archive_matches_manifest(response.content, listing["files"])
+    #: `file_count` counts the manifest's entries; the archive holds those plus
+    #: `MANIFEST.json`, which is not one of its own entries.
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert len(archive.namelist()) == listing["file_count"] + 1
+    assert response.headers["x-file-count"] == str(listing["file_count"])
+    assert int(listing["file_count"]) > 0
+
+
+def test_an_empty_archive_fails_the_guard() -> None:
+    """The mutation that proves the guard can go red.
+
+    A 200 with an empty zip is the shape a broken download takes — the button
+    works, the file opens, and there is nothing in it. If this ever passes, the
+    test above has stopped checking anything."""
+    empty = io.BytesIO()
+    with zipfile.ZipFile(empty, "w"):
+        pass
+    assert not _archive_matches_manifest(empty.getvalue(), ["README.md"])
+    assert not _archive_matches_manifest(b"", ["README.md"])
+    #: And a manifest with nothing beside it fails too, which is the subtler
+    #: version: an archive that opens and looks structured but delivers no packet.
+    manifest_only = io.BytesIO()
+    with zipfile.ZipFile(manifest_only, "w") as archive:
+        archive.writestr(MANIFEST_NAME, "{}")
+    assert not _archive_matches_manifest(manifest_only.getvalue(), ["README.md"])
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_download_refuses_exactly_as_the_json_route_does() -> None:
+    """Both routes answer a fund-period with no packet with the same 409 and the
+    same sentence. The refusal names what is wrong, and it must not be reduced to
+    a download that simply does not arrive."""
+    listing = _client().get("/funds/fund_ii/periods/nonexistent/export")
+    download = _client().get("/funds/fund_ii/periods/nonexistent/export.zip")
+    assert listing.status_code == download.status_code == 409
+    assert listing.json()["detail"] == download.json()["detail"]
+    assert "nonexistent" in download.json()["detail"]
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_a_download_registers_nothing_and_leaves_nothing_behind() -> None:
+    """SPEC §3.1 is read-only about the LEDGER, and this is the evidence rather
+    than the assertion: `packet_manifest_entry` has the same row count after the
+    download as before, and no staging directory survives the request."""
+    fund_id, period_id = DOWNLOADABLE
+    assert DSN is not None
+    with psycopg.connect(DSN, prepare_threshold=None) as conn:
+        conn.execute(f"set search_path to {ledger_schema()}")
+        before = conn.execute("select count(*) from packet_manifest_entry").fetchone()
+
+    leftovers = set(Path(tempfile.gettempdir()).glob("packet-download-*"))
+    response = _client().get(f"/funds/{fund_id}/periods/{period_id}/export.zip")
+    assert response.status_code == 200
+    assert set(Path(tempfile.gettempdir()).glob("packet-download-*")) == leftovers
+
+    with psycopg.connect(DSN, prepare_threshold=None) as conn:
+        conn.execute(f"set search_path to {ledger_schema()}")
+        after = conn.execute("select count(*) from packet_manifest_entry").fetchone()
+    assert before == after
+    #: Stated on the response itself, because the browser is where the wrong
+    #: conclusion gets drawn. Generating a packet is not registering one.
+    assert response.headers["x-recorded-in-ledger"] == "false"
+
+
+@pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+def test_the_download_does_not_publish_into_the_shared_packet_directory() -> None:
+    """The JSON route publishes to `PACKET_OUT`; this one builds in a temporary
+    directory and keeps nothing. A download that quietly overwrote the published
+    packet would make two callers race over one directory."""
+    fund_id, period_id = DOWNLOADABLE
+    published = reconciliation.PACKET_OUT / period_id
+    before = sorted(p.name for p in published.iterdir()) if published.is_dir() else None
+    assert _client().get(f"/funds/{fund_id}/periods/{period_id}/export.zip").status_code == 200
+    after = sorted(p.name for p in published.iterdir()) if published.is_dir() else None
+    assert before == after
+
+
+def test_the_download_says_there_is_no_ledger_rather_than_shipping_the_stub(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no DSN the scorecard falls back to the Dream fixture and says so. A
+    packet must not: a one-holding stub zipped under the fund's name is a
+    deliverable that is wrong rather than absent."""
+    monkeypatch.setattr(reconciliation, "dsn", lambda key="DATABASE_URL": None)
+    response = _client().get("/funds/fund_ii/periods/fund_ii_24q4/export.zip")
+    assert response.status_code == 503
+    assert "no database is configured" in response.json()["detail"]
+
+
+def test_the_download_filename_cannot_carry_a_header_break() -> None:
+    """The ids reach `Content-Disposition` from the URL. A newline there is a
+    split response, not an odd filename, so everything outside the safe set is
+    replaced before it gets near a header."""
+    assert reconciliation._download_name("fund_ii", "24q4") == "fund_ii-24q4.zip"
+    hostile = reconciliation._download_name("a\r\nX-Evil: 1", "../../etc/passwd")
+    assert "\r" not in hostile and "\n" not in hostile and "/" not in hostile
+    assert hostile.endswith(".zip")

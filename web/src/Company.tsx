@@ -4,7 +4,7 @@ import type { HoldingRow } from "./contracts";
 import type { Async } from "./data";
 import { failureDetail, loadHolding } from "./data";
 import { EvidencePanel } from "./Evidence";
-import type { HoldingResponse } from "./responses";
+import type { HoldingResponse, Recomputation } from "./responses";
 import { EvidenceTrail } from "./Trail";
 import { Section, SourceBadge } from "./ui";
 import { Workspace } from "./Workspace";
@@ -24,10 +24,12 @@ import { Workspace } from "./Workspace";
  */
 export function Company({
   rows,
+  recomputations,
   selected,
   onSelect,
 }: {
   rows: HoldingRow[];
+  recomputations: Record<string, Recomputation> | null;
   selected: string | null;
   onSelect: (holdingId: string) => void;
 }) {
@@ -119,7 +121,7 @@ export function Company({
         </>
       )}
 
-      <Workspace row={row} />
+      <Workspace row={row} recomputation={recomputations?.[row.holding_id]} />
     </>
   );
 }

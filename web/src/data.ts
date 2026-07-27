@@ -3,6 +3,7 @@ import { FIXTURE_FUNDS, FIXTURE_HOLDING, FIXTURE_PACKET } from "./fixture";
 import type {
   DecisionRequest,
   DocumentResponse,
+  EvalsResponse,
   ExportResponse,
   FundsResponse,
   HoldingResponse,
@@ -95,6 +96,35 @@ export async function loadHolding(holdingId: string): Promise<HoldingResponse> {
   if (API === "") return fixtureHolding(holdingId);
   const url = `${API}/holdings/${holdingId}`;
   return (await fetchJson(url, HOLDING_KEYS, "holding")) as HoldingResponse;
+}
+
+const EVALS_KEYS = [
+  "source",
+  "measured_at",
+  "corpus",
+  "retrieval",
+  "citations",
+  "extraction",
+  "validators",
+  "by_holding",
+  "not_measured",
+];
+
+/**
+ * What the system has been measured to do, measured on request.
+ *
+ * NO FIXTURE BRANCH, and that is the whole point of the route. Every figure on
+ * the evaluation page is a measurement OF A LEDGER; the bundled one-holding stub
+ * would produce real-looking numbers about a corpus that is not the fund, which
+ * is the failure `source` exists to prevent arriving somewhere `source` cannot
+ * help. With no API configured this says so rather than answering.
+ */
+export async function loadEvals(): Promise<EvalsResponse> {
+  if (API === "")
+    throw new Error(
+      "No API is configured. Every number on this page is a measurement of a ledger, and the bundled fixture is a one-holding demo stub — reporting its figures here would be reporting a measurement of something that is not the fund.",
+    );
+  return (await fetchJson(`${API}/evals`, EVALS_KEYS, "evals")) as EvalsResponse;
 }
 
 const DOCUMENT_KEYS = [

@@ -453,10 +453,21 @@ def test_a_lineage_only_observation_may_prove_a_mark_did_not_move() -> None:
 
 
 def test_a_memos_own_reliance_window_closes_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    """INV-16 outranks the matrix. A third-party memo is `sufficient` only
-    within the window its own text states — Capsule's forbids later reliance in
-    a sentence that is itself a cited fact, so the boundary is traceable to the
-    source rather than to a setting."""
+    """INV-16 outranks the matrix. A third-party memo is read only within the
+    window its own text states — Capsule's forbids later reliance in a sentence
+    that is itself a cited fact, so the boundary is traceable to the source
+    rather than to a setting.
+
+    In-window the memo is `partial`, not `sufficient`. The audit letter's ¶2
+    routes it through the second branch — "For marks based on other information:
+    the underlying source **and** management's memo describing the basis of the
+    mark" — and no management memo exists in this corpus, so the memo satisfies
+    one half of an "and" (owner ruling, 2026-07-26).
+
+    What this test is about is the WINDOW, and the two verdicts stay distinct
+    either way: in-window the matrix cell governs, out-of-window there is no
+    support at all. A memo that reads the same on both sides of its own boundary
+    is the failure this guards."""
     memo = _claim(
         "memo",
         None,
@@ -468,10 +479,171 @@ def test_a_memos_own_reliance_window_closes_it(monkeypatch: pytest.MonkeyPatch) 
         applicable_to=date(2024, 12, 31),
     )
     ledger = _ledger(claims=(memo,))
-    assert r2(ledger, "h", date(2024, 12, 31)).verdict is RequirementVerdict.SUFFICIENT
+    inside = r2(ledger, "h", date(2024, 12, 31))
+    assert inside.verdict is RequirementVerdict.PARTIAL
+    assert inside.relied_on == ("memo",)
+    assert "NO_MANAGEMENT_BASIS_MEMO" in inside.reasons
     later = r2(ledger, "h", date(2025, 12, 31))
     assert later.relied_on == (), "the memo forbids reliance after its own date"
     assert later.verdict is RequirementVerdict.MISSING
+
+
+# ── the audit letter's ¶2, both branches (owner rulings, 2026-07-26) ─────
+def _pro_forma_table(claim_id: str, pps: str | None) -> EvidenceClaim:
+    return _claim(
+        claim_id,
+        "series_a",
+        pps,
+        source_class=SourceClass.COMPANY_CAP_TABLE,
+        execution_status=ExecutionStatus.PRO_FORMA,
+    )
+
+
+def test_a_pro_forma_cap_table_stating_a_price_is_sufficient_on_its_own() -> None:
+    """¶2 branch A: "the round's executed documents **or** pro forma
+    capitalization table evidencing price per share."
+
+    The letter says "or", so the table stands alone. This cell read `partial`
+    through four review rounds, which is stricter than the client asked, and it
+    was standing in for a disclosure obligation that R5 already carries
+    separately — the closing paragraph's "identify any positions marked on a pro
+    forma basis pending receipt of executed documentation".
+
+    Sway is the corpus case: its recapitalisation table states the converted
+    share count and $0.40 outright."""
+    outcome = r2(_ledger(claims=(_pro_forma_table("cap", "0.40"),)), "h", date(2025, 12, 31))
+    assert outcome.verdict is RequirementVerdict.SUFFICIENT
+    assert "PRO_FORMA_WITHOUT_PRICE_PER_SHARE" not in outcome.reasons
+
+
+def test_a_pro_forma_cap_table_without_a_price_per_share_is_not() -> None:
+    """The qualifier in ¶2 is load-bearing: the letter conditions the disjunct on
+    the table "evidencing price per share", so a table that states no price is
+    not the document it accepts.
+
+    No document in this corpus fails this — Dream, Sway and Fluidstack all state
+    a price — which is exactly why it is injected here. A branch that only the
+    corpus could reach is a branch nobody has proved."""
+    outcome = r2(_ledger(claims=(_pro_forma_table("cap", None),)), "h", date(2025, 12, 31))
+    assert outcome.verdict is RequirementVerdict.PARTIAL
+    assert "PRO_FORMA_WITHOUT_PRICE_PER_SHARE" in outcome.reasons
+    assert "REQUEST_EXECUTED_DOC" in outcome.next_actions
+
+
+def test_a_third_party_memo_alone_does_not_satisfy_the_other_information_branch() -> None:
+    """¶2 branch B: "For marks based on other information: the underlying source
+    **and** management's memo describing the basis of the mark."
+
+    A third-party valuation memorandum is a mark based on other information, so
+    the conjunction governs. The memo is the underlying source; no management
+    memo describing the basis of the mark exists anywhere in this corpus, so the
+    row satisfies one half of an "and".
+
+    Moonfare FY2023 is the case, and it was the only place the packet claimed
+    MORE support than the letter allows. The action is deliberately not
+    `DRAFT_MANAGEMENT_ASSESSMENT` — that is ¶3(b), a different paragraph asking
+    a different question about a different document."""
+    memo = _claim(
+        "memo",
+        None,
+        None,
+        source_class=SourceClass.THIRD_PARTY_VALUATION_MEMO,
+        execution_status=ExecutionStatus.NOT_APPLICABLE,
+    )
+    outcome = r2(_ledger(claims=(memo,)), "h", date(2025, 12, 31))
+    assert outcome.verdict is RequirementVerdict.PARTIAL
+    assert "NO_MANAGEMENT_BASIS_MEMO" in outcome.reasons
+    assert "REQUEST_MANAGEMENT_BASIS_MEMO" in outcome.next_actions
+    assert "DRAFT_MANAGEMENT_ASSESSMENT" not in outcome.next_actions
+
+
+# ── INV-17 · off-class evidence, and the letter is SILENT on it ──────────
+def test_off_class_evidence_does_not_raise_the_verdict() -> None:
+    """Lucra is the case. The fund holds Series A-1, supported only by a
+    non-binding term sheet (`insufficient`). A CEO email about the Series A-2
+    close — a class the fund does NOT hold — was lifting R2 to `partial` through
+    `best()`.
+
+    The cross-class rule could not stop it: that rule only lowers `sufficient`,
+    so it never observed the raise happening beneath it.
+
+    **The letter is silent on this.** Nothing in it addresses whether evidence
+    about a class you do not hold may support one you do; the nearest thing is
+    the framing "for each portfolio investment **held** during the periods under
+    audit", which leans against it but is inference. The decision rests on INV-17
+    — pricing one class off another's evidence is a policy act — and a reader who
+    disagrees is disagreeing with an inference, not with ¶2."""
+    held = _claim(
+        "a1_term_sheet",
+        "series_a",
+        "2.00",
+        source_class=SourceClass.COMPANY_COMMUNICATION,
+        execution_status=ExecutionStatus.NON_BINDING,
+    )
+    off = _claim(
+        "a2_ceo_email",
+        "series_a2",
+        "3.00",
+        source_class=SourceClass.COMPANY_COMMUNICATION,
+        execution_status=ExecutionStatus.UNEXECUTED_REFERENCED,
+        issued_date=date(2025, 10, 17),
+        applicable_from=date(2025, 10, 17),
+    )
+    outcome = r2(_ledger(claims=(held, off)), "h", date(2025, 12, 31))
+    assert outcome.verdict is RequirementVerdict.INSUFFICIENT
+    assert "OFF_CLASS_EVIDENCE_NOT_RELIED" in outcome.reasons
+    assert "RECORD_VALUATION_POLICY_DECISION" in outcome.next_actions
+    assert outcome.relied_on == ("a1_term_sheet", "a2_ceo_email"), (
+        "the off-class claim stays in scope and stays reported — it is what makes "
+        "the holding cross-class, and hiding it would say less than the system knows"
+    )
+
+
+def test_a_recorded_policy_decision_is_what_lets_off_class_evidence_count() -> None:
+    """The gate is the recorded decision, not the passage of time or the
+    strength of the document. With one scoped to this holding and date, the
+    Series A-2 email is admissible and the verdict rises."""
+    held = _claim(
+        "a1_term_sheet",
+        "series_a",
+        "2.00",
+        source_class=SourceClass.COMPANY_COMMUNICATION,
+        execution_status=ExecutionStatus.NON_BINDING,
+    )
+    off = _claim(
+        "a2_ceo_email",
+        "series_a2",
+        "3.00",
+        source_class=SourceClass.COMPANY_COMMUNICATION,
+        execution_status=ExecutionStatus.UNEXECUTED_REFERENCED,
+    )
+    decided = _ledger(
+        claims=(held, off),
+        decisions=(PolicyDecision("h", date(2025, 12, 31), "last_round", "cited"),),
+    )
+    outcome = r2(decided, "h", date(2025, 12, 31))
+    assert outcome.verdict is RequirementVerdict.PARTIAL
+    assert "OFF_CLASS_EVIDENCE_NOT_RELIED" not in outcome.reasons
+
+
+def test_evidence_for_no_held_class_at_all_is_insufficient() -> None:
+    """Dream reaches this, so it is not a hypothetical. The fund holds Series
+    A-1 and both relied-upon documents price Series B.
+
+    `validated_amount` has always refused this row — `not_derivable`,
+    `NO_PRICE_FOR_CLASS:series_a1` — while the verdict read `partial`. Two layers
+    of one system disagreeing about whether the held class had any support. The
+    verdict now agrees with the derivation."""
+    only_off = _claim(
+        "series_b_cap",
+        "series_b",
+        "8.00",
+        source_class=SourceClass.COMPANY_CAP_TABLE,
+        execution_status=ExecutionStatus.PRO_FORMA,
+    )
+    outcome = r2(_ledger(claims=(only_off,)), "h", date(2025, 12, 31))
+    assert outcome.verdict is RequirementVerdict.INSUFFICIENT
+    assert "NO_SUPPORT_FOR_A_HELD_CLASS" in outcome.reasons
 
 
 def test_supersession_is_recorded_and_never_inferred_from_dates() -> None:

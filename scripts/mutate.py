@@ -60,6 +60,11 @@ MODELS = ROOT / "packages/contracts/models.py"
 PARSE = ROOT / "ingest/documents/parse.py"
 CITATIONS = ROOT / "packages/contracts/citations.py"
 CLAIMS = ROOT / "ingest/documents/claims.py"
+#: Hosts for the G7 probes at the end of the list, and the only reason these two
+#: files appear in this harness. Each is simply a module inside a directory the
+#: answer-key guard claims to scan; nothing about their contents matters.
+API_LEDGER = ROOT / "api/ledger.py"
+PACKET_MANIFEST = ROOT / "packet/manifest.py"
 SUITES = [
     "tests/test_tracker_marks.py",
     "tests/test_tracker_mark_sentences.py",
@@ -590,6 +595,84 @@ MUTATIONS: list[Mutation] = [
         "    result = MATRIX.get(key)\n    if result is None:",
         "    result = MATRIX.get(key, PolicyResult(verdict=_SUFFICIENT))\n    if result is None:",
     ),
+    # ── the audit letter's ¶2, both branches (owner rulings, 2026-07-26) ──
+    Mutation(
+        # ¶2 branch A says "executed documents OR pro forma capitalization table
+        # evidencing price per share". Capping the disjunct at `partial` is
+        # stricter than the client asked, and it double-counts a disclosure
+        # obligation R5 already carries.
+        "policy: a pro forma cap table cannot satisfy branch A on its own",
+        TUPLES,
+        "    ): PolicyResult(\n        verdict=_SUFFICIENT,\n"
+        "        without_price_per_share=PolicyResult(\n"
+        "            verdict=_PARTIAL,\n"
+        '            reason_code="PRO_FORMA_WITHOUT_PRICE_PER_SHARE",',
+        "    ): PolicyResult(\n        verdict=_PARTIAL,\n"
+        "        without_price_per_share=PolicyResult(\n"
+        "            verdict=_PARTIAL,\n"
+        '            reason_code="PRO_FORMA_WITHOUT_PRICE_PER_SHARE",',
+    ),
+    Mutation(
+        # "evidencing price per share" is a condition the letter attaches to the
+        # disjunct, so a table stating no price is not what ¶2 accepts. Dropping
+        # the qualifier is the cheapest way to collapse this cell to green.
+        "policy: the pro-forma qualifier stops being load-bearing",
+        REQS,
+        "        if cell.without_price_per_share is not None and claim.price_per_share is None:\n"
+        "            cell = cell.without_price_per_share\n",
+    ),
+    # ¶2 branch B is an AND — "the underlying source and management's memo
+    # describing the basis of the mark" — and no management memo exists in this
+    # corpus. `sufficient` here is the packet claiming more support than the
+    # letter allows, which is the only over-reporting defect the review found.
+    #
+    # One mutation per cell, deliberately. The two cells are byte-identical apart
+    # from the position type, and `apply` replaces the FIRST occurrence only, so
+    # a single mutation would revert the feeder cell and leave the direct-equity
+    # one standing — reporting STILL GREEN for a guard that is in fact defended.
+    # The corpus case (Moonfare) is the fx one; the injected case is the other.
+    Mutation(
+        "policy: a third-party memo alone satisfies branch B — fx interest",
+        TUPLES,
+        "        PositionType.FX_DENOMINATED_INTEREST,\n    ): PolicyResult(\n"
+        "        verdict=_PARTIAL,\n"
+        '        reason_code="NO_MANAGEMENT_BASIS_MEMO",\n'
+        '        next_actions=("REQUEST_MANAGEMENT_BASIS_MEMO",),\n    ),',
+        "        PositionType.FX_DENOMINATED_INTEREST,\n    ): PolicyResult(verdict=_SUFFICIENT),",
+    ),
+    Mutation(
+        "policy: a third-party memo alone satisfies branch B — direct equity",
+        TUPLES,
+        "        PositionType.DIRECT_EQUITY,\n    ): PolicyResult(\n"
+        "        verdict=_PARTIAL,\n"
+        '        reason_code="NO_MANAGEMENT_BASIS_MEMO",\n'
+        '        next_actions=("REQUEST_MANAGEMENT_BASIS_MEMO",),\n    ),',
+        "        PositionType.DIRECT_EQUITY,\n    ): PolicyResult(verdict=_SUFFICIENT),",
+    ),
+    Mutation(
+        # INV-17, and the letter is SILENT on it. Lucra's R2 rose from
+        # `insufficient` to `partial` on a CEO email about a class the fund does
+        # not hold. The cross-class cap below cannot catch this: it only lowers
+        # `sufficient`, so it never observes the raise happening beneath it.
+        "policy: off-class evidence raises the verdict again",
+        REQS,
+        "        if (\n"
+        "            claim.priced_class is not None\n"
+        "            and claim.priced_class not in held_classes\n"
+        "            and not authorized\n"
+        "        ):\n"
+        "            off_class.append(claim.priced_class)\n"
+        "            continue\n",
+    ),
+    Mutation(
+        # The gate is the RECORDED decision. Letting any claim through makes the
+        # exclusion decorative.
+        "policy: off-class evidence counts without a recorded decision",
+        REQS,
+        "            and not authorized\n        ):\n"
+        "            off_class.append(claim.priced_class)\n",
+        "        ):\n            off_class.append(claim.priced_class)\n",
+    ),
     Mutation(
         "policy: two partials compose to sufficient",
         REDUCER,
@@ -702,6 +785,35 @@ MUTATIONS: list[Mutation] = [
         "        if len(named) > 1:\n            note, match = named[0]\n"
         "            return Reading(_slug_class(match.group(1)), note.text, note.source_sheet)",
     ),
+    # ── G7: the product cannot reach its own answer key ──────────────────
+    #
+    # These three run the other way round. Every mutation above DELETES a guard
+    # and expects the suite to notice the absence; the guard here IS a test, so
+    # deleting it leaves a tree that violates nothing and the suite stays green
+    # whether the guard works or not. What proves this one is planting the
+    # defect it is supposed to catch.
+    #
+    # The defect is specific. `test_the_product_does_not_import_its_own_answer_
+    # key` walked the syntax tree for `Import` and `ImportFrom` nodes, so
+    # `Path("evals/oracle/derived.json").read_text()` was a file read rather
+    # than an import and passed — while satisfying every fixed-corpus comparison
+    # in the suite by reading the answers off disk. A cross-family review found
+    # it and it went untriaged for a day.
+    #
+    # One per directory the guard claims to cover, because "the check reaches
+    # policy/, api/ and packet/" is three claims. The scan's directory filter is
+    # a glob character class, `[apolicyngest]*`, which is not readable enough to
+    # verify by eye — and its previous version excluded nothing at all for the
+    # same reason.
+    *[
+        Mutation(
+            f"G7: {label} reads the answer key off disk instead of importing it",
+            path,
+            "from __future__ import annotations",
+            'from __future__ import annotations\n\n_SNAPSHOT = "evals/oracle/derived.json"',
+        )
+        for label, path in (("policy", REQS), ("api", API_LEDGER), ("packet", PACKET_MANIFEST))
+    ],
 ]
 
 
@@ -755,6 +867,15 @@ FILE_SUITES: dict[Path, list[str]] = {
         "tests/test_policy_vs_oracle.py",
     ],
     SEED: ["tests/test_policy_guards.py", "tests/test_policy_vs_oracle.py"],
+    # The G7 probes plant an inert module-level string. It changes no behaviour,
+    # so no behavioural suite can possibly notice it and naming one would be
+    # decoration — the answer-key scan is the only thing that can see it at all.
+    #
+    # That reasoning is what makes a one-file list correct here rather than a
+    # shortcut, and it stops being true the moment a behavioural mutation is
+    # added for either file. Whoever adds one adds its suites here.
+    API_LEDGER: ["tests/test_policy_vs_oracle.py"],
+    PACKET_MANIFEST: ["tests/test_policy_vs_oracle.py"],
 }
 
 

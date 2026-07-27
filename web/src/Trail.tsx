@@ -1,17 +1,14 @@
 import { useState } from "react";
 
-import type {
-  Claim,
-  GapObservation,
-  RequirementAssessment,
-  RequirementCode,
-  SourceFact,
-} from "./contracts";
+import type { Claim, GapObservation, RequirementAssessment, RequirementCode } from "./contracts";
+import { readTrail, trailHref, updateTrail } from "./deeplink";
+import type { Figure } from "./Figures";
+import { ClaimHead, Figures, factKey, OtherFigures } from "./Figures";
 import type { CitationState } from "./Gap";
 import { citationState, GapAction, MET_UNCITED, openRequirements } from "./Gap";
-import { EXECUTION_STATUS, FACT_STATE, REQUIREMENT, SOURCE_CLASS, VERDICT } from "./labels";
+import { REQUIREMENT, VERDICT } from "./labels";
 import { PassagePane } from "./Passage";
-import type { EvidenceClaim } from "./responses";
+import type { EvidenceClaim, EvidenceFact } from "./responses";
 
 /**
  * The evidence trail: requirement → claim and figure → source passage.
@@ -34,6 +31,19 @@ import type { EvidenceClaim } from "./responses";
  * file that NO requirement cites — the unused claims. They are reachable
  * because an uncited document is where a discrepancy hides: it is on file, it
  * looks like support, and nothing in the packet depends on it.
+ *
+ * The middle pane is in TWO parts and they are not the same evidence. The
+ * ledger binds a CLAIM to a requirement, so Fluidstack's Series A purchase
+ * agreement — legitimately relied upon for existence and for fair value — put
+ * all twelve of its cited figures under both, and clicking R1 then R2 showed
+ * the same window twice. The API now says per FIGURE which requests it answers,
+ * so the figures that answer THIS request lead, and the rest of what the same
+ * documents state follows under its own heading.
+ *
+ * Followed, not dropped. The document really does state them; they answer a
+ * different question. Hiding them would be this pane deciding what an auditor
+ * may read next to the sentence, which is the one thing the passage pane's own
+ * docstring says it must not do.
  */
 
 const CODES: RequirementCode[] = ["R1", "R2", "R3", "R4", "R5"];
@@ -41,16 +51,7 @@ const CODES: RequirementCode[] = ["R1", "R2", "R3", "R4", "R5"];
 const UNCITED = "uncited";
 type Focus = RequirementCode | typeof UNCITED;
 
-interface Figure {
-  claim: Claim;
-  fact: SourceFact;
-}
-
-function factKey(figure: Figure): string {
-  return `${figure.claim.id}:${figure.fact.id}`;
-}
-
-function factsOf(claims: EvidenceClaim[], claimId: string): SourceFact[] {
+function factsOf(claims: EvidenceClaim[], claimId: string): EvidenceFact[] {
   return claims.find((claim) => claim.id === claimId)?.facts ?? [];
 }
 
@@ -59,6 +60,62 @@ function figuresFor(assessment: RequirementAssessment, claims: EvidenceClaim[]):
   return assessment.evidence.flatMap((citation) =>
     factsOf(claims, citation.claim.id).map((fact) => ({ claim: citation.claim, fact })),
   );
+}
+
+/**
+ * Most direct answer first, then the order the documents state them.
+ *
+ * Ordering only. `answer_rank` is supplied by the API — which figure most
+ * directly answers a request is a statement about evidence — and the comparison
+ * below is `<`/`>` rather than a subtraction, because §5.3 permits ordering a
+ * display and forbids arithmetic on a value the API owns. The sort is stable, so
+ * equal ranks stay in arrival order — the document's own order, and the right
+ * tiebreak for figures nobody has ranked. Sorted on a COPY, because the array is
+ * the packet's own and reordering it in place would move figures under a
+ * requirement nobody chose.
+ */
+function byDirectness(figures: Figure[], code: RequirementCode): Figure[] {
+  const rank = (figure: Figure): number => figure.fact.answer_rank[code] ?? UNRANKED;
+  return [...figures].sort((a: Figure, b: Figure) =>
+    rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : 0,
+  );
+}
+
+/**
+ * A figure the API sent no rank for, which on a well-formed response cannot
+ * happen: a rank arrives for every request a figure answers. Ranked last rather
+ * than first, so a missing key can never promote something to the top of the
+ * pane.
+ */
+const UNRANKED = Number.MAX_SAFE_INTEGER;
+
+/**
+ * The cited claims' figures, split by whether they answer the request in focus.
+ *
+ * `answers_requirements` is the API's judgement and is only READ here — a
+ * component that decided `fund_shares` is about existence would be writing
+ * evidence policy in TypeScript, which `scripts/check-web-arch.mjs` refuses and
+ * is right to.
+ *
+ * The answering half is ordered by how directly each figure answers the request,
+ * so opening a requirement lands on the figure that IS the answer: the fund's
+ * aggregate purchase price under existence and cost, the round's price per share
+ * under fair value, the gross consideration under realisation. The other half
+ * keeps arrival order — it is grouped under the document that states it, and
+ * re-ranking figures against a request they do not answer would be a claim
+ * nobody made.
+ */
+function splitByRequirement(
+  figures: Figure[],
+  code: RequirementCode,
+): { answering: Figure[]; other: Figure[] } {
+  return {
+    answering: byDirectness(
+      figures.filter((figure) => figure.fact.answers_requirements.includes(code)),
+      code,
+    ),
+    other: figures.filter((figure) => !figure.fact.answers_requirements.includes(code)),
+  };
 }
 
 function isCited(assessments: RequirementAssessment[], claimId: string): boolean {
@@ -198,112 +255,17 @@ function Rail({
   );
 }
 
-/** One extracted figure, as a control that opens its passage. */
-function FigureButton({
-  figure,
-  on,
-  onChoose,
-}: {
-  figure: Figure;
-  on: boolean;
-  onChoose: () => void;
-}) {
-  const state = FACT_STATE[figure.fact.state];
-  return (
-    <li>
-      <button
-        type="button"
-        className={on ? "figrow figrow--on" : "figrow"}
-        aria-current={on}
-        onClick={onChoose}
-      >
-        <code className="figrow__field">{figure.fact.field_name}</code>
-        <span className="figrow__value">{figure.fact.value_text}</span>
-        <span className="figrow__state" title={state.meaning}>
-          {state.label}
-        </span>
-        <span className="figrow__where">
-          chars {figure.fact.citation.span_start}–{figure.fact.citation.span_end}
-        </span>
-      </button>
-    </li>
-  );
-}
-
-function ClaimHead({ claim }: { claim: Claim }) {
-  return (
-    <p className="trail__claim">
-      <span className="trail__claim-key">{claim.claim_key}</span>
-      <span
-        className="tag tag--authority"
-        title="Whose word this is. One document can carry statements of different authority, so this describes the assertion rather than the file."
-      >
-        {SOURCE_CLASS[claim.source_class]}
-      </span>
-      <span
-        className="tag tag--exec"
-        title="Whether the document is signed, proposed, or refers to a closing set held elsewhere."
-      >
-        {EXECUTION_STATUS[claim.execution_status]}
-      </span>
-    </p>
-  );
-}
-
-/**
- * The figures, grouped under the claim that states them.
- *
- * Grouped rather than flat because a figure with no claim above it is a number
- * with no authority attached, and authority is half of what an auditor is
- * judging (INV-15).
- */
-function Figures({
-  figures,
-  active,
-  onChoose,
-}: {
-  figures: Figure[];
-  active: Figure | undefined;
-  onChoose: (key: string) => void;
-}) {
-  const claimIds = [...new Set(figures.map((figure) => figure.claim.id))];
-  return (
-    <>
-      {claimIds.map((claimId) => {
-        const mine = figures.filter((figure) => figure.claim.id === claimId);
-        const head = mine.at(0);
-        if (head === undefined) return null;
-        return (
-          <div key={claimId} className="trail__group">
-            <ClaimHead claim={head.claim} />
-            <ul className="figrows">
-              {mine.map((figure) => (
-                <FigureButton
-                  key={factKey(figure)}
-                  figure={figure}
-                  on={active !== undefined && factKey(active) === factKey(figure)}
-                  onChoose={() => {
-                    onChoose(factKey(figure));
-                  }}
-                />
-              ))}
-            </ul>
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
 function Middle({
   assessment,
-  figures,
+  answering,
+  other,
   active,
   onChoose,
   citedClaims,
 }: {
   assessment: RequirementAssessment | undefined;
-  figures: Figure[];
+  answering: Figure[];
+  other: Figure[];
   active: Figure | undefined;
   onChoose: (key: string) => void;
   citedClaims: Claim[];
@@ -318,9 +280,30 @@ function Middle({
       </p>
     );
   const cited = citationState(assessment);
+  const figures = [...answering, ...other];
   return (
     <>
-      {figures.length > 0 && <Figures figures={figures} active={active} onChoose={onChoose} />}
+      {answering.length > 0 && <Figures figures={answering} active={active} onChoose={onChoose} />}
+      {/* A claim relied upon for this request, none of whose figures is
+          declared as answering it. Said out loud: the alternative renders as an
+          empty pane under a cited document, which reads as a page that failed
+          to load rather than as a finding about the evidence. */}
+      {answering.length === 0 && other.length > 0 && (
+        <p className="trail__none">
+          The documents cited here state {other.length} {other.length === 1 ? "figure" : "figures"},
+          and none of them is declared as answering {REQUIREMENT[assessment.requirement].label}.
+          They are below.
+        </p>
+      )}
+      {other.length > 0 && (
+        <OtherFigures
+          figures={other}
+          active={active}
+          onChoose={onChoose}
+          code={assessment.requirement}
+          answeringCount={answering.length}
+        />
+      )}
       {figures.length === 0 && citedClaims.length > 0 && (
         <div className="trail__group">
           {citedClaims.map((claim) => (
@@ -358,6 +341,51 @@ function Middle({
   );
 }
 
+/**
+ * The link to this exact passage, ready to send.
+ *
+ * The whole point of putting the trail in the URL: a partner who has found the
+ * sentence supporting a mark can send an auditor THE SENTENCE rather than
+ * directions to it. Directions are a set of clicks the recipient can take
+ * wrongly, and only the sender ever sees them work.
+ *
+ * The URL is shown as well as copied, because a clipboard write can be refused
+ * — an insecure origin, a browser that does not implement it, a permission the
+ * viewer has denied — and a button that silently does nothing is worse than one
+ * that hands over the text to copy by hand.
+ */
+function CopyTrailLink() {
+  const [state, setState] = useState<"idle" | "copied" | "manual">("idle");
+  const href = trailHref(readTrail());
+  return (
+    <p className="trail__share">
+      <button
+        type="button"
+        className="linkish"
+        onClick={() => {
+          navigator.clipboard
+            ?.writeText(href)
+            .then(() => {
+              setState("copied");
+            })
+            .catch(() => {
+              setState("manual");
+            }) ?? setState("manual");
+        }}
+      >
+        {state === "copied" ? "Link copied" : "Copy a link to this passage"}
+      </button>
+      <span
+        className="trail__share-note"
+        title="The link names the fund-period, the company, the requirement and the figure, so it opens on this passage rather than on the dashboard."
+      >
+        opens here, not on the dashboard
+      </span>
+      {state === "manual" && <code className="trail__share-url">{href}</code>}
+    </p>
+  );
+}
+
 export function EvidenceTrail({
   assessments,
   claims,
@@ -367,21 +395,53 @@ export function EvidenceTrail({
   claims: EvidenceClaim[];
   gaps: GapObservation[];
 }) {
-  const [focus, setFocus] = useState<Focus>("R1");
-  const [chosenFact, setChosenFact] = useState<string | null>(null);
+  // Opened from the address bar when a link names a requirement and a figure,
+  // so a partner can send the PASSAGE rather than directions to it. Read once,
+  // at mount; after that the reader's clicks own the URL.
+  const [focus, setFocus] = useState<Focus>(() => readTrail().requirement ?? "R1");
+  const [chosenFact, setChosenFact] = useState<string | null>(() => readTrail().fact ?? null);
+
+  const chooseFocus = (next: Focus) => {
+    setFocus(next);
+    // The unused-documents row is not a requirement and there is no code to put
+    // in the URL for it, so that segment and everything after it is dropped
+    // rather than left naming the requirement the reader has just left.
+    updateTrail(
+      next === UNCITED
+        ? { requirement: undefined, fact: undefined }
+        : { requirement: next, fact: undefined },
+    );
+  };
+
+  const chooseFact = (key: string) => {
+    setChosenFact(key);
+    updateTrail({ fact: key });
+  };
 
   const assessment =
     focus === UNCITED ? undefined : assessments.find((a) => a.requirement === focus);
-  const figures =
+  const cited =
     focus === UNCITED
       ? uncitedFigures(claims, assessments)
       : assessment === undefined
         ? []
         : figuresFor(assessment, claims);
 
-  // The chosen figure, or the first one on offer. Derived rather than stored, so
-  // moving to a requirement whose figures do not include the previous choice
-  // lands on something real instead of on a blank third pane.
+  // Split only when a requirement is in focus. The unused-documents row is not
+  // a requirement, so there is nothing for a figure to answer or not answer
+  // there and every figure leads.
+  const { answering, other } =
+    assessment === undefined
+      ? { answering: cited, other: [] as Figure[] }
+      : splitByRequirement(cited, assessment.requirement);
+
+  // The chosen figure, or the first one that ANSWERS the request in focus.
+  // Derived rather than stored, so moving between requirements lands on
+  // something real instead of on a blank third pane — and the default now lands
+  // on the figure this request rests on rather than on whichever figure the
+  // shared document happened to state first, which is what made R1 and R2 open
+  // the same passage.
+  const figures = [...answering, ...other];
   const active = figures.find((figure) => factKey(figure) === chosenFact) ?? figures.at(0);
 
   const citedClaims = assessment === undefined ? [] : assessment.evidence.map((e) => e.claim);
@@ -398,7 +458,7 @@ export function EvidenceTrail({
           case rather than the exception, and a third of the screen saying
           "nothing here" is a third of the screen. */}
       <div className={active === undefined ? "trail trail--no-passage" : "trail"}>
-        <Rail assessments={assessments} claims={claims} focus={focus} onFocus={setFocus} />
+        <Rail assessments={assessments} claims={claims} focus={focus} onFocus={chooseFocus} />
 
         <div className="trail__middle">
           {focus === UNCITED ? (
@@ -415,15 +475,16 @@ export function EvidenceTrail({
                   passage.
                 </p>
               ) : (
-                <Figures figures={figures} active={active} onChoose={setChosenFact} />
+                <Figures figures={figures} active={active} onChoose={chooseFact} />
               )}
             </>
           ) : (
             <Middle
               assessment={assessment}
-              figures={figures}
+              answering={answering}
+              other={other}
               active={active}
-              onChoose={setChosenFact}
+              onChoose={chooseFact}
               citedClaims={citedClaims}
             />
           )}
@@ -439,6 +500,7 @@ export function EvidenceTrail({
               citation={active.fact.citation}
               caption={`${active.fact.field_name} · ${active.fact.value_text}`}
             />
+            <CopyTrailLink />
           </div>
         )}
       </div>

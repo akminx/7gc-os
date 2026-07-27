@@ -1373,6 +1373,46 @@ td.cell--no-mark {
   white-space: nowrap;
 }
 
+/* Which request a figure DOES answer, shown only where the reader is asking
+   why it is in front of them. Column 1 so it wraps with the value rather than
+   pushing the offsets off the row. */
+.figrow__answers {
+  grid-column: 1;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.figrow__answers--none {
+  font-style: italic;
+}
+
+/* The figures the same documents state that answer a different request. A
+   disclosure rather than a second list, so the request in focus keeps the pane
+   and nothing is deleted from the auditor's reach. */
+.trail__other {
+  margin-top: 1.1rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+
+.trail__other-summary {
+  font-size: 0.75rem;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+
+.trail__other-summary:hover {
+  color: var(--ink);
+}
+
+.trail__other-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  max-width: 60ch;
+  margin: 0.5rem 0 0.75rem;
+}
+
 .figrow__where {
   font-family: var(--mono);
 }
@@ -1485,6 +1525,39 @@ td.cell--no-mark {
 .paper__unresolved {
   color: var(--v-missing);
   margin-bottom: 0.5rem;
+}
+
+/* What the pane is currently showing, and how to see the rest. Stated above
+   the page rather than inside it: a reader has to be able to tell a document
+   that is short from one that has been narrowed, and only this line does. */
+.paper__window {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  max-width: 64ch;
+}
+
+.paper__expand {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.paper__expand:hover {
+  color: var(--ink);
+}
+
+/* A narrowed page is short, so the tall scroll box would leave it floating in
+   whitespace. It grows with its content instead and keeps the same ceiling. */
+.paper--focused {
+  max-height: min(60vh, 34rem);
 }
 
 /* The single most important visual moment in the application. */
@@ -2083,4 +2156,368 @@ button.why[aria-expanded="true"] {
   font-weight: 400;
   line-height: 1.5;
   text-align: left;
+}
+
+/* ══ The system's own recomputation ═══════════════════════════════════════
+   SPEC §8's V2, run against the cited evidence on read and shown beside the
+   figure that was reported. It borrows the verdict hues rather than inventing
+   a palette, because a reader has already learned what red and green mean on
+   this screen — and it borrows them for the OUTCOME, never for the amount: the
+   number itself is set in the same ink as every other figure, because neither
+   figure is asserted to be the right one. */
+
+.recheck {
+  display: grid;
+  gap: 0.2rem;
+  justify-items: start;
+}
+
+.recheck-chip {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-radius: var(--r-chip);
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.recheck-chip--pass {
+  color: var(--v-sufficient);
+  background: color-mix(in srgb, var(--v-sufficient) 12%, transparent);
+}
+
+.recheck-chip--fail {
+  color: var(--v-missing);
+  background: color-mix(in srgb, var(--v-missing) 14%, transparent);
+}
+
+.recheck-chip--not_comparable {
+  color: var(--v-conflicting);
+  background: color-mix(in srgb, var(--v-conflicting) 12%, transparent);
+}
+
+.recheck-chip--unconfirmable {
+  color: var(--v-not_assessed);
+  background: color-mix(in srgb, var(--v-not_assessed) 12%, transparent);
+}
+
+.recheck-chip--blocked_incomplete {
+  color: var(--v-insufficient);
+  background: color-mix(in srgb, var(--v-insufficient) 12%, transparent);
+}
+
+.recheck-chip--not_applicable {
+  color: var(--v-not_applicable);
+  background: color-mix(in srgb, var(--v-not_applicable) 12%, transparent);
+}
+
+.recheck__derived {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+
+/* The one number a reader scanning eight rows for what is wrong is looking
+   for. Loud, and only ever rendered where the two figures actually differ. */
+.recheck__delta {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--v-missing);
+}
+
+.recheck__delta--large {
+  font-size: 0.8125rem;
+  margin-top: 0.3rem;
+}
+
+.recheck-none {
+  font-size: 0.6875rem;
+  font-style: italic;
+  color: var(--v-missing);
+}
+
+.figure--recheck .sub--how {
+  color: var(--muted);
+  max-width: 40ch;
+}
+
+.figure--recheck-fail {
+  border-left: 3px solid var(--v-missing);
+  padding-left: 0.75rem;
+}
+
+/* The working, on screen. Fluidstack's finding is only legible per class:
+   100,000 Series A at $10.00 plus 100,000 Series A-2 at $15.00 is 2,500,000,
+   and the reported 6,000,000 is 200,000 shares at the $30.00 Series B price
+   applied to every class. One total hides which half is wrong. */
+.recheck-working {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.recheck-working li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+  font-size: 0.6875rem;
+}
+
+.recheck-working__terms {
+  color: var(--muted);
+}
+
+.recheck-working__amount {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.recheck-working__flag {
+  color: var(--v-conflicting);
+  font-weight: 600;
+}
+
+.recheck__from {
+  margin: 0.5rem 0 0;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.col-recheck,
+.cell--recheck {
+  min-width: 12rem;
+}
+
+/* The link a partner sends instead of directions. Under the passage, because it
+   is about the passage — a share control in the masthead would name whatever
+   the whole page happens to be showing. */
+.trail__share {
+  margin: 0.6rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.trail__share-note {
+  color: var(--muted);
+}
+
+.trail__share-url {
+  flex-basis: 100%;
+  font-size: 0.6875rem;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+/* ══ The evaluation page ═══════════════════════════════════════════════════
+   The unflattering number is set larger than the flattering one, on purpose. A
+   page of green hundreds is marketing; leading with the weak figure is what
+   makes the strong ones credible. */
+
+.recalls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.25rem 2rem;
+  margin: 0.75rem 0;
+}
+
+.recall__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.recall--lead .recall__title {
+  color: var(--v-insufficient);
+}
+
+.recall__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.recall__rows li {
+  display: grid;
+  grid-template-columns: 4rem repeat(2, minmax(0, 1fr));
+  align-items: baseline;
+  gap: 0.3rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.5rem;
+}
+
+.recall__k {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.recall__cand {
+  grid-column: 1 / -1;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+/* A count and its denominator. Never a percentage: the API sends both numbers
+   because a count is auditable and a rate is a conclusion. */
+.count {
+  display: grid;
+}
+
+.count__n {
+  font-family: var(--mono);
+  font-size: 1.375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: inline;
+}
+
+.recall--lead .count__n {
+  font-size: 1.75rem;
+}
+
+.count__of {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.count__label {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.misses {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.miss {
+  display: grid;
+  gap: 0.15rem;
+  border-left: 2px solid var(--v-insufficient);
+  padding-left: 0.7rem;
+}
+
+.miss__where {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.miss__scope {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.miss__detail {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.refusals {
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.refusals li {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.8125rem;
+  border-left: 2px solid var(--v-sufficient);
+  padding-left: 0.7rem;
+}
+
+.refusals__why {
+  font-size: 0.75rem;
+  color: var(--muted);
+  max-width: 70ch;
+}
+
+.census {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+
+.census li {
+  display: grid;
+  gap: 0.2rem;
+  justify-items: start;
+}
+
+.census__n {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+.census__finding {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  max-width: 80ch;
+}
+
+.blindspots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.blindspots li {
+  display: grid;
+  gap: 0.25rem;
+  border-left: 2px solid var(--v-not_assessed);
+  padding-left: 0.8rem;
+}
+
+.blindspots__what {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.blindspots__why {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  max-width: 78ch;
+}
+
+.blindspots__how {
+  font-size: 0.6875rem;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+/* The paragraph of the client's letter, under the requirement code. Small and
+   quiet: the code is what a reader scans by, the paragraph is what tells them
+   the column is answering someone's actual request. */
+.rcol__para {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 400;
+  color: var(--muted);
 }

@@ -1,7 +1,8 @@
 import type { HoldingRow, Mark, PacketTotals, RequirementCode } from "./contracts";
 import { formatDate, formatMoney } from "./format";
 import { AUDIT_SCOPE, DERIVATION_STATUS, POSITION_TYPE, REQUIREMENT, TOTAL_KIND } from "./labels";
-import type { PacketResponse } from "./responses";
+import { RecomputedCell } from "./Recomputation";
+import type { PacketResponse, Recomputation } from "./responses";
 import {
   ApprovalState,
   Figure,
@@ -158,7 +159,15 @@ function MarkCells({ mark }: { mark: Mark | null }) {
  * from a keyboard, and the pre-flight for this screen is that a partner can
  * reach a company and open its trail without a mouse.
  */
-function Row({ row, onOpen }: { row: HoldingRow; onOpen: (holdingId: string) => void }) {
+function Row({
+  row,
+  recomputation,
+  onOpen,
+}: {
+  row: HoldingRow;
+  recomputation: Recomputation | undefined;
+  onOpen: (holdingId: string) => void;
+}) {
   return (
     <tr
       className="hrow"
@@ -178,6 +187,9 @@ function Row({ row, onOpen }: { row: HoldingRow; onOpen: (holdingId: string) => 
         </span>
       </td>
       <MarkCells mark={row.mark} />
+      <td className="cell--recheck">
+        <RecomputedCell recomputation={recomputation} />
+      </td>
       {CODES.map((code) => (
         <AssessmentCell key={code} row={row} code={code} />
       ))}
@@ -219,7 +231,7 @@ export function Dashboard({
 
       <Section
         title="Holdings"
-        hint="Reported is what the tracker says. Validated is what the evidence independently derives. Support is a separate judgement about the evidence. A mark can be perfectly derivable and still unsupported, so the three are never merged into one column. The five verdicts are shown individually rather than as a score, because a ratio hides which requirement is short."
+        hint="Four separate questions, four columns, never merged. Reported is what the tracker says. Validated (stored) is what a human confirmed and the ledger holds — empty for every row in this fund, which is itself a finding. Recomputed is what the cited evidence derives when this page is read: an independent check, not an approved value, and where it disagrees the difference is on screen. Support is a judgement about whether the evidence meets the client's requests, and a mark can be perfectly derivable and wholly unsupported. The five verdicts are shown individually rather than as a score, because a ratio hides which requirement is short."
       >
         <div className="scroller">
           <table>
@@ -230,17 +242,33 @@ export function Dashboard({
                 <th scope="col" className="num">
                   Reported (tracker)
                 </th>
-                <th scope="col" className="num">
-                  Validated (derived)
+                <th
+                  scope="col"
+                  className="num"
+                  title="What a human confirmed and the ledger stored. Empty for every row in this fund, because nothing has ever written to it."
+                >
+                  Validated (stored)
                 </th>
+                <th
+                  scope="col"
+                  className="col-recheck"
+                  title="SPEC §8's V2, run against the cited evidence when this page was read. An independent recomputation, not an approved value and not written to the ledger."
+                >
+                  Recomputed from evidence
+                </th>
+                {/* The code AND the paragraph of the letter it answers. The
+                    column read `R1` alone, so "which of the client's four
+                    requests does this packet answer" was five hovers away — on
+                    the one screen that question gets asked. */}
                 {CODES.map((code) => (
                   <th
                     key={code}
                     scope="col"
                     className="rcol"
-                    title={`${REQUIREMENT[code].label} · ${REQUIREMENT[code].meaning}`}
+                    title={`${REQUIREMENT[code].letter}. ${REQUIREMENT[code].meaning}`}
                   >
                     {code}
+                    <span className="rcol__para">{REQUIREMENT[code].paragraph}</span>
                   </th>
                 ))}
                 <th scope="col" className="col-support">
@@ -253,7 +281,12 @@ export function Dashboard({
             </thead>
             <tbody>
               {packet.rows.map((row) => (
-                <Row key={row.holding_id} row={row} onOpen={onOpenCompany} />
+                <Row
+                  key={row.holding_id}
+                  row={row}
+                  recomputation={packet.recomputations?.[row.holding_id]}
+                  onOpen={onOpenCompany}
+                />
               ))}
             </tbody>
           </table>

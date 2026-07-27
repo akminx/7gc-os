@@ -1002,9 +1002,13 @@
           ]
         },
         "R2": {
-          "verdict": "sufficient",
-          "reasons": [],
-          "next_actions": [],
+          "verdict": "partial",
+          "reasons": [
+            "NO_MANAGEMENT_BASIS_MEMO"
+          ],
+          "next_actions": [
+            "REQUEST_MANAGEMENT_BASIS_MEMO"
+          ],
           "relied_on": [
             "moonfare_memo_23"
           ],
@@ -1024,7 +1028,7 @@
         }
       },
       "applicable_count": 2,
-      "sufficient_count": 1,
+      "sufficient_count": 0,
       "row_verdict": "missing",
       "fully_supported": false,
       "tracker_label": [],
@@ -1757,10 +1761,8 @@
           ]
         },
         "R2": {
-          "verdict": "partial",
-          "reasons": [
-            "PRO_FORMA_PENDING_EXECUTION"
-          ],
+          "verdict": "sufficient",
+          "reasons": [],
           "next_actions": [],
           "relied_on": [
             "sway_recap_cap"
@@ -1782,7 +1784,7 @@
         }
       },
       "applicable_count": 3,
-      "sufficient_count": 1,
+      "sufficient_count": 2,
       "row_verdict": "partial",
       "fully_supported": false,
       "tracker_label": [],
@@ -1882,11 +1884,11 @@
           ]
         },
         "R2": {
-          "verdict": "partial",
+          "verdict": "insufficient",
           "reasons": [
-            "CLOSING_SET_PENDING",
             "CROSS_CLASS_POLICY_DECISION_REQUIRED",
-            "NON_BINDING_TERM_SHEET"
+            "NON_BINDING_TERM_SHEET",
+            "OFF_CLASS_EVIDENCE_NOT_RELIED"
           ],
           "next_actions": [
             "RECORD_VALUATION_POLICY_DECISION"
@@ -1912,7 +1914,7 @@
       },
       "applicable_count": 2,
       "sufficient_count": 0,
-      "row_verdict": "partial",
+      "row_verdict": "insufficient",
       "fully_supported": false,
       "tracker_label": [],
       "unsupported_tracker_labels": [],
@@ -2031,7 +2033,7 @@
           "reasons": [
             "CLOSING_SET_PENDING",
             "CROSS_CLASS_POLICY_DECISION_REQUIRED",
-            "PRO_FORMA_PENDING_EXECUTION"
+            "OFF_CLASS_EVIDENCE_NOT_RELIED"
           ],
           "next_actions": [
             "RECORD_VALUATION_POLICY_DECISION"
@@ -2090,11 +2092,11 @@
           ]
         },
         "R2": {
-          "verdict": "partial",
+          "verdict": "insufficient",
           "reasons": [
-            "CLOSING_SET_PENDING",
             "CROSS_CLASS_POLICY_DECISION_REQUIRED",
-            "PRO_FORMA_PENDING_EXECUTION"
+            "NO_SUPPORT_FOR_A_HELD_CLASS",
+            "OFF_CLASS_EVIDENCE_NOT_RELIED"
           ],
           "next_actions": [
             "RECORD_VALUATION_POLICY_DECISION"

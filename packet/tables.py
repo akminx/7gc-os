@@ -27,6 +27,8 @@ from packages.contracts.models import (
 )
 from packet.evidence import Evidence
 from packet.layout import Layout
+from packet.recompute import Recomputation
+from policy.validators import Outcome
 
 Cell = str | int | Decimal | None
 
@@ -255,6 +257,118 @@ def holdings(packet: Packet) -> Table:
             f"{totals.packet_gap_positions - totals.unsupported_positions}",
         ),
     )
+
+
+def recomputation(packet: Packet, recomputed: dict[str, Recomputation]) -> Table:
+    """SPEC §8's V2, in the packet the auditor takes away.
+
+    The screen shows this; so must the deliverable. An auditor who is told on a
+    web page that the fund's Fluidstack mark is 3,500,000 above what its own
+    documents derive, and then receives a packet that says only 6,000,000, has
+    been shown a finding they cannot cite.
+
+    Every column is labelled as a RECOMPUTATION. `Derived amount` is not
+    `Validated amount` — nothing here has been approved, the figure is computed
+    from the cited evidence each time the packet is generated, and the ledger's
+    `mark.validated_amount` is untouched and still empty. `Outcome` is SPEC §8's
+    six-value vocabulary rather than a pass/fail column, because
+    `not_comparable` (the fund is the author of both figures) and
+    `unconfirmable` (the evidence is silent) send different letters.
+
+    Sorted with the disagreements first. A table an auditor reads top to bottom
+    should open on what is wrong with it, and alphabetical order buries the two
+    rows the whole check exists to surface behind six that agree.
+    """
+    on = packet.period.period_date
+    ordered = sorted(packet.rows, key=lambda r: _reading_order(recomputed, r))
+    rows: list[tuple[Cell, ...]] = []
+    for row in ordered:
+        got = recomputed.get(row.holding_id)
+        if got is None:
+            continue
+        rows.append(
+            (
+                row.company_name,
+                row.holding_id,
+                got.outcome.value,
+                got.reason,
+                None if got.derived is None else got.derived.amount,
+                None if got.reported is None else got.reported.amount,
+                None if got.difference is None else got.difference.amount,
+                None if got.derived is None else got.derived.currency,
+                " + ".join(
+                    f"{part.shares} {part.security_class} x {part.price_per_share}"
+                    for part in got.per_class
+                )
+                or None,
+                ", ".join(got.evidence_claim_ids) or None,
+                got.policy_version,
+            )
+        )
+    disagreements = [r for r in rows if r[2] == Outcome.FAIL.value]
+    return Table(
+        key="recomputation",
+        title="Independent recomputation",
+        note=(
+            "What the CITED EVIDENCE derives for each mark at "
+            f"{on.isoformat()}, computed when this packet was generated and stored "
+            "nowhere. It is not a validated amount and not an approved value: no "
+            "figure here has been confirmed by a human, and the ledger's own "
+            "validated amount is empty for every position in this fund. Where the "
+            "derived and reported figures differ, neither is asserted to be the "
+            "correct one — the difference is the finding."
+        ),
+        headers=(
+            "Portfolio company",
+            "Holding id",
+            "Recomputation outcome",
+            "How the figure was reached",
+            "Derived amount (not validated, not approved)",
+            "Tracker-reported amount (unaudited)",
+            "Reported minus derived",
+            "Currency",
+            "Per class, priced by its own class",
+            "Evidence relied on",
+            "Policy version",
+        ),
+        rows=tuple(rows),
+        footer=(
+            f"{len(disagreements)} of {len(rows)} position(s) derive a figure that differs "
+            "from the one reported.",
+            *(f"  {r[0]}: derived {r[4]} against a reported {r[5]}" for r in disagreements),
+            "An outcome of `unconfirmable` means the evidence states no figure this "
+            "check could derive; `not_comparable` means it states one and the fund "
+            "wrote the document it came from, so comparing the two is circular; "
+            "`blocked_incomplete` means the document states the figure and this "
+            "system has no field for its shape. None of the three is a pass.",
+        ),
+    )
+
+
+def _reading_order(recomputed: dict[str, Recomputation], row: HoldingRow) -> tuple[int, str, str]:
+    """Where this row sits in the table, and then alphabetically.
+
+    A row with no recomputation sorts after every outcome rather than into one
+    of them: "the check did not run for this row" is not a seventh outcome, and
+    filing it under the last one would put it beside findings it says nothing
+    about.
+    """
+    got = recomputed.get(row.holding_id)
+    rank = len(_RECOMPUTATION_ORDER) if got is None else _RECOMPUTATION_ORDER[got.outcome]
+    return (rank, row.company_name, row.holding_id)
+
+
+#: Disagreements first, then the checks that could not run, then the agreements.
+#: Not a ranking of severity — SPEC §8's outcomes are unordered — but a reading
+#: order, so a table opens on what is wrong with it.
+_RECOMPUTATION_ORDER = {
+    Outcome.FAIL: 0,
+    Outcome.NOT_COMPARABLE: 1,
+    Outcome.BLOCKED_INCOMPLETE: 2,
+    Outcome.UNCONFIRMABLE: 3,
+    Outcome.PASS: 4,
+    Outcome.NOT_APPLICABLE: 5,
+}
 
 
 def requirements(packet: Packet) -> Table:

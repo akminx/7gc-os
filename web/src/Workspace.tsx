@@ -20,6 +20,8 @@ import {
   REQUIREMENT,
   VALUATION_BASIS,
 } from "./labels";
+import { RecomputedMark } from "./Recomputation";
+import type { Recomputation } from "./responses";
 import type { MetaItem } from "./ui";
 import {
   ApprovalState,
@@ -138,7 +140,7 @@ function MarkFigures({ mark }: { mark: Mark | null }) {
   if (mark === null) {
     return (
       <div className="figure figure--no-mark">
-        <span className="figure__caption">Reported and validated — neither exists</span>
+        <span className="figure__caption">Reported and stored — neither exists</span>
         <span className="figure__amount">
           <NoMark />
         </span>
@@ -153,7 +155,12 @@ function MarkFigures({ mark }: { mark: Mark | null }) {
     <>
       <Figure caption="Reported — tracker" money={mark.reported} tone="reported" />
       <div className="figure figure--validated">
-        <span className="figure__caption">Validated — independently derived</span>
+        <span
+          className="figure__caption"
+          title="What a human confirmed and the ledger stored. Empty for every row in this fund, because nothing has ever written to it — which is a finding about the system rather than about the mark."
+        >
+          Validated — confirmed and stored
+        </span>
         <span className="figure__amount">
           {mark.validated === null ? "none" : formatMoney(mark.validated)}
         </span>
@@ -337,7 +344,15 @@ function Decide({ row, actors }: { row: HoldingRow; actors: string[] }) {
   );
 }
 
-export function Workspace({ row, actors = namedActors() }: { row: HoldingRow; actors?: string[] }) {
+export function Workspace({
+  row,
+  recomputation,
+  actors = namedActors(),
+}: {
+  row: HoldingRow;
+  recomputation?: Recomputation;
+  actors?: string[];
+}) {
   const mark = row.mark;
   const markItems: MetaItem[] =
     mark === null
@@ -367,10 +382,11 @@ export function Workspace({ row, actors = namedActors() }: { row: HoldingRow; ac
 
       <Section
         title="The mark"
-        hint="Three facts, not one. Reported is what the tracker says. Validated is what the evidence independently derives. Support is a separate judgement entirely: a mark can be perfectly derivable and wholly unsupported."
+        hint="Four facts, not one. Reported is what the tracker says. Validated is what a human has confirmed and stored — empty for every row in this fund. Recomputed is what the cited evidence derives when this page is read, which is neither of the first two. Support is a separate judgement again: a mark can be perfectly derivable and wholly unsupported."
       >
-        <div className="triptych">
+        <div className="triptych triptych--four">
           <MarkFigures mark={mark} />
+          <RecomputedMark recomputation={recomputation} />
           <div className="figure figure--support">
             <span className="figure__caption">Support — evidence verdicts</span>
             <span className="figure__amount">
