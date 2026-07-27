@@ -122,6 +122,67 @@ LETTER_FUND_FRAGMENT = "our audits of 7GC Fund II, L.P."
 FUND_LABEL = {"fund_ii": "Fund II", "fund_i": "Fund I"}
 
 
+#: WHICH of ¶2's two branches governs a position, and the sentence that decides
+#: it. Hand-written, and it has to be: the letter draws one line — is the mark
+#: based on a financing round, or on other information — and no column in this
+#: ledger answers it.
+#:
+#: NOT derived from `valuation_basis`. That enum has six members and the honest
+#: mapping does not exist: Moonfare's basis is a March 2023 round AND the FY2023
+#: third-party memorandum in one sentence that says both. The BRANCH question is
+#: narrower than the enum and is the only one ¶2 asks, so it is the only one
+#: answered here.
+#:
+#: A holding is listed only where a DOCUMENT states its basis. The other ten
+#: state none, are in neither branch's denominator, and are counted and named
+#: instead — an unstated basis is a finding about the corpus, and inferring one
+#: from the evidence on file would decide what evidence is required from the
+#: evidence present.
+ROUND = "round"
+OTHER = "other"
+
+BASIS_BRANCH: dict[str, tuple[str, str]] = {
+    "fund_ii_moonfare": (
+        ROUND,
+        "remains based on the company's most recent equity financing (March 2023) — a "
+        "financing round, named and dated, in the fund's own FX memo and again in the "
+        "FY2023 third-party memorandum",
+    ),
+    "fund_i_banzai": (
+        OTHER,
+        "quoted closing price on the last trading day of each fiscal year (Level 1 input) "
+        "— an exchange close is not a financing round",
+    ),
+    "fund_i_capsule": (
+        OTHER,
+        "a hybrid of the calibrated backsolve and the guideline multiple contraction "
+        "applied to the revised revenue plan — a model, and the corpus's only one",
+    ),
+    # THE ARGUABLE ONE, and it is recorded as arguable rather than settled.
+    #
+    # Jio's statement says its valuation is "based on the price of the most
+    # recent observable financing round of the underlying company", which reads
+    # as branch A. Read that way, ¶2 wants Jio Platforms' round documents.
+    #
+    # It is filed under OTHER because 7GC does not hold Jio Platforms. It holds
+    # an LP interest in Horizon Access Fund IV, which holds Jio, and the
+    # administrator's NAV of 7GC's own capital account is the direct evidence of
+    # what 7GC's position is worth. Demanding the round documents of a company
+    # the fund has no direct interest in is demanding paperwork it has no right
+    # to — and the statement is exactly what branch B calls "the underlying
+    # source".
+    #
+    # A reviewer read it the other way. If that reading wins, this entry moves
+    # and 2a/2b gain three position-dates the corpus cannot answer.
+    "fund_i_jio_indirect": (
+        OTHER,
+        "an administrator's NAV of the fund's own capital account — the underlying "
+        "source for an indirect interest, whose own basis is a round of a company "
+        "7GC does not directly hold",
+    ),
+}
+
+
 class AcceptanceError(Exception):
     """The report cannot be produced, and producing part of one would mislead."""
 
@@ -193,6 +254,11 @@ class Limb:
     #: carries one row per consideration with the note that says what was
     #: considered, so an auditor reads the consideration rather than a checkbox.
     considerations: frozenset[str] = frozenset()
+    #: Which of ¶2's branches this limb belongs to, or None for a limb the
+    #: branches do not divide. A limb declaring one is owed only by positions
+    #: whose documents put them in that branch — never by a position whose basis
+    #: is unstated, which is in neither.
+    branch: str | None = None
     #: This limb asks WHICH positions, not whether each position is supported.
     #:
     #: The closing paragraph's second aside is the only one: "please also
@@ -300,6 +366,7 @@ PARA_2 = (
         "For marks based on a financing round: the round's executed documents",
         BY_POSITION_DATE,
         classes=frozenset({"executed_transaction_doc"}),
+        branch=ROUND,
     ),
     Limb(
         "2b",
@@ -315,6 +382,7 @@ PARA_2 = (
                 "series_b_price_per_share",
             }
         ),
+        branch=ROUND,
     ),
     Limb(
         "2c",
@@ -331,6 +399,7 @@ PARA_2 = (
                 "company_communication",
             }
         ),
+        branch=OTHER,
     ),
     Limb(
         "2d",
@@ -338,6 +407,7 @@ PARA_2 = (
         "management's memo describing the basis of the mark",
         BY_POSITION_DATE,
         decisions=frozenset({"basis_memo"}),
+        branch=OTHER,
     ),
 )
 
@@ -833,7 +903,10 @@ def scope_of(limb: Limb, ev: Evidence) -> list[tuple[str, str | None]]:
         return [(h, None) for h in sorted({h for h, _ in ev.held})]
     if limb.scope == BY_REALISATION:
         return [(h, None) for h in sorted(ev.realised)]
-    return sorted(ev.held)
+    if limb.branch is None:
+        return sorted(ev.held)
+    # A branch limb is owed only where a document says which branch applies.
+    return sorted((h, d) for h, d in ev.held if BASIS_BRANCH.get(h, (None, ""))[0] == limb.branch)
 
 
 def answered(limb: Limb, ev: Evidence, holding: str, on: str | None) -> bool:
@@ -962,32 +1035,33 @@ def basis_caveat(ev: Evidence) -> list[str]:
     """
     if ev.marks_with_basis >= ev.marks_total:
         return []
+    unstated = len(ev.holdings) - ev.holdings_stating_basis
     return [
         *wrapped(
-            "The letter's two branches are CONDITIONAL and this ledger cannot yet scope"
-            f" them: `mark.basis` is recorded for {ev.marks_with_basis} of {ev.marks_total}"
-            " marks. All four limbs below are therefore scored against every held"
-            " position-date rather than against the subset its branch governs, and every"
-            " denominator is larger than the letter's.",
+            "The letter's two branches are CONDITIONAL, and they are scoped where a DOCUMENT"
+            f" says which one applies: {ev.holdings_stating_basis} of {len(ev.holdings)}"
+            " positions carry a `valuation_basis_stated` fact, cited to its span. Each limb"
+            " below is owed only by the positions its branch governs, so each denominator is"
+            " the letter's rather than every held position-date.",
             "  ",
         ),
         *wrapped(
-            f"What the SOURCES say is now read: {ev.holdings_stating_basis} of"
-            f" {len(ev.holdings)} positions carry a `valuation_basis_stated` fact — a sentence in a"
-            " document, cited to its span, saying what the mark rests on. The remainder"
-            " state none, and that silence is a finding about the corpus rather than a gap"
-            " in this reader.",
+            f"The other {unstated} state no basis and are in NEITHER denominator. That"
+            " silence is a finding about the corpus, not a default: inferring a mark's basis"
+            " from the evidence on file and then using it to decide which evidence is"
+            " required is circular, and the number it produced would look right."
+            f" `mark.basis` is null for all {ev.marks_total} marks — the branch is read from"
+            " the documents, never from the column.",
             "  ",
         ),
         *wrapped(
-            "Turning a stated basis into a BRANCH is a judgement nobody has made, and it is"
-            " left undone deliberately. Moonfare's is a March 2023 round AND a third-party"
-            " memorandum; Jio's is a round price adjusted for fees and expenses, which no"
-            " branch describes; Banzai states a quoted price for three years and a purchase"
-            " cost for two others. Each mapping is one word, with no error anywhere, and the"
-            " denominator it produced would look right. The basis is never inferred from the"
-            " evidence on file — deciding what evidence is required from the evidence present"
-            " is circular.",
+            "The branch is a JUDGEMENT, and the sentence behind each one is recorded beside"
+            " it in `BASIS_BRANCH`. Jio's is the arguable one: its statement says the"
+            " valuation rests on a financing round of the underlying company, which reads as"
+            " branch A. It is filed under branch B because 7GC holds an interest in a feeder"
+            " rather than in that company, and the administrator's NAV of its own capital"
+            " account is what branch B calls the underlying source. A reviewer read it the"
+            " other way.",
             "  ",
         ),
         "",

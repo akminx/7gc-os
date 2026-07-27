@@ -329,23 +329,31 @@ def test_the_report_refuses_a_ledger_holding_nothing_for_the_letters_fund() -> N
     acceptance.check_fund_scope(two_funds())
 
 
-# ── ¶2's branches are conditional and nothing records the condition ──────
-def test_paragraph_2_says_its_denominator_is_larger_than_the_letters() -> None:
-    """ "For marks based on a financing round: … For marks based on other
-    information: …" — and `mark.basis` is NULL for every mark, so all four limbs
-    are scored against every position rather than the subset each branch
-    governs. The report has to say that where the numbers are; inferring each
-    mark's basis from the evidence on file, and then using it to decide which
-    evidence is required, would be circular."""
+# ── ¶2's branches are scoped, and the report says on what ───────────────
+def test_paragraph_2_says_what_scopes_its_branches_and_who_is_in_neither() -> None:
+    """This asserted the opposite, and asserting it was right at the time.
+
+    "For marks based on a financing round: … For marks based on other
+    information: …" — with `mark.basis` NULL for every mark, all four limbs were
+    scored against every position and the report had to say so where the numbers
+    were. The basis is now READ from the documents that state one, so the
+    denominators are the letter's.
+
+    What must not be lost is the other half: ten positions state no basis, and
+    they are in NEITHER branch. Defaulting them into one would decide what
+    evidence is required from the evidence present, and the number it produced
+    would look right — which is exactly what the old caveat existed to refuse.
+    """
     ev = two_funds()
     ev.marks_total, ev.marks_with_basis = 72, 0
+    ev.holdings_stating_basis = 4
     caveat = " ".join(acceptance.basis_caveat(ev))
-    assert "recorded for 0 of 72 marks" in caveat
-    assert "every denominator is larger than the letter's" in caveat
+    assert "in NEITHER denominator" in caveat
     assert "circular" in caveat
+    assert "null for all 72 marks" in caveat, "the column's own state is still reported"
     printed = acceptance.report(ev, acceptance.assess(ev))
     where = printed.index(next(x for x in printed if x.startswith("¶2 ·")))
-    assert "recorded for 0 of 72 marks" in " ".join(printed[where : where + 10]), (
+    assert "NEITHER denominator" in " ".join(printed[where : where + 12]), (
         "the caveat is not printed where ¶2's numbers are"
     )
 
@@ -541,3 +549,57 @@ def test_every_fragment_resolves_against_the_letter_itself() -> None:
     """The whole map against the client's actual file. Everything above tests
     the machinery; this tests that the machinery is pointed at the letter."""
     acceptance.resolve_fragments(acceptance.letter_text())
+
+
+# ── ¶2's branches are scoped by what a document says ─────────────────────
+
+
+def test_a_branch_limb_is_owed_only_by_positions_that_branch_governs() -> None:
+    """¶2 asks two different things of two different kinds of mark, and asking
+    both of every position makes every denominator larger than the letter's.
+
+    A position whose documents say the mark rests on a financing round owes
+    branch A; one whose documents say anything else owes branch B. Nothing is
+    inferred: a position appears in a denominator only because a sentence in a
+    source put it there.
+    """
+    ev = two_funds()
+    ev.held = {("fund_ii_poolside", "2025-12-31"), ("fund_i_capsule", "2025-12-31")}
+    round_limb = LIMBS["2a"]
+    other_limb = LIMBS["2c"]
+
+    # `fund_i_capsule` is declared OTHER; `fund_ii_poolside` states no basis.
+    assert acceptance.BASIS_BRANCH["fund_i_capsule"][0] == acceptance.OTHER
+    assert "fund_ii_poolside" not in acceptance.BASIS_BRANCH
+
+    assert acceptance.scope_of(other_limb, ev) == [("fund_i_capsule", "2025-12-31")]
+    assert acceptance.scope_of(round_limb, ev) == []
+
+
+def test_a_position_whose_basis_no_document_states_is_in_neither_branch() -> None:
+    """The half that keeps the scoping honest.
+
+    Ten of fourteen positions state no basis. Defaulting them into either
+    branch would decide what evidence is required from the evidence present,
+    and the denominator it produced would look right. They belong to neither
+    and are reported as such.
+    """
+    ev = two_funds()
+    ev.held = {("fund_ii_poolside", "2025-12-31")}
+    for key in ("2a", "2b", "2c", "2d"):
+        assert acceptance.scope_of(LIMBS[key], ev) == [], (
+            f"{key} claims a position no document assigned to a branch"
+        )
+    # And a limb the branches do not divide still sees it.
+    assert acceptance.scope_of(LIMBS["3a"], ev) == [("fund_ii_poolside", "2025-12-31")]
+
+
+def test_every_branch_declared_is_one_the_letter_writes() -> None:
+    """Two branches, because the letter has two. A third value would be a
+    category nobody asked for, silently owed by nobody."""
+    assert {b for b, _ in acceptance.BASIS_BRANCH.values()} <= {
+        acceptance.ROUND,
+        acceptance.OTHER,
+    }
+    for holding, (_, why) in acceptance.BASIS_BRANCH.items():
+        assert len(why) > 40, f"{holding} is filed under a branch with no reason recorded"
