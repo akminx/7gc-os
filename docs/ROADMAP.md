@@ -2,7 +2,7 @@
 
 What I did not build, and the condition that would make me build it. A cut
 without a trigger is an excuse; a cut with one is a decision someone else can
-audit. Built and deployed: both funds, 72 marks over six packet dates, 237 cited
+audit. Built and deployed: both funds, 72 marks over six packet dates, 247 cited
 facts each bound to its passage, and an oracle the ledger agrees with on 175
 requirement comparisons.
 

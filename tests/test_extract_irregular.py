@@ -94,6 +94,7 @@ Measurement Date    Closing Price    Position Value
 12/31/2025          $7.70            $308,000
 
 Basis: quoted closing price on the last trading day of each fiscal year.
+Pre-listing periods (FY2021, FY2022): held at March 2021 purchase price ($14.25/share; $570,000).
 """
 
 MERGER = """ZENITH TRUST & TRANSFER COMPANY
@@ -110,7 +111,9 @@ was cancelled and converted into the right to receive $9.50 in cash, without int
     Tax withholding                       $0.00 (valid Form W-9 on file)
     Net payment                           $1,900,000.00
 
-Payment of the net amount was initiated by wire on May 24, 2024 to the account specified.
+Payment of the net amount was initiated by wire on May 24, 2024 to the account specified in the
+holder's letter of transmittal, ref. ZN-M-4402. Original acquisition of the shares by the holder:
+December 30, 2021 at $7.75 per share ($1,550,000.00 aggregate), per the Company's stock ledger.
 """
 
 TERM_SHEET = """ZENITH, INC.

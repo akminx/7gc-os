@@ -1,6 +1,6 @@
 """Model extraction for the one document a pattern reads badly. SPEC §10.
 
-The corpus is read by deterministic extractors and they work: 237 cited facts,
+The corpus is read by deterministic extractors and they work: 247 cited facts,
 all resolving. This is not a replacement for them. It is the tier SPEC §10 says
 rules cannot cover — *"model extraction only for prose"* — built on the single
 document that most needs it, so the cascade is a thing that runs rather than a

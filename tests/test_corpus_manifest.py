@@ -39,8 +39,8 @@ document before it compares anything else, which makes that structural rather
 than remembered.
 
 **A distractor is checked only against the ONE figure the map binds to that
-fact.** Read as "does any extracted figure cite this distractor" it fails 44 of
-56 times — because 44 of the distractor passages are the correct citation of
+fact.** Read as "does any extracted figure cite this distractor" it fails 46 of
+56 times — because 46 of the distractor passages are the correct citation of
 some OTHER manifest fact. Sway's `Conversion of 800,000 Series A at 1.09375 : 1`
 is a distractor for the post-recapitalisation share count and the right passage
 for the pre-recapitalisation one. A check wrong in that direction goes red
@@ -103,18 +103,19 @@ EXPECTED_FACTS = 104
 EXPECTED_DISTRACTORS = 56
 EXPECTED_ALSO_STATED = 5
 EXPECTED_PASSAGES = EXPECTED_FACTS + EXPECTED_DISTRACTORS + EXPECTED_ALSO_STATED
-EXPECTED_BOUND_FACTS = 95
-EXPECTED_UNMATCHED_FACTS = 9
-#: 95 bound facts, one of which — Banzai's position size — is cited onto three
-#: year-end claims and so is checked three times.
-EXPECTED_FIGURES = 97
+EXPECTED_BOUND_FACTS = 101
+EXPECTED_UNMATCHED_FACTS = 3
+#: 101 bound facts, three of which — Banzai's position size, and the two halves
+#: of its March 2021 entry cost — are stated once for the position and cited
+#: onto all three year-end claims, so each is checked three times.
+EXPECTED_FIGURES = 107
 EXPECTED_SHARED_WINDOWS = 11
 EXPECTED_FIGURE_ABSENCES = 6
 EXPECTED_DOCUMENT_GAP_ABSENCES = 7
 #: What the contract's substring rule would reject, all of them correct.
 EXPECTED_SUBSTRING_REJECTS = 7
 #: What an unscoped distractor check would report, all of them false.
-EXPECTED_UNSCOPED_DISTRACTOR_HITS = 44
+EXPECTED_UNSCOPED_DISTRACTOR_HITS = 46
 
 
 class WindowError(AssertionError):
@@ -351,14 +352,21 @@ def test_every_manifest_fact_is_either_bound_to_a_figure_or_recorded_as_unbound(
 def test_each_bound_fact_names_exactly_one_extracted_figure_per_claim() -> None:
     """A map entry matching two figures would compare whichever came first.
 
-    Banzai's position size is the deliberate exception and it is stated as one:
-    three claims, three figures, all three checked. Everything else is one.
+    Banzai's saved quote record is the deliberate exception, three times over
+    and stated as such: the position size and the two halves of the March 2021
+    entry cost are each written once for the position rather than for a year,
+    and the extractor cites each onto all three year-end claims. Three claims,
+    three figures, all three checked. Everything else is one.
     """
     census = {fact["id"]: len(_figures(fact)) for fact in FACTS if fact["id"] in FIELD}
     empty = sorted(name for name, count in census.items() if count == 0)
     assert not empty, f"{len(empty)} bound fact(s) match no extracted figure: {empty[:5]}"
     plural = {name: count for name, count in census.items() if count > 1}
-    assert plural == {"banzai.fund_shares": 3}, f"unexpectedly ambiguous bindings: {plural}"
+    assert plural == {
+        "banzai.fund_shares": 3,
+        "banzai.entry.fund_price_per_share": 3,
+        "banzai.entry.fund_aggregate_purchase_price": 3,
+    }, f"unexpectedly ambiguous bindings: {plural}"
     assert sum(census.values()) == EXPECTED_FIGURES
 
 
@@ -533,14 +541,21 @@ def test_no_figure_lands_in_a_passage_the_manifest_marks_as_the_wrong_one() -> N
 def test_a_distractor_belongs_to_one_fact_and_not_to_the_corpus() -> None:
     """Why the check above is scoped, kept as a check for the same reason.
 
-    Asked as "does ANY extracted figure cite this distractor", 44 of the 56 come
+    Asked as "does ANY extracted figure cite this distractor", 46 of the 56 come
     back positive — because a distractor is a real passage stating a real
-    figure, and 44 of them are the correct citation of some other manifest fact.
+    figure, and 46 of them are the correct citation of some other manifest fact.
     Sway's `Conversion of 800,000 Series A at 1.09375 : 1` is the wrong passage
     for the post-recapitalisation share count and the right one for the
     pre-recapitalisation count, and the corpus is full of that pattern.
 
-    A check failing 44 times out of 56 does not read as a broken check. It reads
+    Two of the 46 arrived when Jackpocket's and Banzai's entry cost was read.
+    The distractor for `jackpocket.merger.consideration_per_share` IS the
+    acquisition sentence, and the one for `banzai.fy2023.quoted_closing_price`
+    IS the basis note: the manifest already knew both passages state a real
+    figure meaning something else, and now something correctly cites them for
+    that something else. The scoped question is still answered no.
+
+    A check failing 46 times out of 56 does not read as a broken check. It reads
     as a broken system, which is the most expensive way to be wrong.
     """
     unscoped = 0
@@ -631,7 +646,7 @@ def test_the_number_the_system_stored_is_the_number_the_manifest_read() -> None:
             if stated != Decimal(str(value)):
                 problems.append(f"{fact['id']}: manifest {value}, system {row.value_text!r}")
     assert unparsed == ["lucra.series_a2.post_money_valuation"]
-    assert compared == 78
+    assert compared == 86
     assert not problems, f"{len(problems)} figure(s) disagree:\n" + "\n".join(problems[:10])
 
 
@@ -708,23 +723,30 @@ def test_because_market_has_no_document_and_therefore_no_figure() -> None:
 
 
 @pytest.mark.skipif(not CORPUS_PRESENT, reason=NO_CORPUS)
-def test_the_only_evidence_of_what_the_fund_paid_for_jackpocket_and_banzai_is_unread() -> None:
-    """The finding this file was built to surface, stated as a check.
+def test_the_only_evidence_of_what_the_fund_paid_for_jackpocket_and_banzai_is_read() -> None:
+    """The finding this file was built to surface, now stated as its inverse.
 
-    Four of the nine unbound facts are the corpus's ONLY statements of entry
-    cost for two holdings. Jackpocket's is one sentence inside the paying
-    agent's realisation notice — `December 30, 2021 at $4.00 per share
-    ($2,000,000.00 aggregate), per the Company's stock ledger` — and there is no
-    2021 purchase agreement anywhere. Banzai's is a parenthesis in a saved quote
-    record: `held at March 2021 purchase price ($10.00/share; $500,000)`.
+    Its predecessor asserted that four of the unbound facts were the corpus's
+    ONLY statements of entry cost for two holdings and that nothing read them.
+    Its docstring said it would go red the day that stopped being true. This is
+    the same check, turned over: Jackpocket's sentence inside the paying agent's
+    realisation notice — `December 30, 2021 at $4.00 per share ($2,000,000.00
+    aggregate), per the Company's stock ledger` — and Banzai's parenthesis in a
+    saved quote record — `held at March 2021 purchase price ($10.00/share;
+    $500,000)` — are each cited now, to the passage the manifest names.
 
-    Both documents are parsed today. Both figures are cited nowhere. So the
-    audit letter's first request — existence and cost — is answered with silence
-    for two holdings whose evidence the system has already read and discarded,
-    and the packet cannot report a gap it does not know it has.
+    **This is not a verdict.** A paying agent's recital and a saved brokerage
+    screen are not executed acquisition documents, so Jackpocket's R1 is still
+    `missing` and Banzai's still `partial`, and the `document_gap` rows saying
+    those purchase agreements are not located or are with counsel are still
+    true. What changed is that ¶1 for these two holdings is answered with a
+    cited figure AND a stated gap rather than with silence. A change that lifts
+    either gap on the strength of these figures is the defect this file exists
+    to catch, not the next step.
 
-    This test passes while that is true. It goes red the day it stops being
-    true, which is the day the four names below have to move into `FIELD`.
+    The last assertion is the category, not the four names: an `UNMATCHED` entry
+    reading "Nothing extracts it" is a figure the packet cannot state at all,
+    and there is no longer one of those.
     """
     entry_cost = {
         "jackpocket.entry.fund_price_per_share",
@@ -732,15 +754,18 @@ def test_the_only_evidence_of_what_the_fund_paid_for_jackpocket_and_banzai_is_un
         "banzai.entry.fund_price_per_share",
         "banzai.entry.fund_aggregate_purchase_price",
     }
-    assert entry_cost <= set(UNMATCHED)
+    assert not entry_cost & set(UNMATCHED)
+    assert entry_cost <= set(FIELD)
+    bound = _bindings()
     for name in entry_cost:
         fact = next(entry for entry in FACTS if entry["id"] == name)
-        # The passage is in the document and resolves; nothing reads it.
-        assert _window(fact["source"], fact["passage"])
-        assert not any(row.fact_id == name for row in _bindings())
+        window = _window(fact["source"], fact["passage"])
+        rows = [row for row in bound if row.fact_id == name]
+        assert rows, f"{name} is mapped and cites nothing"
+        for row in rows:
+            assert window.holds(row.place), f"{name} cites outside the manifest's passage"
     reads_nothing = {name for name, why in UNMATCHED.items() if why.startswith("Nothing extracts")}
-    assert entry_cost < reads_nothing
-    assert len(reads_nothing) == 6
+    assert reads_nothing == set()
 
 
 @pytest.mark.skipif(not CORPUS_PRESENT, reason=NO_CORPUS)

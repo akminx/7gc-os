@@ -20,12 +20,13 @@ Three things this file records, each of which is a judgement a person made:
   security_class, as_of)` still collides on Fluidstack's two
   `post_money_valuation` facts, one for the Series A-2 tranche and one for the
   Series B round, both read out of the same pro forma table.
-* `UNMATCHED` — the nine manifest facts that bind to nothing today, with the
+* `UNMATCHED` — the three manifest facts that bind to nothing today, with the
   reason for each. `join.mapping_is_not_renaming` in the manifest asks for
   exactly this: "a manifest field with NO counterpart is a FINDING, not a
-  chore." Six of the nine are figures no extractor reads at all, and four of
-  those six are the only evidence in the corpus of what the fund paid for
-  Jackpocket and Banzai.
+  chore." All three are now of one kind: the system cites the right document and
+  a weaker passage inside it. The six that were figures no extractor read at all
+  — four of them the corpus's only evidence of what the fund paid for Jackpocket
+  and Banzai — are bound below, which is what closed that finding.
 * `DOCUMENT_GAP_ABSENCES` — the absence entries that name a missing DOCUMENT
   rather than a missing figure, and so cannot be checked against
   `extracted_fact` at all.
@@ -163,6 +164,21 @@ FIELD: dict[str, tuple[str | None, str]] = {
     "jackpocket.merger.net_payment": ("merger_consideration", "net_payment"),
     "jackpocket.merger.effective_date": ("merger_consideration", "effective_date"),
     "jackpocket.merger.payment_date": ("merger_consideration", "payment_date"),
+    # The manifest files the transmittal reference under `settlement_reference`,
+    # which on the three purchase agreements means money IN — ¶1's third limb.
+    # Here it is the reference the exit proceeds were paid against, so the
+    # extractor gives it its own name and the map records the correspondence.
+    "jackpocket.merger.payment_reference": ("merger_consideration", "payment_reference"),
+    # ¶1 evidence inside a ¶4 document: the paying agent's recital of the
+    # company's stock ledger, and the only statement in the corpus of what 7GC
+    # paid for Jackpocket. Binding it does not make the notice an acquisition
+    # document — `document_gap` still records that the 2021 SPA is not located.
+    "jackpocket.entry.acquisition_date": ("merger_consideration", "acquisition_date"),
+    "jackpocket.entry.fund_price_per_share": ("merger_consideration", "original_purchase_pps"),
+    "jackpocket.entry.fund_aggregate_purchase_price": (
+        "merger_consideration",
+        "original_purchase_aggregate",
+    ),
     # ── Moonfare ──────────────────────────────────────────────────────
     "moonfare.fy2023.concluded_fair_value_usd": (
         "fy2023_third_party_valuation",
@@ -230,12 +246,19 @@ FIELD: dict[str, tuple[str | None, str]] = {
     "banzai.fy2024.position_value": ("fy2024_close", "position_value"),
     "banzai.fy2025.quoted_closing_price": ("fy2025_close", "closing_price"),
     "banzai.fy2025.position_value": ("fy2025_close", "position_value"),
+    # The basis note states the March 2021 entry once, for the position rather
+    # than for a year, so it is cited onto all three claims — the same shape as
+    # `banzai.fund_shares` above, and the same `None` for the claim key.
+    "banzai.entry.fund_price_per_share": (None, "original_purchase_pps"),
+    "banzai.entry.fund_aggregate_purchase_price": (None, "original_purchase_aggregate"),
 }
 
 #: The manifest facts nothing in `FIELD` accounts for, and why. Every entry here
-#: is a question for a person, not a chore: three are a citation the system
-#: places somewhere else in the right document, and six are figures no extractor
-#: reads at all.
+#: is a question for a person, not a chore, and all three are now one question:
+#: the system cites the right document and a weaker passage inside it. None of
+#: them is a figure nothing reads — that category was emptied when Jackpocket's
+#: and Banzai's entry cost was extracted, and an entry rejoining it would be a
+#: figure the packet has stopped being able to state.
 UNMATCHED: dict[str, str] = {
     "anthropic.press.reported_valuation": (
         "The extractor cites the headline; the manifest's window is the lead paragraph. "
@@ -258,40 +281,6 @@ UNMATCHED: dict[str, str] = {
         "EXECUTED purchase agreement dated 14 November 2025. That agreement is not in "
         "the corpus. The header states a date; the note states whose date it is, and "
         "only the note tells a reader that the executed instrument is missing."
-    ),
-    "jackpocket.merger.payment_reference": (
-        "Nothing extracts it. The notice states 'letter of transmittal, ref. "
-        "JP-M-1187'; the three purchase agreements all have their wire reference read "
-        "and cited, and the realisation notice does not."
-    ),
-    "jackpocket.entry.acquisition_date": (
-        "Nothing extracts it. The date the fund acquired the Jackpocket position — "
-        "30 December 2021 — is stated only inside the paying agent's recital of the "
-        "company's stock ledger."
-    ),
-    "jackpocket.entry.fund_price_per_share": (
-        "Nothing extracts it, and this is the corpus's ONLY statement of what the fund "
-        "paid for Jackpocket: '$4.00 per share', in one sentence of the merger notice, "
-        "attributed to the Company's stock ledger. There is no 2021 purchase agreement. "
-        "A packet built from what the extractors read today answers the audit letter's "
-        "existence-and-cost request for this holding with nothing at all."
-    ),
-    "jackpocket.entry.fund_aggregate_purchase_price": (
-        "Nothing extracts it. '($2,000,000.00 aggregate)', in the same sentence, and "
-        "the same consequence: the cost limb of the letter's first request is "
-        "unanswered for Jackpocket while the evidence sits in a document the system "
-        "has already parsed."
-    ),
-    "banzai.entry.fund_price_per_share": (
-        "Nothing extracts it. The quote record's basis note states '$10.00/share' for "
-        "the March 2021 purchase — written in a compressed form, inside a parenthesis "
-        "about periods before the audit window. It is the only statement of Banzai's "
-        "entry price in the corpus."
-    ),
-    "banzai.entry.fund_aggregate_purchase_price": (
-        "Nothing extracts it. '$500,000', in the same parenthesis, and the only "
-        "statement of what the fund paid for the Banzai position anywhere in the "
-        "corpus."
     ),
 }
 

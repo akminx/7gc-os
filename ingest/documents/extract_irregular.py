@@ -52,6 +52,24 @@ example. Each row therefore gets its own claim, its own `issued_date`, and its
 own applicability window, and each row's price is quoted inside that row so
 three prices in one file cannot be confused for one another.
 
+## Two of these documents recite an acquisition they did not effect
+
+Jackpocket's paying-agent notice states, from the company's stock ledger, that
+the holder bought in on 30 December 2021 at $4.00 a share for $2,000,000.00.
+Banzai's saved quote screen states, in a parenthesis about periods before the
+audit window, that the position is held at a March 2021 purchase price of
+$10.00/share, $500,000. Neither figure is stated anywhere else in the corpus,
+and there is no purchase agreement for either position.
+
+Reading them changes what the packet can SAY and not what it may CONCLUDE. A
+paying agent's recital and a saved brokerage screen are not executed acquisition
+documents, so the classifications above are untouched, the R1 gaps recording
+that those agreements are not located stay open, and neither claim gains a
+reliance link on the letter's first request. What ends is the silence: ¶1 for
+these two holdings is now answered with a cited figure AND a stated gap, rather
+than with nothing. A later change that lifts either gap on the strength of these
+figures would report that a brokerage screen satisfies the letter.
+
 ## Prices are read from the citation, never typed beside it
 
 `_cited_price` takes the claim's `price_per_share` out of the fact that cites
@@ -70,6 +88,7 @@ from decimal import Decimal
 from ingest.documents.claims import ClaimDraft, FactDraft, cited_fact
 from ingest.documents.extract_dream import HELD_CLASS as DREAM_HELD_CLASS
 from ingest.documents.extract_dream import PRICED_CLASS as DREAM_PRICED_CLASS
+from ingest.documents.extract_spa import WIRE_REF
 from ingest.documents.parse import ParsedDocument
 from packages.contracts.citations import CitationError
 from packages.contracts.enums import ExecutionStatus, SourceClass
@@ -248,7 +267,8 @@ BANZAI_PRICED_CLASS = "common"
 
 
 def _banzai_patterns(observed: date) -> dict[str, re.Pattern[str]]:
-    """One row's three figures, each quoted inside that row.
+    """One row's three figures, each quoted inside that row, and the two the
+    whole file states once.
 
     Three prices live in this file — $2.40, $1.10 and $0.62 — and each appears
     once. Quoting a price on its own would still resolve; anchoring it to its
@@ -258,6 +278,17 @@ def _banzai_patterns(observed: date) -> dict[str, re.Pattern[str]]:
     The row label is built from the date the claim carries, so a claim dated
     12/31/2024 cannot cite the 12/29/2023 row: there is no second place for the
     date to be typed and therefore nothing for the two to disagree about.
+
+    The share count and the entry cost carry no row, because the document states
+    each of them once for the position as a whole. They are cited onto all three
+    claims for that reason, exactly as `position_shares` already was.
+
+    `March 2021` is a literal and not a `_date_pattern`: the basis note states a
+    month and a year and no day, so there is no date constant for a pattern to
+    be built from. `/share` sits OUTSIDE the price group deliberately —
+    `cited_numeral("$10.00/share")` reads no figure at all, and a price stored
+    with no number is a claim's worth of evidence that reconciles against
+    nothing.
     """
     row = f"{observed.month:02d}/{observed.day:02d}/{observed.year}"
     return {
@@ -265,13 +296,19 @@ def _banzai_patterns(observed: date) -> dict[str, re.Pattern[str]]:
         "quote_date": re.compile(rf"(?P<value>{row})\s+\$[\d.]+\s+\$[\d,]+"),
         "closing_price": re.compile(rf"{row}\s+(?P<value>\$[\d.]+)\s+\$[\d,]+"),
         "position_value": re.compile(rf"{row}\s+\$[\d.]+\s+(?P<value>\$[\d,]+)"),
+        "original_purchase_pps": re.compile(
+            r"held at March 2021 purchase price \((?P<value>\$[\d.]+)/share; \$[\d,]+\)"
+        ),
+        "original_purchase_aggregate": re.compile(
+            r"held at March 2021 purchase price \(\$[\d.]+/share; (?P<value>\$[\d,]+)\)"
+        ),
     }
 
 
 def banzai_facts(
     document_version_id: str, parsed: ParsedDocument, observed: date
 ) -> tuple[FactDraft, ...]:
-    """The share count, and one row's date, close and position value."""
+    """The share count, the entry cost, and one row's date, close and value."""
     return _facts(document_version_id, parsed, _banzai_patterns(observed))
 
 
@@ -317,6 +354,12 @@ def banzai_claims(
 MERGER_EFFECTIVE_DATE = date(2024, 5, 20)
 JACKPOCKET_PRICED_CLASS = "series_b"
 
+#: The date the paying agent recites for the holder's ORIGINAL purchase, which
+#: is not a date this notice effects anything on. It is compiled into its own
+#: pattern for the same reason every other date here is: a notice that stated
+#: another day would match nothing rather than be cited for this one.
+JACKPOCKET_ENTRY_DATE = date(2021, 12, 30)
+
 #: Escrow and withholding are extracted even though both are zero. V9 reconciles
 #: `gross == shares × per-share` and reconciles fees, escrow and withholding
 #: *separately*, never comparing net to the gross formula — and a zero that was
@@ -339,6 +382,30 @@ _JACKPOCKET: dict[str, re.Pattern[str]] = {
     "tax_withholding": re.compile(r"Tax withholding\s+(?P<value>\$[\d,.]+)"),
     "net_payment": re.compile(r"Net payment\s+(?P<value>\$[\d,.]+)"),
     "payment_date": re.compile(r"initiated by wire on (?P<value>May \d+, \d{4})"),
+    # `letter of transmittal` occurs three times in the notice and only this one
+    # carries a reference, so the `, ref\.` is what names the passage rather
+    # than the phrase. `-layout` wraps the line between the two words, which is
+    # why the space is `\s+`; a literal space matches nothing here.
+    "payment_reference": re.compile(rf"letter of\s+transmittal, ref\. (?P<value>{WIRE_REF})"),
+    # ¶1, inside a ¶4 document. The paying agent recites the company's stock
+    # ledger, and that recital is the corpus's only statement of what the fund
+    # paid for Jackpocket — there is no 2021 purchase agreement. Extracting it
+    # answers the letter's first request with a figure and its provenance; it
+    # does not turn a merger notice into an acquisition document, and the
+    # `document_gap` recording that the SPA is not located stays as it is.
+    "acquisition_date": re.compile(
+        r"Original acquisition of the shares by the holder:\s+"
+        rf"(?P<value>{_date_pattern(JACKPOCKET_ENTRY_DATE)})"
+    ),
+    "original_purchase_pps": re.compile(
+        r"Original acquisition of the shares by the holder:\s+"
+        rf"{_date_pattern(JACKPOCKET_ENTRY_DATE)} at (?P<value>\$[\d.]+) per share"
+    ),
+    # The wrap falls between `per share` and `($2,000,000.00`, so the space in
+    # front of the bracket is `\s+` for the same reason as above.
+    "original_purchase_aggregate": re.compile(
+        r"at \$[\d.]+ per share\s+\((?P<value>\$[\d,.]+) aggregate\)"
+    ),
 }
 
 

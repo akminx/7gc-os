@@ -97,6 +97,11 @@ FIELD_REQUIREMENT: dict[str, frozenset[RequirementCode]] = {
     "security_class_held": frozenset({R1}),
     "shares_held": frozenset({R1}),
     "position_shares": frozenset({R1}),
+    # A later document reciting the fund's ORIGINAL acquisition: Capsule's memo,
+    # Jackpocket's realisation notice, Banzai's basis note. `agreement_date` is
+    # deliberately not reused for the date — on the merger notice that name
+    # already carries `merger_agreement_date`, which is a different agreement.
+    "acquisition_date": frozenset({R1}),
     "original_purchase_pps": frozenset({R1}),
     "original_purchase_aggregate": frozenset({R1}),
     "acquisition_consideration_usd": frozenset({R1}),
@@ -209,6 +214,10 @@ FIELD_REQUIREMENT: dict[str, frozenset[RequirementCode]] = {
     "escrow_allocation": frozenset({R4}),
     "tax_withholding": frozenset({R4}),
     "payment_date": frozenset({R4}),
+    # The transmittal reference the exit proceeds were paid against. Not
+    # `settlement_reference`: on the purchase agreements that name is money IN,
+    # which is ¶1's third limb, and this is money OUT.
+    "payment_reference": frozenset({R4}),
     "merger_agreement_date": frozenset({R4}),
     "security": frozenset({R4}),
     # A recapitalisation's effective date and a merger's. Both, for the reason
@@ -328,6 +337,7 @@ LEAD_FIELDS: dict[RequirementCode, tuple[str, ...]] = {
         "escrow_allocation",
         "tax_withholding",
         "payment_date",
+        "payment_reference",
     ),
     R5: (
         "executed_docs_pending",

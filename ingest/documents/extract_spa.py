@@ -99,7 +99,12 @@ _MONEY = r"\$[\d,]+\.\d\d"
 _WHOLE_MONEY = r"\$[\d,]+"
 _DATE_SPELLED = r"[A-Z][a-z]+ \d{1,2}, \d{4}"
 _DATE_SLASHED = r"\d{2}/\d{2}/\d{4}"
-_WIRE_REF = r"[A-Z]{2}-[A-Z]-\d{4}"
+
+#: How this corpus spells a payment reference, public because the same shape is
+#: read on Jackpocket's realisation notice — `JP-M-1187` on a letter of
+#: transmittal. Imported there rather than restated, so the format is stated
+#: once and two extractors cannot drift into two ideas of what one looks like.
+WIRE_REF = r"[A-Z]{2}-[A-Z]-\d{4}"
 
 _MONTHS = (
     "January",
@@ -203,7 +208,7 @@ def _settlement_patterns(purchaser: str) -> dict[str, re.Pattern[str]]:
             line + _MONEY + r" received (?P<value>" + _DATE_SLASHED + r"|" + _DATE_SPELLED + r")"
         ),
         "settlement_reference": re.compile(
-            line + _MONEY + r" received [^\n]*ref\.\s+(?P<value>" + _WIRE_REF + r")"
+            line + _MONEY + r" received [^\n]*ref\.\s+(?P<value>" + WIRE_REF + r")"
         ),
     }
 
