@@ -117,13 +117,66 @@ def synthetic_statement(as_of: date) -> str:
         "     Unfunded commitment                                    $0.00\n"
         "\n"
         "The Partnership holds a single underlying position: an indirect interest in Jio "
-        "Platforms Limited, acquired July 2020. The Partnership's valuation is determined "
-        "based on the price of the most recent observable financing round of the "
-        "underlying company, adjusted for fees.\n"
+        "Platforms Limited, acquired July 2020. The\nPartnership's valuation of the "
+        "underlying position is determined in accordance with the Partnership's valuation "
+        "policy,\nbased on the price of the most recent observable financing round of the "
+        "underlying company, adjusted for the\nPartnership's fees and expenses where "
+        "applicable.\n"
         "Figures are unaudited. Statements are issued annually as of the Partnership's "
         "fiscal year end and delivered to the investor's email of record in PDF format.\n"
     )
 
+
+#: Clearwater's FY2023 Moonfare memo, in shape. Added when the basis patterns
+#: went in: both Moonfare documents were reached only through `@needs_corpus`,
+#: so every guard over them SKIPPED in a checkout without the case study — and a
+#: guard that skips because the corpus is private has not failed.
+SYNTHETIC_MOONFARE_MEMO = (
+    "Independent Valuation Memorandum — Subject: 7GC Fund II, L.P. holding in Moonfare "
+    "GmbH — Measurement\nDate: December 31, 2023 — Engagement ref. CVA-2024-0031\n"
+    "\n"
+    "CVA was engaged to estimate the fair value of the Fund's EUR-denominated interest. "
+    "The Fund acquired the interest in\nMarch 2023 for consideration of $1,000,000, "
+    "corresponding to a EUR-denominated interest of EUR 950,000 at the\nexchange rate "
+    "prevailing at acquisition.\n"
+    "\n"
+    "2. Valuation Approach\n"
+    "Calibration to most recent financing. The Company completed an equity financing in "
+    "March 2023 at a post-money\nvaluation of €555,000,000, in which the Fund "
+    "participated. We identified no subsequent financing rounds, secondary\ntransactions "
+    "or other observable market inputs before the Measurement Date. Accordingly, we\n"
+    "concluded the March 2023 round price remains the best indication of fair value for "
+    "the EUR-denominated interest at the\nMeasurement Date.\n"
+    "\n"
+    "      EUR-denominated interest (last-round basis)          EUR 950,000\n"
+    "      EUR/USD closing rate, 12/31/2023                          1.0526\n"
+    "      Concluded fair value (USD, rounded)                   $1,000,000\n"
+    "\n"
+    "This memorandum was prepared for the FY2023 financial statement audit of the Fund "
+    "and should not be relied upon for subsequent\nmeasurement dates without update.\n"
+)
+
+#: 7GC Fund Operations' FY2024 re-measurement of the same interest, in shape.
+SYNTHETIC_MOONFARE_FX = (
+    "7GC — FUND OPERATIONS\n"
+    "Internal Memorandum — FX Re-measurement of EUR-Denominated Holding — Measurement "
+    "Date: December\n31, 2024\n"
+    "\n"
+    "     EUR-denominated interest (unchanged, last-round basis)      EUR 950,000\n"
+    "     EUR/USD closing rate, 12/31/2024                                 1.1037\n"
+    "     USD carrying value, 12/31/2024                               $1,048,515\n"
+    "     Prior USD carrying value (entry, March 2023: $1,000,000)     $1,000,000\n"
+    "     FX re-measurement adjustment                                   +$48,515\n"
+    "\n"
+    "Basis\n"
+    "The underlying EUR value of the interest is unchanged and remains based on the "
+    "company's most recent equity\nfinancing (March 2023), consistent with the FY2023 "
+    "third-party valuation memorandum. The USD movement is\nattributable solely to the "
+    "change in the EUR/USD exchange rate between the measurement dates. The interest\n"
+    "will be re-measured at the closing rate at each future measurement date.\n"
+    "\n"
+    "Prepared by Fund Operations; reviewed by the CFO.\n"
+)
 
 #: Capsule's shape, including the sentence INV-16 turns on.
 SYNTHETIC_CAPSULE = (
@@ -137,6 +190,22 @@ SYNTHETIC_CAPSULE = (
     "\n"
     "In Q3 2022 the Company closed a $9,000,000 bridge financing in the form of "
     "convertible notes.\n"
+    "\n"
+    # §3 and §4 are both here because the memo names approaches it REJECTED
+    # beside the one it used, and a basis read out of the wrong section reports
+    # a ground the valuer declined to stand on. The heading is the only thing
+    # that tells them apart, which is why it is inside the citation.
+    "3. Valuation Approaches Considered\n"
+    "Market approach — backsolve. We considered a backsolve to the Q3 2022 bridge "
+    "financing. Because the bridge was\nissued as convertible debt to insiders under "
+    "distressed conditions, we applied it as a calibration input rather than a primary\n"
+    "indication. Income approach. Not relied upon given the limited reliability of "
+    "long-range forecasts at the Measurement Date.\n"
+    "\n"
+    "4. Selected Approach and Allocation\n"
+    "We estimated total equity value using a hybrid of the calibrated backsolve and the "
+    "guideline multiple contraction applied to\nthe Company's revised revenue plan, and "
+    "allocated value across the capital structure using an option pricing model\n(OPM).\n"
     "\n"
     "      Concluded fair value per Series B Preferred share             $1.20\n"
     "      Fund holding (500,000 shares)                             $600,000\n"
@@ -308,6 +377,125 @@ def test_the_capsule_memo_prices_the_class_it_states(tmp_path: Path) -> None:
     assert facts["implied_change_vs_purchase"].value_numeric == Decimal("-70.0")
 
 
+# ── ¶2 · the ground a value rests on, where a document states one ───────
+# ¶2 has two limbs and which one governs a row depends on what the mark is
+# BASED ON, so `mark.basis` decides how every ¶2 figure is scored. It is NULL
+# for all 72 marks, and the temptation is to fill it from the evidence on file:
+# there is a cap table, so the mark is round-based. That reasoning cannot come
+# out wrong — the answer justifies itself — and it renders as a determined fact
+# an auditor cannot tell from a real one.
+#
+# So the basis is READ, never inferred, and the guards below are about the two
+# ways reading it goes wrong: citing a sentence that states something adjacent
+# (an approach considered and declined, an absence of rounds, a cost basis for
+# periods this document raises no claim for), and inventing one where the
+# document is silent. Four of this family's seven documents state a basis. The
+# other three do not, and `test_a_document_that_states_no_basis_produces_none`
+# is what keeps that a finding rather than a gap someone later fills in.
+def test_the_jio_basis_says_whose_it_is_and_what_was_done_to_it(tmp_path: Path) -> None:
+    """The Partnership's ground for the underlying position, not 7GC's for the
+    feeder mark — and a round price ADJUSTED, not a round price.
+
+    Cited bare, "based on the price of the most recent observable financing
+    round" reads as the fund's own basis and as an unadjusted round price.
+    Neither is what the statement says, and both are the reading that makes the
+    account look like cleaner evidence than it is.
+    """
+    as_of = date(2024, 12, 31)
+    doc = _doc(tmp_path, synthetic_statement(as_of), "stmt.txt")
+    fact = {f.field_name: f for f in jio_statement_facts("dv", doc, as_of)}[
+        "valuation_basis_stated"
+    ]
+    assert "Partnership's valuation of the underlying position" in fact.citation.quote
+    assert "in accordance with the Partnership's valuation policy" in fact.citation.quote
+    assert fact.value_text.startswith("based on the price of the most recent observable")
+    assert fact.value_text.endswith("Partnership's fees and expenses where applicable.")
+    assert "adjusted for the" in fact.value_text
+
+
+def test_the_moonfare_basis_is_the_conclusion_and_not_the_search_before_it(
+    tmp_path: Path,
+) -> None:
+    """§2 says two things and only one of them is a basis.
+
+    *"We identified no subsequent financing rounds, secondary transactions or
+    other observable market inputs"* is an ABSENCE — ¶3's subject, the age and
+    scope of the support, which this corpus already answers with
+    `no_subsequent_round_of_record`. The basis is the sentence that says what
+    the concluded value rests ON, and citing the absence for it would file a
+    ¶3 fact under ¶2 while reporting that the memo based its value on having
+    found nothing.
+    """
+    doc = _doc(tmp_path, SYNTHETIC_MOONFARE_MEMO, "memo.txt")
+    fact = {f.field_name: f for f in moonfare_memo_facts("dv", doc)}["valuation_basis_stated"]
+    assert fact.value_text.startswith("concluded the March 2023 round price")
+    assert "best indication of fair value" in fact.value_text
+    assert "identified no subsequent" not in fact.citation.quote
+    assert fact.value_numeric is None
+
+
+def test_the_fx_memo_basis_carries_the_word_that_dates_it(tmp_path: Path) -> None:
+    """A 2023 ground under a 2024 measurement date, and the memo says so.
+
+    The quote reaches back to *"is unchanged and"* deliberately. Capturing only
+    "remains based on the company's most recent equity financing (March 2023)"
+    would still resolve and would still be true, and an auditor reading it
+    beside a 12/31/2024 measurement date would have to work out for himself
+    that twenty-one months passed and nothing was re-priced. The memo does not
+    make him: it states it in the same sentence.
+    """
+    doc = _doc(tmp_path, SYNTHETIC_MOONFARE_FX, "fx.txt")
+    stated = {f.field_name: f for f in moonfare_fx_facts("dv", doc)}
+    fact = stated["valuation_basis_stated"]
+    assert "is unchanged and" in fact.citation.quote
+    assert "(March 2023)" in fact.value_text
+    # The measurement date is 2024's and the ground is 2023's. Two different
+    # years in one claim is the whole content of this document.
+    assert "2024" in stated["measurement_date"].value_text
+    assert "2024" not in fact.value_text
+
+
+def test_the_capsule_basis_is_the_selected_approach_and_not_a_rejected_one(
+    tmp_path: Path,
+) -> None:
+    """The corpus's only model-based mark, and its sharpest mis-citation.
+
+    §3 "Valuation Approaches Considered" lists a backsolve demoted to *"a
+    calibration input rather than a primary indication"* and an income approach
+    *"Not relied upon"*. Both are grammatical basis sentences about this
+    valuation; neither is the basis. The section heading is inside the citation
+    because it is the only thing in the passage that tells them apart, and a
+    basis read out of §3 would report Capsule's $600,000 as resting on ground
+    Clearwater explicitly refused.
+    """
+    doc = _doc(tmp_path, SYNTHETIC_CAPSULE, "capsule.txt")
+    fact = {f.field_name: f for f in capsule_memo_facts("dv", doc)}["valuation_basis_stated"]
+    assert fact.citation.quote.startswith("4. Selected Approach and Allocation")
+    assert "a hybrid of the calibrated backsolve" in fact.value_text
+    for rejected in ("Not relied upon", "rather than a primary", "Approaches Considered"):
+        assert rejected not in fact.value_text
+    # Rejected approaches are in the document and must stay unread by this
+    # field, so the guard checks the section it did NOT come from is present.
+    assert "3. Valuation Approaches Considered" in doc.canonical_text
+
+
+def test_a_document_that_states_no_basis_produces_none(tmp_path: Path) -> None:
+    """The silence, which is as much the deliverable as the four extractions.
+
+    Meridian's covering email transmits a statement that states a basis and
+    states none itself, and that is the ordinary case in this corpus rather
+    than the exception. Sixty-odd marks have no basis sentence anywhere behind
+    them; leaving them NULL is a finding about what the fund holds, and the way
+    that finding dies is a later pattern that reads a basis out of a document
+    that never gave one.
+    """
+    doc = _doc(tmp_path, SYNTHETIC_EMAIL, "email.txt")
+    assert "valuation_basis_stated" not in {f.field_name for f in meridian_email_facts("dv", doc)}
+    # And no basis-shaped words are in it to read one out of.
+    assert "Basis" not in doc.canonical_text
+    assert "based on" not in doc.canonical_text
+
+
 # ── The real documents ───────────────────────────────────────────────────
 #: Hand-transcribed from each PDF. `None` where the passage states no single
 #: figure — a wrapped date, a pair, a sentence — because a silent zero is worse.
@@ -326,6 +514,11 @@ MOONFARE_MEMO_EXPECTED: dict[str, tuple[str, str | None]] = {
         "should not be relied upon for subsequent\nmeasurement dates without update.",
         None,
     ),
+    "valuation_basis_stated": (
+        "concluded the March 2023 round price remains the best indication of fair value "
+        "for the EUR-denominated interest at the\nMeasurement Date.",
+        None,
+    ),
 }
 
 MOONFARE_FX_EXPECTED: dict[str, tuple[str, str | None]] = {
@@ -340,6 +533,10 @@ MOONFARE_FX_EXPECTED: dict[str, tuple[str, str | None]] = {
     "prior_usd_carrying_value": ("$1,000,000", "1000000"),
     # The `+` stays in the quote; the figure is the magnitude.
     "fx_remeasurement_adjustment": ("$48,515", "48515"),
+    "valuation_basis_stated": (
+        "remains based on the company's most recent equity\nfinancing (March 2023)",
+        None,
+    ),
     "basis_reference": ("consistent with the FY2023 third-party valuation memorandum.", None),
     "remeasurement_scope": (
         "The interest\nwill be re-measured at the closing rate at each future measurement date.",
@@ -355,6 +552,11 @@ CAPSULE_EXPECTED: dict[str, tuple[str, str | None]] = {
     "original_purchase_pps": ("$4.00", "4.00"),
     "original_purchase_aggregate": ("$2,000,000", "2000000"),
     "bridge_financing_amount": ("$9,000,000", "9000000"),
+    "valuation_basis_stated": (
+        "We estimated total equity value using a hybrid of the calibrated backsolve and "
+        "the guideline multiple contraction applied to\nthe Company's revised revenue plan",
+        None,
+    ),
     "concluded_fair_value_per_share": ("$1.20", "1.20"),
     "fund_holding_value": ("$600,000", "600000"),
     "implied_change_vs_purchase": ("(70.0%)", "-70.0"),
@@ -402,9 +604,13 @@ def statement_expected(as_of: date) -> dict[str, tuple[str, str | None]]:
             "an indirect interest in Jio Platforms Limited, acquired July 2020.",
             None,
         ),
-        "valuation_basis": (
+        # The fee-and-expense adjustment is part of the value, not decoration in
+        # the quote: the Partnership does not state the account AS the round
+        # price, it states it as the round price adjusted.
+        "valuation_basis_stated": (
             "based on the price of the most recent observable financing round of the "
-            "underlying company",
+            "underlying company, adjusted for the\nPartnership's fees and expenses "
+            "where applicable.",
             None,
         ),
         "audit_status": ("Figures are unaudited.", None),

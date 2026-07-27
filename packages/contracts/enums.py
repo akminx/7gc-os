@@ -148,6 +148,42 @@ class DecisionType(StrEnum):
     PACKET = "packet"
 
 
+class AssessmentKind(StrEnum):
+    """WHICH document management wrote, when it wrote a management assessment.
+
+    The letter asks for three, by different names and for different reasons, and
+    `DecisionType` had one value for all of them — so a fund writing only a
+    basis memo answered ¶2, ¶3(b) and the closing calibration at once and no
+    query could say which it had actually produced. `scripts/acceptance.py`
+    reported all three as NOT EXPRESSIBLE rather than score them.
+    """
+
+    #: ¶2 · what a mark is based on, where the basis is not a financing round.
+    BASIS_MEMO = "basis_memo"
+    #: ¶3(b) · that the LAST round's price still represents fair value at a date
+    #: after that round. A different claim from the basis memo: one says what was
+    #: done, the other says it still holds.
+    REPRESENTATIVENESS = "representativeness"
+    #: The closing paragraph's RECOMMENDATION, separated from ¶3(b) by verb —
+    #: "we continue to recommend" against "please provide" — and by trigger:
+    #: twelve months at an unchanged mark, not merely a subsequent date.
+    CALIBRATION = "calibration"
+
+
+class AssessmentConsideration(StrEnum):
+    """¶3(b)'s parenthetical, which names its own contents.
+
+    "(including consideration of company performance, market conditions, and any
+    indicators of impairment)" — three things the assessment must CONTAIN, not
+    merely that one exists. Unbuildable while the assessment itself could not be
+    told from two other documents.
+    """
+
+    COMPANY_PERFORMANCE = "company_performance"
+    MARKET_CONDITIONS = "market_conditions"
+    IMPAIRMENT_INDICATORS = "impairment_indicators"
+
+
 class DecisionStatus(StrEnum):
     DRAFT = "draft"
     APPROVED = "approved"
@@ -177,6 +213,8 @@ PG_ENUMS: dict[str, type[StrEnum]] = {
     "gap_kind": GapKind,
     "gap_remediation": GapRemediation,
     "decision_type": DecisionType,
+    "assessment_kind": AssessmentKind,
+    "assessment_consideration": AssessmentConsideration,
     "decision_status": DecisionStatus,
     "fact_state": FactState,
 }

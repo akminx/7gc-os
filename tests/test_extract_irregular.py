@@ -93,7 +93,7 @@ Measurement Date    Closing Price    Position Value
 12/31/2024          $8.80            $352,000
 12/31/2025          $7.70            $308,000
 
-Basis: quoted closing price on the last trading day of each fiscal year.
+Basis: quoted closing price on the last trading day of each fiscal year (Level 1 input).
 Pre-listing periods (FY2021, FY2022): held at March 2021 purchase price ($14.25/share; $570,000).
 """
 

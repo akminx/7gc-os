@@ -79,6 +79,21 @@ export type GapRemediation = "open" | "requested" | "received" | "unobtainable";
 
 export type DecisionType = "transcription" | "valuation" | "management_assessment" | "packet";
 
+/**
+ * Which of the three documents management wrote. The letter asks for a basis
+ * memo, a representativeness assessment and a calibration assessment by
+ * different names and for different reasons, and `DecisionType` had one value
+ * for all three — so one memo answered every one of them and no query could say
+ * which the fund had actually produced.
+ */
+export type AssessmentKind = "basis_memo" | "representativeness" | "calibration";
+
+/** What a representativeness assessment says it considered — ¶3(b)'s own parenthetical. */
+export type AssessmentConsideration =
+  | "company_performance"
+  | "market_conditions"
+  | "impairment_indicators";
+
 export type DecisionStatus = "draft" | "approved" | "rejected" | "superseded";
 
 export type FactState = "candidate" | "canonical" | "approved";

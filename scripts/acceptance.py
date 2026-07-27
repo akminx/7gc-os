@@ -182,6 +182,17 @@ class Limb:
     #: `ingest/documents/extract_term_sheet.py` emits for a document that is not
     #: pro forma at all — reported a position as marked pro forma.
     statuses: frozenset[str] = frozenset()
+    #: ¶3(b)'s parenthetical: "(including consideration of company performance,
+    #: market conditions, and any indicators of impairment)". Three things the
+    #: assessment must CONTAIN, not merely that one exists.
+    #:
+    #: Unbuildable until `0012`, and not for want of trying: while ¶2's basis
+    #: memo, ¶3(b)'s assessment and the closing calibration were one enum value,
+    #: the contents of a document could not be checked because the document
+    #: could not be told from two others. `assessment_consideration_record`
+    #: carries one row per consideration with the note that says what was
+    #: considered, so an auditor reads the consideration rather than a checkbox.
+    considerations: frozenset[str] = frozenset()
     #: This limb asks WHICH positions, not whether each position is supported.
     #:
     #: The closing paragraph's second aside is the only one: "please also
@@ -193,7 +204,9 @@ class Limb:
     census: bool = False
 
     def __post_init__(self) -> None:
-        if not self.classes and not self.fields and not self.decisions and not self.statuses:
+        if not (
+            self.classes or self.fields or self.decisions or self.statuses or self.considerations
+        ):
             raise AcceptanceError(
                 f"limb {self.key} declares no evidence at all. A limb that asks for"
                 " nothing is answered by everything, which is the failure this file exists"
@@ -324,7 +337,7 @@ PARA_2 = (
         "other-information marks · and management's memo describing the basis",
         "management's memo describing the basis of the mark",
         BY_POSITION_DATE,
-        decisions=frozenset({"management_assessment"}),
+        decisions=frozenset({"basis_memo"}),
     ),
 )
 
@@ -359,7 +372,37 @@ PARA_3 = (
         "management's assessment at each subsequent measurement date",
         "management's assessment that the last round price remains representative",
         BY_POSITION_DATE,
-        decisions=frozenset({"management_assessment"}),
+        decisions=frozenset({"representativeness"}),
+    ),
+    # ¶3(b)'S PARENTHETICAL, and three limbs rather than one for the reason ¶1's
+    # figures are three: an assessment that considered market conditions and not
+    # impairment has answered part of the request, and one limb would report
+    # that as answering none of it.
+    #
+    # Separate from 3b, not folded into it, because "no assessment" and "an
+    # assessment that considered nothing" are different findings with different
+    # next actions — one asks the fund to write something, the other asks them to
+    # widen what they already wrote.
+    Limb(
+        "3c",
+        "the assessment considers company performance",
+        "including consideration of company performance",
+        BY_POSITION_DATE,
+        considerations=frozenset({"company_performance"}),
+    ),
+    Limb(
+        "3d",
+        "the assessment considers market conditions",
+        "market conditions",
+        BY_POSITION_DATE,
+        considerations=frozenset({"market_conditions"}),
+    ),
+    Limb(
+        "3e",
+        "the assessment considers any indicators of impairment",
+        "any indicators of impairment",
+        BY_POSITION_DATE,
+        considerations=frozenset({"impairment_indicators"}),
     ),
 )
 
@@ -428,7 +471,7 @@ ASIDES = (
         "calibration assessment for unchanged marks over twelve months",
         "calibration assessment for positions held at an unchanged mark for more than twelve",
         BY_POSITION_DATE,
-        decisions=frozenset({"management_assessment"}),
+        decisions=frozenset({"calibration"}),
     ),
 )
 
@@ -532,6 +575,13 @@ class Evidence:
     statuses_by_date: dict[tuple[str, str], set[str]] = field(
         default_factory=lambda: defaultdict(set)
     )
+    considerations_by_position: dict[str, set[str]] = field(
+        default_factory=lambda: defaultdict(set)
+    )
+    considerations_by_date: dict[tuple[str, str], set[str]] = field(
+        default_factory=lambda: defaultdict(set)
+    )
+    known_considerations: frozenset[str] = frozenset()
     held: set[tuple[str, str]] = field(default_factory=set)
     realised: set[str] = field(default_factory=set)
 
@@ -558,8 +608,20 @@ def read_ledger(conn: Conn) -> Evidence:
     ev.known_fields = frozenset(
         str(f) for (f,) in conn.execute("select distinct field_name from extracted_fact")
     )
+    # The decision vocabulary is `decision_type` PLUS the kinds a management
+    # assessment can declare itself to be. `0012` split that one value into
+    # three because the letter asks for three different documents and this
+    # ledger had one place to put them — so a fund writing only a basis memo
+    # answered ¶2, ¶3(b) and the closing calibration at once, and no query could
+    # say which it had actually written.
     ev.known_decisions = frozenset(
         str(d) for (d,) in conn.execute("select unnest(enum_range(null::decision_type))::text")
+    ) | frozenset(
+        str(k) for (k,) in conn.execute("select unnest(enum_range(null::assessment_kind))::text")
+    )
+    ev.known_considerations = frozenset(
+        str(k)
+        for (k,) in conn.execute("select unnest(enum_range(null::assessment_consideration))::text")
     )
     ev.known_statuses = frozenset(
         str(s) for (s,) in conn.execute("select unnest(enum_range(null::execution_status))::text")
@@ -615,14 +677,32 @@ def read_ledger(conn: Conn) -> Evidence:
     # deliberately not filtered — a drafted assessment still answers "has anyone
     # written one", and reporting only approved ones would make this report
     # about the approval workflow rather than about the client's request.
+    #
+    # A management assessment answers under its KIND, not under
+    # `management_assessment` — that is the whole point of `0012`. The bare type
+    # is still recorded for every other decision, so `valuation` and
+    # `transcription` are unaffected.
     for h, d, kind in conn.execute(
-        "select m.holding_id, p.period_date, r.decision_type::text"
+        "select m.holding_id, p.period_date,"
+        " coalesce(r.assessment_kind::text, r.decision_type::text)"
         " from review_decision r"
         " join mark m on m.id = r.mark_id"
         " join reporting_period p on p.id = m.period_id"
     ).fetchall():
         ev.decisions_by_position[str(h)].add(str(kind))
         ev.decisions_by_date[(str(h), str(d))].add(str(kind))
+    # What a representativeness assessment says it considered. `0012` refuses a
+    # consideration on any other kind of decision, so this needs no filter — the
+    # database will not let one exist.
+    for h, d, what in conn.execute(
+        "select m.holding_id, p.period_date, a.consideration::text"
+        " from assessment_consideration_record a"
+        " join review_decision r on r.id = a.decision_id"
+        " join mark m on m.id = r.mark_id"
+        " join reporting_period p on p.id = m.period_id"
+    ).fetchall():
+        ev.considerations_by_position[str(h)].add(str(what))
+        ev.considerations_by_date[(str(h), str(d))].add(str(what))
     ev.realised = {
         str(h)
         for (h,) in conn.execute(
@@ -654,7 +734,7 @@ def check_fund_scope(ev: Evidence) -> None:
 
 def predicate(
     limb: Limb,
-) -> tuple[str, frozenset[str], frozenset[str], frozenset[str], frozenset[str]]:
+) -> tuple[str, frozenset[str], frozenset[str], frozenset[str], frozenset[str], frozenset[str]]:
     """Everything `answered` is allowed to read off a limb.
 
     Two limbs with equal predicates return equal results for every position at
@@ -666,7 +746,14 @@ def predicate(
     added to one and not the other is a `zip(strict=True)` error rather than a
     limb that quietly stops being told apart from its neighbour.
     """
-    return (limb.scope, limb.classes, limb.fields, limb.decisions, limb.statuses)
+    return (
+        limb.scope,
+        limb.classes,
+        limb.fields,
+        limb.decisions,
+        limb.statuses,
+        limb.considerations,
+    )
 
 
 def missing_vocabulary(limb: Limb, ev: Evidence) -> list[str]:
@@ -681,6 +768,7 @@ def missing_vocabulary(limb: Limb, ev: Evidence) -> list[str]:
         [c for c in limb.classes if c not in ev.known_classes]
         + [f for f in limb.fields if f not in ev.known_fields]
         + [d for d in limb.decisions if d not in ev.known_decisions]
+        + [c for c in limb.considerations if c not in ev.known_considerations]
         + [s for s in limb.statuses if s not in ev.known_statuses]
     )
 
@@ -749,6 +837,7 @@ def answered(limb: Limb, ev: Evidence, holding: str, on: str | None) -> bool:
             ev.fields_by_position[holding],
             ev.decisions_by_position[holding],
             ev.statuses_by_position[holding],
+            ev.considerations_by_position[holding],
         )
     else:
         held = (
@@ -756,6 +845,7 @@ def answered(limb: Limb, ev: Evidence, holding: str, on: str | None) -> bool:
             ev.fields_by_date.get((holding, on), set()),
             ev.decisions_by_date.get((holding, on), set()),
             ev.statuses_by_date.get((holding, on), set()),
+            ev.considerations_by_date.get((holding, on), set()),
         )
     return all(not want or bool(want & have) for want, have in zip(asked, held, strict=True))
 

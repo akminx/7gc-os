@@ -504,9 +504,12 @@ def test_management_assessment_approval_must_name_its_evidence_set(
     test cannot fail."""
     mid = make_mark(conn, seed)
     conn.execute(
-        "insert into review_decision (decision_type, status, subject_kind, subject_id,"
-        " mark_id, policy_version, actor_id)"
-        " values ('management_assessment', 'approved', 'assessment', %s, %s, 'v1', 'a')",
+        # `assessment_kind` since 0012 — a management assessment must say WHICH
+        # of the letter's three documents it is, or one memo answers all three.
+        "insert into review_decision (decision_type, assessment_kind, status, subject_kind,"
+        " subject_id, mark_id, policy_version, actor_id)"
+        " values ('management_assessment', 'representativeness', 'approved', 'assessment',"
+        " %s, %s, 'v1', 'a')",
         (str(mid), mid),
     )
     with pytest.raises(psycopg.Error) as exc:

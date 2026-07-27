@@ -79,8 +79,10 @@ def test_management_assessment_approval_must_bind_amake_mark(
     """SPEC V12: R3 closes only on an assessment bound to the mark revision."""
     assert "management_assessment_binds_mark" in rejects(
         conn,
-        "insert into review_decision (decision_type, status, subject_kind, subject_id,"
-        " actor_id) values ('management_assessment', 'approved', 'assessment', 'x', 'a')",
+        "insert into review_decision (decision_type, assessment_kind, status, subject_kind,"
+        " subject_id, actor_id)"
+        " values ('management_assessment', 'representativeness', 'approved', 'assessment',"
+        " 'x', 'a')",
     )
 
 

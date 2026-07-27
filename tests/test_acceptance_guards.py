@@ -82,6 +82,7 @@ def everything_the_letter_asks_for() -> Any:
         known_fields=frozenset().union(*(limb.fields for limb in acceptance.LIMBS)),
         known_decisions=frozenset().union(*(limb.decisions for limb in acceptance.LIMBS)),
         known_statuses=frozenset().union(*(limb.statuses for limb in acceptance.LIMBS)),
+        known_considerations=frozenset().union(*(limb.considerations for limb in acceptance.LIMBS)),
     )
 
 
@@ -175,7 +176,17 @@ def test_a_management_assessment_is_a_decision_the_ledger_can_already_record() -
         known_classes=frozenset({"executed_transaction_doc", "third_party_valuation_memo"}),
         known_fields=frozenset(),
         known_decisions=frozenset(
-            {"transcription", "valuation", "management_assessment", "packet"}
+            {
+                "transcription",
+                "valuation",
+                "management_assessment",
+                "packet",
+                # `0012` · the three artefacts the letter names, each recordable
+                # as itself rather than all three as one.
+                "basis_memo",
+                "representativeness",
+                "calibration",
+            }
         ),
         known_statuses=frozenset(),
     )
@@ -185,24 +196,26 @@ def test_a_management_assessment_is_a_decision_the_ledger_can_already_record() -
         )
 
 
-# ── one decision type, three different documents ─────────────────────────
-def test_the_three_management_assessment_limbs_cannot_be_told_apart() -> None:
-    """The version of the test above that this file used to end at asserted all
-    three limbs were RECORDABLE, and it passed because they are the same limb.
+# ── one decision type, three different documents — until 0012 ────────────
+def test_the_three_management_assessment_limbs_are_told_apart() -> None:
+    """The inverse of the test this file used to carry, and it is the same test.
 
-    ¶2's memo describing the basis of the mark, ¶3(b)'s assessment that a last
-    round price remains representative, and the closing paragraph's calibration
-    are three documents management would write for three reasons.
-    `review_decision.decision_type` has one value for all three, `answered`
-    reads nothing else, and so the three rows are one query run three times.
-    Three `0/34`s printed as three findings is the report agreeing with the
-    collapse instead of reporting it.
+    It asserted that ¶2's basis memo, ¶3(b)'s representativeness assessment and
+    the closing calibration were INDISTINGUISHABLE — one `decision_type` for
+    three documents management writes for three reasons, so `answered` ran one
+    query three times and three `0/34`s printed as three findings.
+
+    `0012` gave each its own `assessment_kind`, which is what that test existed
+    to demand. Kept and inverted rather than deleted: the collapse is one enum
+    edit away from returning, and this is the assertion that would catch it.
     """
-    for key, others in (("2d", ["3b", "6"]), ("3b", ["2d", "6"]), ("6", ["2d", "3b"])):
-        assert acceptance.indistinguishable(LIMBS[key], acceptance.LIMBS) == others
-        reasons = acceptance.unspeakable(LIMBS[key], everything_the_letter_asks_for())
-        assert reasons, f"limb {key} reported as answerable when it shares its predicate"
-        assert "cannot tell this apart" in reasons[0]
+    for key in ("2d", "3b", "6"):
+        assert acceptance.indistinguishable(LIMBS[key], acceptance.LIMBS) == [], (
+            f"limb {key} still shares its predicate with another"
+        )
+        assert acceptance.unspeakable(LIMBS[key], everything_the_letter_asks_for()) == [], (
+            f"limb {key} reported as a limitation of the system after 0012 separated it"
+        )
 
 
 def test_a_limb_with_its_own_decision_type_is_not_reported_as_collapsed() -> None:
@@ -250,24 +263,32 @@ def test_two_limbs_asking_the_same_thing_of_different_scopes_are_not_collapsed()
         assert acceptance.indistinguishable(limb, same_evidence) == []
 
 
-def test_the_collapsed_limbs_are_reported_once_as_a_defect_not_three_times() -> None:
-    """The whole point of the finding, at the level a reader acts on.
+def test_the_separated_limbs_are_the_funds_records_saying_no_not_a_system_defect() -> None:
+    """The inverse of the finding this test used to carry, at the level a reader
+    acts on.
 
-    Under the collapse the three limbs must appear as UNANSWERABLE — a
-    limitation of this system, which no document the fund sends can lift — and
-    never as three separate UNANSWERED rows, which would read as three requests
-    the fund has failed to answer.
+    Under the collapse the three had to appear as UNANSWERABLE — a limitation of
+    this system, which no document the fund could send would lift. `0012` gave
+    each artefact its own `assessment_kind`, so the same three are now
+    UNANSWERED: the ledger can record every one of them and the corpus holds
+    none, which is a request to make of the fund rather than a change to make
+    here.
+
+    The two are different sentences to an auditor and different work for the
+    team, and getting them the wrong way round is what this pair of tests has
+    guarded from both directions.
     """
     ev = two_funds()
     lines, code = acceptance.closing(acceptance.assess(ev), strict=False)
     unanswerable = " ".join(section(lines, "UNANSWERABLE"))
     unanswered = " ".join(section(lines, "UNANSWERED"))
     for key in ("2d", "3b", "6"):
-        assert f"  {key:4}" in unanswerable, f"{key} is not reported as a limitation of the system"
-        assert f"  {key:4}" not in unanswered, f"{key} is reported as the fund's records saying no"
-    assert "are ONE finding and not 3" in " ".join(lines)
-    assert "1 distinct" in " ".join(lines), "three rows counted as three defects"
-    assert code == 1, "a clause of the letter with nowhere to land does not fail the report"
+        assert f"  {key:4}" in unanswered, f"{key} is not reported as the fund's records saying no"
+        assert f"  {key:4}" not in unanswerable, (
+            f"{key} still reads as a limitation of the system after 0012 separated it"
+        )
+    assert "are ONE finding and not 3" not in " ".join(lines)
+    assert code == 0, "a limb the ledger can record and the corpus lacks is not a defect here"
 
 
 # ── the letter is one fund's ─────────────────────────────────────────────
@@ -463,7 +484,9 @@ def test_every_declared_limb_asks_for_something() -> None:
     limbs rather than only to the ones a test builds."""
     assert acceptance.LIMBS
     for limb in acceptance.LIMBS:
-        assert limb.classes or limb.fields or limb.decisions or limb.statuses, limb.key
+        assert (
+            limb.classes or limb.fields or limb.decisions or limb.statuses or limb.considerations
+        ), limb.key
 
 
 def test_answered_reads_the_predicate_and_nothing_else() -> None:
@@ -481,6 +504,7 @@ def test_answered_reads_the_predicate_and_nothing_else() -> None:
         limb.fields,
         limb.decisions,
         limb.statuses,
+        limb.considerations,
     )
     acceptance.answered(limb, acceptance.Evidence(), "h", "2025-12-31")
     acceptance.answered(limb, acceptance.Evidence(), "h", None)

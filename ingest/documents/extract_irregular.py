@@ -302,6 +302,25 @@ def _banzai_patterns(observed: date) -> dict[str, re.Pattern[str]]:
         "original_purchase_aggregate": re.compile(
             r"held at March 2021 purchase price \(\$[\d.]+/share; (?P<value>\$[\d,]+)\)"
         ),
+        # The one line in the file that says what these three prices ARE. It
+        # carries no row and is cited onto all three claims, exactly as the
+        # share count is, because it states itself for the position as a whole
+        # — "each fiscal year" is what makes it true of every row at once.
+        #
+        # The line BELOW it is also a basis sentence and is deliberately not
+        # read as one: "Pre-listing periods (FY2021, FY2022): held at March 2021
+        # purchase price" states the ground of two marks this file raises no
+        # claim for. Attaching it here would put a 2021 cost basis on the
+        # FY2023, FY2024 and FY2025 closes — a stated basis, cited to a real
+        # passage, resolving perfectly, and wrong about all three. Its figures
+        # are already read as `original_purchase_pps` and
+        # `original_purchase_aggregate`, which is a recital of history and is
+        # what they are. A basis for FY2021 and FY2022 needs claims scoped to
+        # FY2021 and FY2022, and there are none.
+        "valuation_basis_stated": re.compile(
+            r"Basis: (?P<value>quoted closing price on the last trading day of each fiscal "
+            r"year \(Level 1 input\)\.)"
+        ),
     }
 
 

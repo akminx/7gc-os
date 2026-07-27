@@ -124,6 +124,17 @@ _MOONFARE_MEMO: dict[str, re.Pattern[str]] = {
     "eur_interest_last_round_basis": re.compile(
         r"EUR-denominated interest \(last-round basis\)\s+EUR (?P<value>[\d,]+)"
     ),
+    # §2's CONCLUSION, and the reason the anchor reaches back to "Accordingly".
+    # The section above it lists approaches the valuer weighed and declined —
+    # a backsolve demoted to "a calibration input rather than a primary
+    # indication", an income approach "not relied upon" — and a basis read out
+    # of those sentences reports a ground this memo refused to stand on. Only
+    # one sentence here says what the concluded value RESTS on.
+    "valuation_basis_stated": re.compile(
+        r"Accordingly, we\s+"
+        r"(?P<value>concluded the March 2023 round price remains the best indication of "
+        r"fair value for the EUR-denominated interest at the\s+Measurement Date\.)"
+    ),
     # The pair is directed and stated as such. SPEC V7 wants a directed pair, an
     # effective date and a cited source; the memo states the first two.
     "currency_pair": re.compile(r"(?P<value>EUR/USD) closing rate, 12/31/2023"),
@@ -171,6 +182,17 @@ _MOONFARE_FX: dict[str, re.Pattern[str]] = {
     "fx_remeasurement_adjustment": re.compile(
         r"FX re-measurement adjustment\s+\+(?P<value>\$[\d,]+)"
     ),
+    # The memo's own "Basis" paragraph. The quote deliberately reaches back to
+    # "is unchanged and", because the word an auditor needs beside a 2023 ground
+    # under a 2024 measurement date is the one admitting nothing moved — and
+    # `basis_reference` below, which carries ¶3's age question, cites the tail of
+    # this same sentence. Two fields on one sentence, each capturing what it is
+    # about: this one what the value rests on, that one where it came from.
+    "valuation_basis_stated": re.compile(
+        r"The underlying EUR value of the interest is unchanged and "
+        r"(?P<value>remains based on the company's most recent equity\s+"
+        r"financing \(March 2023\))"
+    ),
     # Where the EUR value came from — a third-party memo that, by its own terms
     # above, closed at 12/31/2023.
     "basis_reference": re.compile(
@@ -197,6 +219,21 @@ _CAPSULE_MEMO: dict[str, re.Pattern[str]] = {
     "original_purchase_aggregate": re.compile(r"per share \((?P<value>\$[\d,]+) aggregate\)"),
     "bridge_financing_amount": re.compile(
         r"the Company closed a (?P<value>\$[\d,]+) bridge financing"
+    ),
+    # The heading is in the citation and is doing work. §3 is "Valuation
+    # Approaches Considered" and §4 is "Selected Approach and Allocation", and
+    # the sentences in §3 are the approaches Clearwater WEIGHED — a backsolve
+    # applied "as a calibration input rather than a primary indication", an
+    # income approach "not relied upon". Every one of them is a grammatical
+    # basis sentence about this valuation and none of them is the basis. Without
+    # the heading inside the quote an auditor cannot tell which section a
+    # passage came from, and this is the corpus's only mark whose ground is a
+    # model rather than a price — the one row where getting it wrong is quiet.
+    "valuation_basis_stated": re.compile(
+        r"4\. Selected Approach and Allocation\s+"
+        r"(?P<value>We estimated total equity value using a hybrid of the calibrated "
+        r"backsolve and the guideline multiple contraction applied to\s+"
+        r"the Company's revised revenue plan)"
     ),
     "concluded_fair_value_per_share": re.compile(
         r"Concluded fair value per Series B Preferred share\s+(?P<value>\$[\d.]+)"
@@ -261,9 +298,24 @@ def _statement_patterns(as_of: date) -> dict[str, re.Pattern[str]]:
             r"a single underlying position: (?P<value>an indirect interest in Jio Platforms "
             r"Limited, acquired July 2020\.)"
         ),
-        "valuation_basis": re.compile(
+        # The basis the administrator states, quoted with the clause that says
+        # WHOSE basis it is and for WHAT. Cited on its own, "based on the price
+        # of the most recent observable financing round" reads as 7GC's ground
+        # for the feeder mark; the Partnership is speaking, about the underlying
+        # position, under its own valuation policy, and the auditor has to be
+        # able to see that in the passage rather than infer it.
+        #
+        # The fee-and-expense adjustment is inside the VALUE and not merely the
+        # quote. A capture stopping at "underlying company" reports the account
+        # as a round price, and the statement says it is a round price adjusted
+        # for the Partnership's fees and expenses. That is the cheaper figure to
+        # store and the one that overstates.
+        "valuation_basis_stated": re.compile(
+            r"The\s+Partnership's valuation of the underlying position is determined in "
+            r"accordance with the Partnership's valuation policy,\s+"
             r"(?P<value>based on the price of the most recent observable financing round of "
-            r"the underlying company)"
+            r"the underlying company, adjusted for the\s+Partnership's fees and expenses "
+            r"where applicable\.)"
         ),
         "audit_status": re.compile(r"(?P<value>Figures are unaudited\.)"),
         # INV-16 · the ground on which the window below closes at the year end.

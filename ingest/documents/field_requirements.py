@@ -170,9 +170,37 @@ FIELD_REQUIREMENT: dict[str, frozenset[RequirementCode]] = {
     "measurement_date": frozenset({R2}),
     "post_money_valuation_eur": frozenset({R2}),
     "eur_interest_last_round_basis": frozenset({R2}),
+    # ── ¶2 · the ground a stated value rests on ───────────────────────────
+    # ¶2 has two branches — "for marks based on a financing round" and "for
+    # marks based on other information" — and which one governs a row depends on
+    # what the mark is BASED ON. So a figure that says what a value rests on is
+    # a ¶2 figure: it is the thing that selects the limb the other ¶2 figures are
+    # scored against.
+    #
+    # **R2 and not R3.** ¶3 asks whether an unchanged last-round price is still
+    # representative, and its figures are the ones about the AGE and SCOPE of
+    # the support — `no_subsequent_round_of_record`, `update_status`,
+    # `no_reliance_scope`, `reliance_scope`, `basis_reference`, all declared
+    # above. A stated basis is neither. Banzai's is a Level 1 quoted price that
+    # changes every year and is never carried forward; Capsule's is an option
+    # pricing model; Jio's is the Partnership's own valuation policy. Filing
+    # those under "is the unchanged round price still representative" would
+    # answer a question none of them is about. The one that *does* touch ¶3 —
+    # Moonfare's FY2024 memo, whose basis sentence opens "is unchanged" — already
+    # answers it through `basis_reference` and `eur_interest_unchanged`, so the
+    # union rule at the top of this file has nothing here to protect against.
+    #
+    # This is the document's OWN WORDS and not the `valuation_basis` enum in
+    # `0001_init.sql`. The name says `_stated` for that reason: mapping "quoted
+    # closing price on the last trading day of each fiscal year (Level 1 input)"
+    # onto `quoted_price`, or Capsule's OPM hybrid onto `third_party_memo`, is a
+    # judgement someone must review — not a lookup an extractor may perform on
+    # the way past. Sixty-odd marks have no such sentence anywhere in the corpus
+    # and stay NULL; that silence is a finding, and it survives only as long as
+    # nothing here infers a basis from the evidence that happens to be on file.
+    "valuation_basis_stated": frozenset({R2}),
     # ── ¶2 · the administrator's and the market's figures ─────────────────
     "net_asset_value": frozenset({R2}),
-    "valuation_basis": frozenset({R2}),
     "audit_status": frozenset({R2}),
     "closing_price": frozenset({R2}),
     "quote_date": frozenset({R2}),
