@@ -211,8 +211,26 @@ MUTATIONS: list[Mutation] = [
     Mutation(
         "R1: a signed agreement answers for settlement of funds too",
         REQS,
-        "        if not (_SETTLEMENT_EVIDENCE & stated):",
+        "        if outcome is _SUFFICIENT and not _settled(covering):",
         "        if False:",
+    ),
+    Mutation(
+        "R1: settlement anywhere on the holding clears every lot",
+        REQS,
+        "not _settled(covering)",
+        "not _settled(claims)",
+    ),
+    Mutation(
+        "R1: a contribution of zero counts as money having moved",
+        REQS,
+        "        (value := claim.facts.get(name)) is not None and value > 0",
+        "        name in claim.facts",
+    ),
+    Mutation(
+        "R4: figures from any claim on the holding complete a lot",
+        REQS,
+        "            stated = {name for c in covering for name in c.facts}",
+        "            stated = {name for c in claims for name in c.facts}",
     ),
     Mutation(
         "R1: settlement is only what a stock purchase agreement calls it",

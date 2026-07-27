@@ -13,6 +13,7 @@ one place that question is answered.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -128,6 +129,23 @@ _SETTLEMENT_EVIDENCE = frozenset(
 )
 
 
+def _settled(claims: Sequence[EvidenceClaim]) -> bool:
+    """Whether these claims evidence that money actually moved.
+
+    POSITIVE, not merely present. The first version asked only whether one of
+    the field names appeared, and a cross-family review passed it
+    `contributed_capital = 0` — an investor who has committed and funded
+    nothing — which read as settled. A commitment of zero drawn is the clearest
+    possible evidence that the money has NOT moved, and it satisfied the check
+    designed to prove that it had.
+    """
+    return any(
+        (value := claim.facts.get(name)) is not None and value > 0
+        for claim in claims
+        for name in _SETTLEMENT_EVIDENCE
+    )
+
+
 def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
     """Existence and cost — evaluated per held lot, worst wins (INV-7).
 
@@ -146,9 +164,11 @@ def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
     for lot in ledger.held_lots(holding_id, on):
         held_class = lot.class_at(on)
         candidates: list[RequirementVerdict] = []
+        covering: list[EvidenceClaim] = []
         for claim in claims:
             if claim.priced_class not in (None, held_class):
                 continue
+            covering.append(claim)
             cell = lookup(RequirementCode.R1, claim.source_class, claim.execution_status, position)
             candidates.append(cell.verdict)
             relied.append(claim.id)
@@ -165,7 +185,21 @@ def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
             candidates.append(cell.verdict)
             actions.update(cell.next_actions)
             reasons.add(gap_reason(None))
-        per_lot[lot.id] = best(candidates)
+        outcome = best(candidates)
+
+        # SETTLEMENT IS PER LOT, and from the claims covering THAT lot.
+        #
+        # Written first as a holding-wide union over every R1 claim, which a
+        # cross-family review broke twice in one pass. A claim priced for a
+        # class this lot is not — excluded from the lot's own assessment, and
+        # absent from `relied_on` — still cleared settlement for it; and one
+        # settlement cleared every acquisition the holding had. The scope of the
+        # question is the lot, because that is the scope of the acquisition.
+        if outcome is _SUFFICIENT and not _settled(covering):
+            outcome = _PARTIAL
+            reasons.add("SETTLEMENT_OF_FUNDS_NOT_EVIDENCED")
+            actions.add("REQUEST_SETTLEMENT_CONFIRMATION")
+        per_lot[lot.id] = outcome
 
     if not per_lot:
         # No lot held at this date. A realised position still appears in the
@@ -173,39 +207,9 @@ def r1(ledger: Ledger, holding_id: str, on: date) -> Outcome:
         # of something no longer held is not a question the auditor asked.
         return Outcome(requirement=RequirementCode.R1, verdict=_NA)
 
-    verdict = worst(list(per_lot.values()))
-
-    # ¶1 ASKS FOR SETTLEMENT OF FUNDS, and an executed agreement does not
-    # evidence it. "Executed transaction documents supporting the Fund's
-    # acquisition of each position …, including share counts, price per share,
-    # and settlement of funds" — an SPA proves an agreement was signed; whether
-    # the money moved is a separate assertion, and it is half of what "existence
-    # and COST" means.
-    #
-    # NOT keyed on `settlement_amount_received` alone, and the difference
-    # matters. Jio's evidence is a capital account statement, which states
-    # `contributed_capital = $1,000,000.00` against `unfunded_commitment =
-    # $0.00`. That IS the money having moved, said the way a fund interest says
-    # it. A rule naming only the SPA vocabulary would have reported Jio as
-    # lacking settlement evidence while its own document affirms the
-    # contribution — a confident, plausible, wrong finding, which is the exact
-    # failure mode this project exists to refuse.
-    #
-    # Latent as written: roofstock, poolside and fluidstack carry the settlement
-    # fields, Jio carries the contribution fields, and every other holding is
-    # already short of `sufficient` for a reason of its own. Nothing moves
-    # today, which is why the guard needs constructed cases rather than the
-    # corpus.
-    if verdict is _SUFFICIENT:
-        stated = {name for c in claims for name in c.facts}
-        if not (_SETTLEMENT_EVIDENCE & stated):
-            verdict = _PARTIAL
-            reasons.add("SETTLEMENT_OF_FUNDS_NOT_EVIDENCED")
-            actions.add("REQUEST_SETTLEMENT_CONFIRMATION")
-
     return Outcome(
         requirement=RequirementCode.R1,
-        verdict=verdict,
+        verdict=worst(list(per_lot.values())),
         reasons=tuple(sorted(reasons)),
         next_actions=tuple(sorted(actions)),
         relied_on=tuple(dict.fromkeys(relied)),
@@ -603,9 +607,11 @@ def r4(ledger: Ledger, holding_id: str, on: date) -> Outcome:
     position = ledger.holdings[holding_id].position_type
     claims = applicable_claims(ledger, holding_id, RequirementCode.R4, on)
     per_lot: dict[str, RequirementVerdict] = {}
+    reasons: list[str] = []
+    actions: list[str] = []
     for lot in events:
         covering = [c for c in claims if c.priced_class in (None, lot.security_class)]
-        per_lot[lot.id] = (
+        outcome = (
             best(
                 [
                     lookup(RequirementCode.R4, c.source_class, c.execution_status, position).verdict
@@ -615,34 +621,34 @@ def r4(ledger: Ledger, holding_id: str, on: date) -> Outcome:
             if covering
             else _MISSING
         )
-    complete = all(v is _SUFFICIENT for v in per_lot.values())
-    verdict = worst(list(per_lot.values()))
-    reasons = [] if complete else ["NO_REALIZATION_SUPPORT_FOR_LOT"]
-    actions = [] if complete else ["REQUEST_REALIZATION_SUPPORT"]
 
-    # ¶4 NAMES THREE THINGS, and the document class was answering for all of
-    # them. "Merger consideration statements, distribution notices, or other
-    # support for PROCEEDS RECEIVED, including per-share consideration and share
-    # counts" — proceeds is the head noun, and the other two are named after
-    # "including", so a notice that states none of them does not answer the
-    # request even though it is exactly the class of document asked for.
-    #
-    # Latent on this corpus and deliberately landed anyway: Jackpocket's notice
-    # carries all four fields, so nothing moves today. A realisation that
-    # arrives without them would have read `sufficient` on the strength of its
-    # letterhead, which is the same defect as ¶1's settlement limb one paragraph
-    # further down the letter.
-    if verdict is _SUFFICIENT:
-        stated = {name for c in claims for name in c.facts}
-        for missing, needed in _REALIZATION_FIGURES:
-            if not (needed & stated):
-                verdict = _PARTIAL
-                reasons.append(missing)
-                actions.append("REQUEST_REALIZATION_FIGURES")
+        # ¶4 NAMES THREE THINGS, and the document class was answering for all of
+        # them. "Merger consideration statements, distribution notices, or other
+        # support for PROCEEDS RECEIVED, including per-share consideration and
+        # share counts" — proceeds is the head noun, the other two are named
+        # after "including", so a notice that states none of them does not
+        # answer the request even though it is exactly the class asked for.
+        #
+        # PER LOT, from the claims covering THAT lot, for the reason R1's
+        # settlement limb is: a holding-wide union let figures from an off-class
+        # claim — one excluded from this lot's own assessment — complete it, and
+        # let one realisation's figures answer for another's.
+        if outcome is _SUFFICIENT:
+            stated = {name for c in covering for name in c.facts}
+            for missing, needed in _REALIZATION_FIGURES:
+                if not (needed & stated):
+                    outcome = _PARTIAL
+                    reasons.append(missing)
+                    actions.append("REQUEST_REALIZATION_FIGURES")
+        per_lot[lot.id] = outcome
+
+    if not all(v is _SUFFICIENT for v in per_lot.values()):
+        reasons.insert(0, "NO_REALIZATION_SUPPORT_FOR_LOT")
+        actions.insert(0, "REQUEST_REALIZATION_SUPPORT")
 
     return Outcome(
         requirement=RequirementCode.R4,
-        verdict=verdict,
+        verdict=worst(list(per_lot.values())),
         reasons=tuple(dict.fromkeys(reasons)),
         next_actions=tuple(dict.fromkeys(actions)),
         relied_on=tuple(c.id for c in claims),

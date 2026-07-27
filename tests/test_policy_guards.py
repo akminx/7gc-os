@@ -884,3 +884,96 @@ def test_r1_does_not_invent_a_settlement_gap_where_the_document_is_already_short
     got = r1(_ledger(), "h", date(2025, 12, 31))
     assert got.verdict is not RequirementVerdict.SUFFICIENT
     assert "SETTLEMENT_OF_FUNDS_NOT_EVIDENCED" not in got.reasons
+
+
+def test_settlement_of_zero_is_not_settlement() -> None:
+    """A commitment funded to nothing is the clearest evidence the money has
+    NOT moved, and it satisfied the check written to prove that it had.
+
+    The first version asked only whether one of the field names was present. A
+    cross-family review passed it `contributed_capital = 0` and got
+    `sufficient`. Presence is not evidence; a positive figure is.
+    """
+    assert (
+        r1(_acquired_ledger(contributed_capital=Decimal(0)), "h", date(2025, 12, 31)).verdict
+        is RequirementVerdict.PARTIAL
+    )
+    assert (
+        r1(_acquired_ledger(contributed_capital=Decimal(1000)), "h", date(2025, 12, 31)).verdict
+        is RequirementVerdict.SUFFICIENT
+    )
+
+
+def _off_class_settlement(requirement: RequirementCode, **facts: Decimal) -> Ledger:
+    """A bare covering claim, plus a claim for a class this lot is not."""
+    return _ledger(
+        claims=(
+            _claim(
+                "covering",
+                None,
+                None,
+                requirements=frozenset({requirement}),
+                source_class=SourceClass.EXECUTED_TRANSACTION_DOC,
+                execution_status=ExecutionStatus.EXECUTED,
+            ),
+            _claim(
+                "off_class",
+                "series_zzz",
+                None,
+                requirements=frozenset({requirement}),
+                source_class=SourceClass.EXECUTED_TRANSACTION_DOC,
+                execution_status=ExecutionStatus.EXECUTED,
+                facts=dict(facts),
+            ),
+        ),
+    )
+
+
+def test_settlement_on_a_class_this_lot_is_not_does_not_clear_this_lot() -> None:
+    """Scope. The settlement question is asked of an ACQUISITION, and the
+    acquisition is the lot.
+
+    Written first as a union over every R1 claim on the holding, which let a
+    claim priced for another class — excluded from this lot's own assessment,
+    and absent from `relied_on` — clear it anyway. Found by a cross-family
+    review, which reported `sufficient` with `relied_on=('spa',)`: the
+    settlement-bearing claim was not even among the evidence relied upon.
+    """
+    got = r1(
+        _off_class_settlement(RequirementCode.R1, settlement_amount_received=Decimal(1)),
+        "h",
+        date(2025, 12, 31),
+    )
+    assert got.verdict is RequirementVerdict.PARTIAL
+    assert "SETTLEMENT_OF_FUNDS_NOT_EVIDENCED" in got.reasons
+
+
+def test_realisation_figures_on_another_class_do_not_complete_this_lot() -> None:
+    """The same defect one paragraph of the letter further down, found in the
+    same pass. Figures from an off-class claim completed a lot they do not
+    cover, and one realisation's figures could answer for another's."""
+    ledger = _off_class_settlement(
+        RequirementCode.R4,
+        gross_consideration=Decimal(1),
+        consideration_per_share=Decimal(1),
+        shares_of_record=Decimal(1),
+    )
+    realised = _ledger(
+        lots=(
+            Lot(
+                "l",
+                "h",
+                "series_a",
+                100,
+                Decimal(1),
+                Decimal(100),
+                "USD",
+                date(2020, 1, 1),
+                realized_date=date(2025, 6, 30),
+            ),
+        ),
+        claims=ledger.claims,
+    )
+    got = r4(realised, "h", date(2025, 12, 31))
+    assert got.verdict is RequirementVerdict.PARTIAL
+    assert "NO_PROCEEDS_STATED" in got.reasons

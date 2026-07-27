@@ -46,6 +46,12 @@ pytestmark = pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set"
 #: ¶2's parenthesis, transcribed. Not read from `reporting_period`.
 LETTER_DATES = (date(2023, 12, 31), date(2024, 12, 31), date(2025, 12, 31))
 
+#: The letter names Fund II. `docs/SPEC.md` records applying the same categories
+#: to Fund I deliberately, so the packet population is these two and no others —
+#: written down because "whichever funds the ledger happens to hold" is not a
+#: population, and it was what this file checked first.
+EXPECTED_FUNDS = ("fund_i", "fund_ii")
+
 
 def _as_date(value: object) -> date:
     """A driver row column, narrowed. Asserted rather than cast: a
@@ -113,7 +119,17 @@ def test_every_date_the_letter_names_is_actually_in_scope(demo: Conn) -> None:
     ).fetchall():
         by_fund.setdefault(str(fund_id), set()).add(_as_date(period_date))
 
-    assert by_fund, "no packet-scope periods at all"
+    # THE SET OF FUNDS, not only the dates within whichever funds turned up.
+    #
+    # This asserted the three dates for every fund PRESENT, so a ledger holding
+    # no Fund I at all passed, and so did one carrying a third fund nobody has
+    # audited. A cross-family review built both and watched all three scope
+    # tests go green. "Every fund present has the right dates" is a weaker
+    # statement than it reads as, and the packet's population is the thing
+    # denominators are computed from.
+    assert set(by_fund) == set(EXPECTED_FUNDS), (
+        f"packet scope covers {sorted(by_fund)}, expected {sorted(EXPECTED_FUNDS)}"
+    )
     for fund_id, dates in sorted(by_fund.items()):
         missing = sorted(d for d in LETTER_DATES if d not in dates)
         assert not missing, (

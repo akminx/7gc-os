@@ -329,10 +329,10 @@ export const REASON_CODE: Record<string, ReasonTerm> = {
       "A document on file prices a different security class from the one held. It is named rather than dropped — it is in scope, and it is what makes this holding cross-class — but pricing one class off another's evidence is a valuation-policy act and is not performed until that decision is recorded.",
   },
   NO_SUPPORT_FOR_A_HELD_CLASS: {
-    label: "every current price on file is for a class the fund does not hold",
+    label: "every price that could support this mark is for a class the fund does not hold",
     origin: "insufficient_authority",
     meaning:
-      "Not an absence of evidence: there are documents and they state prices, for a class this position is not. `insufficient` rather than `missing` for that reason. Where a document does state a figure against the held class it is a historic one — an original issue price restated in a later table — and what shares first sold for does not support what they are worth now. The derivation has always refused this case, and the verdict now agrees with it.",
+      "Not an absence of evidence: there are documents and they state prices, for a class this position is not. `insufficient` rather than `missing` for that reason. Any figure on file against the held class is a historic one — an original issue price restated in a later table — and what shares first sold for does not support what they are worth now. The derivation has always refused this case, and the verdict now agrees with it.",
   },
 };
 
