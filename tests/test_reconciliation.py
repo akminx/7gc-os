@@ -35,6 +35,7 @@ from fastapi.testclient import TestClient
 
 from api import ledger, reconciliation
 from api.config import ledger_schema
+from api.reconciliation import DOWNLOAD_HEADERS
 from packet.company import COMPANY_SCOPE_NOTE, holdings_in, slice_for
 from packet.export import MANIFEST_NAME, Written
 from packet.layout import Layout
@@ -821,3 +822,78 @@ def test_a_holding_the_layout_does_not_place_has_no_slice() -> None:
     written = _slice_over({"ada": "companies/Ada"}, ["companies/Ada/a.pdf"])
     assert slice_for(written, "adafruit") is None
     assert holdings_in(written) == ("ada",)
+
+
+# ── what a BROWSER can read, which is not what TestClient can ────────────
+
+
+def test_every_header_the_download_sets_is_exposed_across_origins() -> None:
+    """`TestClient` does not enforce CORS, so this is the one property none of
+    the download tests above can see.
+
+    A cross-origin response hands JavaScript seven safelisted headers —
+    cache-control, content-language, content-length, content-type, expires,
+    last-modified, pragma — and nothing else unless the server names it in
+    `Access-Control-Expose-Headers`. `Content-Disposition` is not on that list,
+    and neither is any `X-` header this route sets.
+
+    Unexposed, the packet download saves under a fallback name and the facts
+    panel beside it reads blank — in a browser, on the deployed site, while
+    every assertion in this file passes. `api/main.py` carries the same lesson
+    about `allow_methods`, where a GET-only list left the approve control dead
+    in the browser and green in the suite.
+    """
+    from api.main import app
+
+    # Read off the app's own middleware stack rather than off a literal, so a
+    # list edited in `api/main.py` and not here cannot pass.
+    declared = next(
+        m.kwargs["expose_headers"]
+        for m in app.user_middleware
+        if "expose_headers" in getattr(m, "kwargs", {})
+    )
+    assert isinstance(declared, list)
+    exposed = {str(h).strip().lower() for h in declared}
+    for name in DOWNLOAD_HEADERS:
+        assert name.lower() in exposed, (
+            f"{name} is set by a download route and not exposed, so a browser on "
+            "another origin reads null while this suite reads the value"
+        )
+
+
+def test_the_download_headers_named_for_cors_are_the_ones_actually_sent() -> None:
+    """The other direction, and the one that makes the list above worth having.
+
+    A name in `DOWNLOAD_HEADERS` that no response carries exposes nothing and
+    reads as coverage; a header a response carries that the list omits is the
+    defect this pair exists to prevent. Checked against a real response rather
+    than against the dict literal that builds one.
+    """
+    response = _client().get("/funds/fund_ii/periods/fund_ii_25q4/export.zip")
+    assert response.status_code == 200
+    sent = {k.lower() for k in response.headers}
+    named = {h.lower() for h in DOWNLOAD_HEADERS}
+    assert named <= sent, f"named for CORS but never sent: {sorted(named - sent)}"
+
+    # THE ACTUAL CORS RULE, not a proxy for it. The first version of this
+    # assertion checked only `x-` headers, so deleting `Content-Disposition`
+    # from the list passed both tests — and that is the header the saved file is
+    # NAMED by. A guard with a hole exactly where the important case lives is
+    # the shape this repository keeps finding.
+    #
+    # `Access-Control-Expose-Headers` is needed for everything a response sends
+    # EXCEPT the seven the fetch spec safelists, so those seven are the
+    # exemption and every other header must be named.
+    SAFELISTED = {
+        "cache-control",
+        "content-language",
+        "content-length",
+        "content-type",
+        "expires",
+        "last-modified",
+        "pragma",
+    }
+    unreadable = sent - SAFELISTED - named - {"date", "server"}
+    assert not unreadable, (
+        f"sent but not exposed, so a browser on another origin reads null: {sorted(unreadable)}"
+    )

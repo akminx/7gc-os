@@ -17,6 +17,7 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import dsn
+from api.reconciliation import DOWNLOAD_HEADERS
 from api.routes import router
 
 SERVICE = "7gc-os-api"
@@ -53,6 +54,13 @@ app.add_middleware(
     # part of how that stays true from the browser's side.
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    # And the same lesson on the way back out. A cross-origin response hands
+    # JavaScript seven safelisted headers and nothing else; `Content-Disposition`
+    # is not among them, so the packet download would have saved under a fallback
+    # name and shown blank facts beside it — in a browser, on the deployed site,
+    # while every `TestClient` assertion passed. Named in `api/reconciliation.py`
+    # beside the route that sets them, so the two lists cannot drift.
+    expose_headers=list(DOWNLOAD_HEADERS),
 )
 
 

@@ -554,6 +554,31 @@ def _zip_bytes(written: Written, paths: Sequence[str], extra: dict[str, bytes]) 
     return buffer.getvalue()
 
 
+#: Every header a download describes itself with, plus the one the browser needs
+#: to name the saved file.
+#:
+#: NAMED HERE SO CORS CAN EXPOSE EXACTLY THESE. A cross-origin response hands
+#: JavaScript a safelist — cache-control, content-language, content-length,
+#: content-type, expires, last-modified, pragma — and nothing else unless the
+#: server says so. `Content-Disposition` is NOT on that list, and neither is any
+#: `X-` header here.
+#:
+#: So without `expose_headers` every one of these reads `null` in a browser while
+#: reading correctly in `TestClient`, which does not enforce CORS: the download
+#: would save under a fallback name and the panel beside it would show blanks —
+#: on the deployed site only. `api/main.py` has the same lesson written six lines
+#: above its method list, where a GET-only `allow_methods` left the approve
+#: control dead in the browser and green in every test.
+DOWNLOAD_HEADERS: tuple[str, ...] = (
+    "Content-Disposition",
+    "X-Packet-Id",
+    "X-Manifest-Hash",
+    "X-File-Count",
+    "X-Withheld-File-Count",
+    "X-Recorded-In-Ledger",
+)
+
+
 def _download_facts(written: Written, present: int, withheld: int) -> dict[str, str]:
     """What an archive says about itself in its own headers.
 
