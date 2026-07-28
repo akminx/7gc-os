@@ -46,7 +46,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from api.decisions import named_actors
+from api.config import load_env
 from api.reconciliation import _connect
 from evidence.explain import restate
 from evidence.retrieve import RetrievalError, RetrievedPassage, default_query, retrieve
@@ -148,6 +148,7 @@ def find_passages(
                 requirement=requirement,
                 query=q,
                 k=k,
+                requirement_scoped=True,
             )
         except RetrievalError as exc:
             # Retrieval refuses rather than returning nothing when the query
@@ -340,7 +341,15 @@ def _claim_json(claim: Any) -> dict[str, Any]:
 #: second switch keeps "is this the private deployment?" a question with one
 #: answer.
 def _assistant_is_offered() -> bool:
-    return bool(named_actors())
+    """Its own switch, because it answers its own question.
+
+    This was gated on `DECISION_ACTORS` to avoid inventing a second flag, and
+    that was the wrong trade: that variable decides WHO MAY RECORD A DECISION,
+    and reusing it meant turning on a paid read also opened the write surface
+    on a public deployment. Two unrelated questions shared one answer, which is
+    the collapse this project spends its whole architecture refusing.
+    """
+    return load_env().get("ASSISTANT_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 @lookup_router.get("/holdings/{holding_id}/explain")
@@ -363,8 +372,8 @@ def explain_row(
             status_code=404,
             detail=(
                 "This deployment does not offer the plain-English restatement. It calls a paid "
-                "model per request, so it is enabled only where DECISION_ACTORS names who is "
-                "using the system. Every read route, and the passage search, are unaffected."
+                "model per request, so it runs only where ASSISTANT_ENABLED is set. Every read "
+                "route, and the passage search, are unaffected."
             ),
         )
     conn = _connect()

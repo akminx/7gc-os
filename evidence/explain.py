@@ -398,7 +398,13 @@ def prompt_for(payload: Mapping[str, Any]) -> tuple[str, str]:
     return SYSTEM, json.dumps(payload, indent=2, sort_keys=True, default=str)
 
 
-def restate(payload: Mapping[str, Any], *, model: str | None = None) -> Explanation:
+def restate(
+    payload: Mapping[str, Any],
+    *,
+    model: str | None = None,
+    attempt: int = 1,
+    correction: str | None = None,
+) -> Explanation:
     """One live call, guarded. Never raises — a refusal is the answer.
 
     Shares `extract.py`'s endpoint, provider pin and temperature, because two
@@ -430,6 +436,8 @@ def restate(payload: Mapping[str, Any], *, model: str | None = None) -> Explanat
         )
 
     system, user = prompt_for(payload)
+    if correction is not None:
+        user = f"{user}\n\n{correction}"
     #: Imported before the request rather than inside the try, so "httpx is not
     #: installed" and "the model was unreachable" stay different answers. The
     #: first is this host missing a development dependency; the second is the
@@ -497,4 +505,25 @@ def restate(payload: Mapping[str, Any], *, model: str | None = None) -> Explanat
         return Explanation(text=None, refusal="the model returned no content", model=chosen)
     if not isinstance(content, str):
         return Explanation(text=None, refusal="the model returned no content", model=chosen)
-    return accept(content, payload, model=chosen)
+    first = accept(content, payload, model=chosen)
+    if first.accepted or attempt > 1:
+        return first
+
+    #: ONE retry, and the prompt does not loosen — it gains a sentence naming
+    #: the check that failed. `extract.py` refuses to retry because there the
+    #: second attempt would be a WEAKER question about the same document; here
+    #: the question is identical and the model is simply told which rule it
+    #: broke. Loosening would be asking for a different answer; this asks for
+    #: the same answer, correctly.
+    #:
+    #: Bounded at one because a loop that retries until something passes is a
+    #: loop that eventually passes something it should not have.
+    return restate(
+        payload,
+        model=chosen,
+        attempt=2,
+        correction=(
+            f"Your previous answer was rejected: {first.refusal} "
+            "Write it again, obeying that rule. Do not change the finding."
+        ),
+    )

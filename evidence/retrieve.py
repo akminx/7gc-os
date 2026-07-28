@@ -195,6 +195,10 @@ select c.id, c.holding_id, c.claim_key, c.source_class::text, c.execution_status
             and (c.applicable_to is null or c.applicable_to >= %(on)s)))
    and (%(source_classes)s::text[] is null
         or c.source_class::text = any (%(source_classes)s::text[]))
+   and (not %(scoped)s
+        or exists (select 1 from claim_requirement cr
+                    where cr.claim_id = c.id
+                      and cr.requirement::text = %(requirement)s))
    and to_tsvector('english', dv.canonical_text) @@ q.any_q
  order by 12 desc, 9
 """
@@ -226,6 +230,7 @@ def retrieve(
     k: int = K,
     source_classes: Sequence[SourceClass] | None = None,
     apply_window: bool = True,
+    requirement_scoped: bool = False,
 ) -> tuple[RetrievedPassage, ...]:
     """The top `k` passages for this requirement at this measurement date.
 
@@ -257,6 +262,13 @@ def retrieve(
             "source_classes": (
                 [c.value for c in source_classes] if source_classes is not None else None
             ),
+            #: Off by default so `recall_at_k()` keeps measuring the ranker it
+            #: has always measured. The ROUTE turns it on, because a reader who
+            #: picks "fair-value support" and is handed this holding's
+            #: existence-and-cost paperwork has been answered a question they
+            #: did not ask — and could reasonably file it as fair-value support.
+            "scoped": requirement_scoped,
+            "requirement": requirement.value,
         },
     ).fetchall()
 
@@ -595,6 +607,11 @@ def measured_query_cost(conn: Conn, *, repeats: int = 20) -> float:
                 "holding_id": None,
                 "on": date(2025, 12, 31),
                 "apply_window": True,
+                #: Unscoped, because this measures the SCAN. Adding the
+                #: requirement filter here would time a narrower query and
+                #: report the corpus as cheaper than the product's own path.
+                "scoped": False,
+                "requirement": RequirementCode.R2.value,
                 "source_classes": None,
             },
         ).fetchall()

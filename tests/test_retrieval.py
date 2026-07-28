@@ -483,6 +483,8 @@ def test_the_scan_is_not_what_costs_the_time_so_no_index_is_built(demo: Conn) ->
             "holding_id": None,
             "on": date(2025, 12, 31),
             "apply_window": True,
+            "scoped": False,
+            "requirement": "R2",
             "source_classes": None,
         },
     ).fetchone()

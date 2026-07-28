@@ -260,7 +260,7 @@ def test_the_explain_route_is_exercised_through_http_not_around_it(
     So it goes through `TestClient`. `restate` is stubbed because the model is
     not what is under test here; everything between the URL and the payload is.
     """
-    monkeypatch.setattr(lookup, "named_actors", lambda: ["someone"])
+    monkeypatch.setattr(lookup, "_assistant_is_offered", lambda: True)
     monkeypatch.setattr(lookup, "_connect", lambda: _NamedConn())
     monkeypatch.setattr(lookup, "load_policy", lambda conn: object())
     monkeypatch.setattr(
@@ -320,21 +320,22 @@ def test_a_payload_never_describes_its_outstanding_steps_as_taken() -> None:
     assert "other_requirements_with_a_step_still_outstanding" in src
 
 
-def test_the_paid_route_is_withheld_where_the_deployment_names_no_actors(
+def test_the_paid_route_is_withheld_unless_the_deployment_switches_it_on(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The restatement costs money per request; the passage search does not.
 
     Every other route in this service reads Postgres. An unauthenticated GET
     that spends money is an endpoint anyone who finds the URL can loop, so it
-    is off wherever `/decisions` is off — the public read-only surface serves
-    what is free, and the private demo, which already declares who is using it,
-    is where the assistant lives.
+    It has its OWN switch. Gating it on `DECISION_ACTORS` reused an existing
+    flag and silently coupled two unrelated questions: turning the assistant on
+    would also have opened the decision-recording write surface. `/passages`,
+    which is free, is unaffected either way.
 
     Asserted as a PAIR. Withholding both routes would be safe and useless; the
     point is that the free one is untouched.
     """
-    monkeypatch.setattr(lookup, "named_actors", list)
+    monkeypatch.setattr(lookup, "_assistant_is_offered", lambda: False)
     monkeypatch.setattr(lookup, "_connect", lambda: _CountingConn())
     app = FastAPI()
     app.include_router(lookup.lookup_router)
@@ -343,7 +344,7 @@ def test_the_paid_route_is_withheld_where_the_deployment_names_no_actors(
 
     withheld = client.get("/holdings/fund_ii_lucra/explain", params=params)
     assert withheld.status_code == 404
-    assert "paid model" in withheld.json()["detail"]
+    assert "ASSISTANT_ENABLED" in withheld.json()["detail"]
 
     monkeypatch.setattr(lookup, "retrieve", lambda *a, **k: (_passage(),))
     assert client.get("/holdings/fund_ii_moonfare/passages", params=params).status_code == 200
