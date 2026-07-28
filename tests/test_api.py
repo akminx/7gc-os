@@ -29,15 +29,47 @@ ROOT = Path(__file__).resolve().parents[1]
 
 client = TestClient(app)
 
-#: The routes answer from the ledger when a DSN is configured and from the Dream
-#: fixture when none is, so the tests ask the service which fund-period it has
-#: rather than assuming one. Hard-coding the fixture's ids made every assertion
-#: below silently a fixture assertion, which is the thing that stopped being
-#: true the moment real data landed.
-_periods = client.get("/funds").json()["periods"]
-FUND: str = _periods[0]["fund_id"]
-PERIOD: str = _periods[0]["period_id"]
-HOLDING: str = client.get(f"/funds/{FUND}/periods/{PERIOD}/packet").json()["rows"][0]["holding_id"]
+#: The skip reason `check_db_guards` sanctions for a schema that has the
+#: migrations and no corpus — the string must stay in step with
+#: SANCTIONED_SKIPS in `scripts/check_all.py`, which matches it verbatim.
+NO_LOADED_CORPUS = (
+    "no loaded corpus — the case-study data is gitignored and CI holds migrations only"
+)
+
+
+@pytest.fixture(scope="session")
+def ledger_ids() -> tuple[str, str, str]:
+    """The (fund, period, holding) the route tests run against, or a skip.
+
+    The routes answer from the ledger when a DSN is configured and from the
+    Dream fixture when none is, so the tests ask the service which fund-period
+    it has rather than assuming one. Hard-coding the fixture's ids made every
+    assertion below silently a fixture assertion, which is the thing that
+    stopped being true the moment real data landed.
+
+    The probe used to sit at module scope, and CI never got past collection:
+    CI applies the migrations to an EMPTY Postgres — the corpus is gitignored —
+    so `/funds` listed zero periods and `periods[0]` raised IndexError before a
+    single test ran. Locally the same probe finds the loaded `demo` ledger and
+    every dependent test runs, which is where these routes are exercised:
+    pre-commit, on every commit.
+
+    Seeding CI with a ledger rich enough to satisfy `0 < unsupported < total`
+    means maintaining a second corpus shaped to produce specific policy
+    verdicts — the fixture-written-to-fit-the-contracts failure this project
+    has already had once. Skipping is the honest state, and not the silent
+    kind: the reason is sanctioned under REQUIRE_DB_TESTS=1 and printed by
+    `-rs`, and the local run has no skip at all.
+    """
+    periods = client.get("/funds").json().get("periods", [])
+    if not periods:
+        pytest.skip(NO_LOADED_CORPUS)
+    fund = str(periods[0]["fund_id"])
+    period = str(periods[0]["period_id"])
+    rows = client.get(f"/funds/{fund}/periods/{period}/packet").json().get("rows", [])
+    if not rows:
+        pytest.skip(NO_LOADED_CORPUS)
+    return fund, period, str(rows[0]["holding_id"])
 
 
 def test_root_identifies_the_service() -> None:
@@ -112,13 +144,16 @@ def test_a_sibling_named_vercel_project_is_not_allowed() -> None:
 
 
 # ── Step 0 stub routes · the contract path end to end ────────────────────
-def test_holding_route_names_its_source_and_its_evidence() -> None:
+def test_holding_route_names_its_source_and_its_evidence(
+    ledger_ids: tuple[str, str, str],
+) -> None:
     """The route answers from the ledger when one is configured and from the
     fixture when none is. Both shapes are the same, and both say which — a demo
     that silently falls back to a fixture shows a number nobody can trace."""
-    body = client.get(f"/holdings/{HOLDING}").json()
+    _fund, _period, holding = ledger_ids
+    body = client.get(f"/holdings/{holding}").json()
     assert body["source"] in {"ledger", "fixture"}
-    assert body["holding_id"] == HOLDING
+    assert body["holding_id"] == holding
     assert isinstance(body["evidence"], list)
 
 
@@ -127,18 +162,24 @@ def test_an_unknown_holding_is_404_not_an_empty_row() -> None:
     assert client.get("/holdings/nope").status_code == 404
 
 
-def test_money_crosses_the_wire_as_a_string_not_a_float() -> None:
+def test_money_crosses_the_wire_as_a_string_not_a_float(
+    ledger_ids: tuple[str, str, str],
+) -> None:
     """A float would reintroduce the precision loss the whole money path
     refuses. JSON has no decimal type, so the contract serialises to string."""
-    raw = client.get(f"/funds/{FUND}/periods/{PERIOD}/totals").content.decode()
+    fund, period, _holding = ledger_ids
+    raw = client.get(f"/funds/{fund}/periods/{period}/totals").content.decode()
     assert '"amount":"' in raw.replace(" ", "")
     assert "e+" not in raw.lower(), "money must not serialise in exponent form"
 
 
-def test_the_total_cannot_be_read_without_its_qualification() -> None:
+def test_the_total_cannot_be_read_without_its_qualification(
+    ledger_ids: tuple[str, str, str],
+) -> None:
     """INV-19 · a caller wanting "the fund's value" must read past the caveat to
     reach it, rather than getting a bare number with the caveat elsewhere."""
-    body = client.get(f"/funds/{FUND}/periods/{PERIOD}/totals").json()
+    fund, period, _holding = ledger_ids
+    body = client.get(f"/funds/{fund}/periods/{period}/totals").json()
     assert body["kind"] == "held_at_date_reported"
     assert body["label"] == ("Tracker-reported amounts for positions held at this date, unaudited")
     # The two figures used to coincide, because nothing was assessed and every
@@ -155,8 +196,9 @@ def test_the_total_cannot_be_read_without_its_qualification() -> None:
     assert body["contains_unsupported_inputs"] is True
 
 
-def test_packet_route_returns_the_whole_packet() -> None:
-    body = client.get(f"/funds/{FUND}/periods/{PERIOD}/packet").json()
+def test_packet_route_returns_the_whole_packet(ledger_ids: tuple[str, str, str]) -> None:
+    fund, period, _holding = ledger_ids
+    body = client.get(f"/funds/{fund}/periods/{period}/packet").json()
     assert body["period"]["audit_scope"] == "packet"
     assert len(body["rows"]) >= 1
     assert body["rows"][0]["approval"] is None
@@ -277,7 +319,9 @@ def test_the_ledger_connection_never_prepares_statements() -> None:
 
 
 @pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
-def test_the_packet_route_loads_the_policy_ledger_once_not_twice() -> None:
+def test_the_packet_route_loads_the_policy_ledger_once_not_twice(
+    ledger_ids: tuple[str, str, str],
+) -> None:
     """`from_ledger.load` is fourteen statements, and this route needs it twice —
     once to assemble the packet and once to run SPEC §8's validators over it.
 
@@ -299,6 +343,7 @@ def test_the_packet_route_loads_the_policy_ledger_once_not_twice() -> None:
     subclass hook is on the connection. It is a local class rather than a
     module-level one so nothing else can accidentally connect through it.
     """
+    fund, period, _holding = ledger_ids
     counted: list[str] = []
     base = psycopg.Connection
 
@@ -312,8 +357,8 @@ def test_the_packet_route_loads_the_policy_ledger_once_not_twice() -> None:
         with conn:
             conn.execute(f"set search_path to {resolve_schema(None)}")
             counted.clear()
-            built = api_ledger.packet(conn, FUND, PERIOD, policy=load_policy(conn))
-            assert built is not None, f"no packet for {FUND}/{PERIOD}"
+            built = api_ledger.packet(conn, fund, period, policy=load_policy(conn))
+            assert built is not None, f"no packet for {fund}/{period}"
             rows = len(built.rows)
     finally:
         conn.close()
@@ -326,6 +371,7 @@ def test_the_packet_route_loads_the_policy_ledger_once_not_twice() -> None:
 
 
 @pytest.mark.skipif(not DSN, reason="MIGRATION_DATABASE_URL not set")
+@pytest.mark.usefixtures("ledger_ids")
 def test_both_approval_outcomes_are_reachable_in_the_loaded_schema() -> None:
     """`0003`'s approval prerequisites join `pbc_requirement`,
     `evidence_assessment` and `evidence_link`. While all three were empty, EVERY

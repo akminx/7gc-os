@@ -70,12 +70,13 @@ position's strongest evidence into its weakest.
 **Grounding is a span, not a context window.** Every figure carries the passage
 stating it — `substring(canonical_text, span) = quote`, checked in Python and
 again by a database trigger, so a citation that does not resolve is refused
-rather than stored. At 20 documents the extractors read each one whole and there
-is no retrieval layer to get wrong; the designed one (SQL filter → FTS → rerank
-on execution status, entity and date) and embeddings behind it each wait on a
-trigger in the scope note. Orchestration is deterministic rather than an agent
-swarm for the same reason: a packet that cannot be reproduced step for step is
-not audit evidence.
+rather than stored. At 20 documents the extractors read each one whole;
+retrieval is built to layer 2 — SQL filter → Postgres FTS → a declared rerank
+whose leading dimension is the authority lattice, not a score — and is measured
+both ways: 40/40 entity-scoped, 24/40 blind at top-5, which is what the ranker
+is worth. Embeddings wait on the trigger in the scope note. Orchestration is
+deterministic rather than an agent swarm for the same reason: a packet that
+cannot be reproduced step for step is not audit evidence.
 
 **What ingestion refuses to do matters as much.** When two sources disagree,
 neither overwrites the other: the disagreement becomes a finding carrying both
@@ -135,9 +136,13 @@ becomes investor-facing without a typed decision naming what was decided.**
 | Outreach · signals | draft an evidence request or an investor update | **never sent** — an invariant, not a setting |
 
 AI does **not** compute a total, decide a verdict, choose policy precedence,
-resolve a conflict between claims, or approve anything. In the built slice it
-does nothing at all — deterministic extractors read the whole corpus, and
-`docs/ROADMAP.md` carries the trigger that would change that.
+resolve a conflict between claims, or approve anything. One trigger has fired:
+no pattern reads Lucra's CEO email, so a model proposed five figures from it
+and the citation binding accepted three — the model returns a quote and a
+value, never an offset, so a hallucinated passage or a misattached figure is a
+refusal rather than a row, and the call is recorded and replayed, never live in
+CI. The restatement route beside it may restate the record and never add to
+it, and it is off unless the deployment says otherwise.
 
 Audit support instantiates the decision layer with four types, **none implying
 another**: approving *that a number was transcribed faithfully* and approving
@@ -161,6 +166,8 @@ LP-facing outputs are.
 ---
 
 *Built, deployed and enforced: contract, invariants, gate, tracker ingestion,
-document extractors, policy layer, packet API and read-only UI. Transport
-adapters and the #4/#6 policy layers are designed, not built — `docs/ROADMAP.md`
-carries each with its trigger.*
+document extractors (rules, plus a model behind the citation binding),
+retrieval to layer 2, policy layer, packet API and export, read-only UI, and a
+restatement route that cannot add to the record. Transport adapters, embeddings
+and the #4/#6 policy layers are designed, not built — `docs/ROADMAP.md` carries
+each with its trigger.*

@@ -384,6 +384,11 @@ SANCTIONED_SKIPS = (
     "case-study document is not in the repository",
     "the case-study document or its recording is not in the repository",
     "the `demo` schema holds no loaded corpus",
+    # tests/test_api.py's ledger probe. CI applies the migrations to an empty
+    # Postgres; the corpus is gitignored, so the route tests run pre-commit
+    # against the loaded `demo` ledger and skip here, named, instead of
+    # crashing collection with an IndexError from `periods[0]`.
+    "no loaded corpus — the case-study data is gitignored and CI holds migrations only",
 )
 
 #: pytest's `-rs` short summary: "SKIPPED [3] tests/test_packet_export.py:483: no DATABASE_URL".
