@@ -2,19 +2,26 @@
 
 What I did not build, and the condition that would make me build it. A cut
 without a trigger is an excuse; a cut with one is a decision someone else can
-audit. Built and deployed: both funds, 72 marks over six packet dates, 247 cited
+audit. Built and deployed: both funds, 72 marks over six packet dates, 253 cited
 facts each bound to its passage, and an oracle the ledger agrees with on 175
 requirement comparisons.
 
+## Built since, and why the trigger fired
+
+- **Model extraction.** A figure no pattern could read — Lucra's CEO email —
+  fired the stated trigger. It ships behind the guardrail SPEC §10 required:
+  the model returns a quote and a value and never an offset, so a hallucinated
+  passage or a misattached figure is a refusal rather than a row. Recorded and
+  replayed, never live in CI. Three of five proposed figures were accepted; the
+  two refusals are the guardrail firing.
+- **Retrieval, layers 1–2.** SQL filter → Postgres FTS → declared rerank. No
+  index: the scan is 15 ms and the round trip is sixty times that. Measured on
+  request, both ways — entity-scoped 40/40, blind 24/40 at top-5. The scoped
+  figure measures the SQL filter, since about one candidate survives it; the
+  blind figure is what the ranker is worth.
+
 ## Not built
 
-- **Any model call.** Deterministic extractors read the whole corpus — a packet
-  an auditor re-derives is the wrong place for a non-reproducible step.
-  *Trigger:* a figure no pattern reads; the cascade (SPEC §10) ships behind the
-  eval harness, never ahead of it.
-- **Retrieval — FTS, rerank, embeddings.** 20 documents, each read whole, so no
-  ranking step can fail silently. *Trigger:* a corpus too large to read whole;
-  for embeddings, Recall@5 +5 points over FTS at ≤2× cost.
 - **The general form of the validators.** V4 is exact Decimal equality, not a
   tolerance; V8 classifies Moonfare's $30 as `ROUNDING_VARIANCE` and routes
   anything unrecognised to a human. The arithmetic answer key stays in
@@ -24,12 +31,10 @@ requirement comparisons.
 - **Management-assessment drafts.** R3 fires at 12 holding-dates and emits
   `DRAFT_MANAGEMENT_ASSESSMENT`; nothing drafts. *Trigger:* fired — ¶3(b) asks
   *management* to author it.
-- **Settlement-of-funds evidence.** Nine extracted facts reach no requirement,
-  and ¶1 names it. *Trigger:* fired.
-- **Connectors · LangGraph · RBAC · outreach sending · graph DB.** Fixed pack,
-  stateless runs, read-only public surface. *Triggers:* continuous arrival · a
-  run pausing days for an inbound event · a write surface. Autonomous sending is
-  prohibited by INV-14, not deferred.
+- **Connectors · LangGraph · RBAC · outreach sending.** Fixed pack, stateless
+  runs, read-only public surface. *Triggers:* continuous arrival · a run pausing
+  days for an inbound event · a write surface. Autonomous sending is prohibited
+  by INV-14, not deferred.
 - **Coverage floor and file-size ceiling, as gates.** Loosened deliberately,
   recorded in `check_all.py`: coverage had ratcheted to 98.25% and the remainder
   was `main()` bodies. Both still report. *Trigger:* a defect either would have
@@ -39,7 +44,29 @@ requirement comparisons.
   rounds 3 and 4's fixes. *Trigger:* a packet defect of a class the first round
   already checks.
 
+## Cut, each with its trigger
+
+| Cut | Trigger to build |
+|---|---|
+| A chatbot. Windows bound to a selection, not a conversation — a chat answer has no anchor, so provenance is re-argued in prose each time, which is where wrong figures enter | None. Cross-holding questions ("which companies have unsigned paperwork") are filters over the table, which the packet payload already carries. Exact, instant, free |
+| Generation over retrieved passages — the G in RAG. Retrieval ships; synthesis does not. The answer is the passages | A corpus too large to show the reader. At 20 documents and 44k characters, an auditor wants the quote, not a paraphrase of it |
+| Embeddings / vector search | Recall@5 +5 points over FTS at ≤2× cost (unchanged, and now measurable — the blind 24/40 is the baseline) |
+| Model reranking | Never. INV-1 makes authority a lattice, not a score; press cannot support a fair-value mark at any rank. A model rerank turns that into a number |
+| Query expansion | Already fired, not yet built: "euros" does not stem to EUR, "currency" does not reach "denominated". Expansion runs before the database, where a bad expansion returns fewer rows rather than a wrong sentence |
+| Recall re-measured for the requirement-scoped path | Before any recall number is claimed for the product's own configuration. The filter is opt-in precisely so the baseline did not move |
+| Guards against spelled-out figures and synonym inversion | Unclosable by regex. The numeral guard catches digit-typos and digit-arithmetic; the payload is shaped so the misreading is unavailable instead |
+| Rate limiting on the paid route | Public exposure beyond a named demo. Today it is off unless `ASSISTANT_ENABLED` says otherwise |
+| The vocabulary rollout — 99 definitions still live only in `title=` tooltips | Touch-device or printed use, where hover does not exist |
+| A relationship graph beside the ledger. The corpus already holds multi-hop facts relationally — Jio is an LP interest in a feeder that holds the company; every document → claim → fact → span is typed — and at 20 documents a recursive CTE answers them. On the firm's real data the questions change shape: shared signatories across funds, counsel named in one SPA appearing in another's gap note, a round document pricing a class another holding marks off. Those stay *correct* as SQL; they stop being *writable* once each hop is a join someone has to remember | Recurring multi-hop questions three joins deep that operators stop writing as SQL, on a corpus too large for the packet payload to carry as a filter. The ledger remains the source of truth; the graph is a projection over it, never a second store of figures |
+
 ## Now
+
+Three defects reached a deployed page and none was caught by a test, because
+every test ran where all three were already true: a route that had never
+executed, a dependency classified for the wrong lifetime, and one switch
+controlling two unrelated things. Two were found by cross-family review, one by
+the deployment itself. The gates are good at what they can see; this note is
+the honest list of what they cannot.
 
 `/ready` returned 200 through three separate broken deployments — correctly,
 since it is `SELECT 1` and the database was up. The API read the wrong schema and
@@ -52,13 +79,12 @@ which is what this system claims about a valuation mark.
 
 ## Week 1
 
-Settlement of funds, oracle first: those facts need a matrix cell that raises
-today, and the oracle models 23 evidence records against the ledger's 28. Amend
-the answer key, add the cell, re-derive; the reverse order is an implementation
-grading itself. Then the assessment drafts, where the first model call earns its
-place and is confined by construction, since INV-14 and INV-18 make a draft
-un-exportable without its own approval. Then a deployment check that asserts
-packet contents, and one CI job through the pooler.
+The assessment drafts, where the first model call that *writes* earns its place
+and is confined by construction, since INV-14 and INV-18 make a draft
+un-exportable without its own approval. A deployment check that asserts packet
+contents — the three defects above all reached a deployed page past a green
+suite — and one CI job through the pooler, so the transaction-mode failure
+class is exercised where it can fail.
 
 ## Week 4
 
@@ -80,3 +106,8 @@ approval state; a figure no requirement supports comes back labelled unsupported
 `approved_fair_value_total` comes back **null at all six packet dates**, because
 no fund-year here is fully supported. The refusal is the product, and it is where
 buy-versus-build falls: buy the assistant, build the ledger.
+
+On the firm's real data — not this pack — project the same ledger into a
+**relationship graph**: companies, documents, claims, counsel, signatories, and
+the edges between them. The figures stay where they are; what becomes queryable
+is how they relate. That is the cut above, and it waits on the trigger there.

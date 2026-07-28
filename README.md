@@ -5,10 +5,11 @@ date, assemble the evidence supporting its valuation mark, trace every figure to
 an exact source passage, route uncertain evidence through human review, and
 export an auditor packet with its gaps stated honestly.
 
-> **Status: design foundation.** The correctness contract, invariants and
-> deterministic gate are complete and enforced. The application — schema,
-> ingestion, retrieval, UI, packet export — is next. See `docs/SPEC.md` §13 for
-> the build order.
+> **Status: built and deployed.** Both funds, all 14 positions, 20 documents,
+> 253 cited facts each bound to its passage, 72 marks over six packet dates,
+> and an oracle the ledger agrees with on 175 requirement comparisons. Live and
+> read-only at [7gc-os.vercel.app](https://7gc-os.vercel.app);
+> `docs/WALKTHROUGH.md` is the five-minute path through it.
 >
 > The source materials are a fund's private case-study dataset and are not
 > republished here. The oracle references them by name and quotes short passages
@@ -86,9 +87,19 @@ it cannot run is worse than no check.
 
 ```
 docs/SPEC.md          scope, data model, requirements, validators, build order
+docs/BLUEPRINT.md     the platform design (deliverable A)
+docs/ROADMAP.md       scope & roadmap note (deliverable C)
+docs/WALKTHROUGH.md   the five-minute demo path
 docs/ORACLE.md        findings F1-F12, release gates G1-G10
 INVARIANTS.md         20 named distinctions and their guards
 evals/oracle/         the executable oracle
+supabase/migrations/  the invariants as database constraints
+ingest/               workbooks + documents → canonical, cited rows
+evidence/             retrieval (SQL filter → FTS → declared rerank), cited extraction
+policy/               requirements, sufficiency matrix, validators
+api/                  packet, totals, decisions, lookup, evals
+web/                  dashboard, workspace, trace, reconciliation
+packet/               the auditor packet and its manifest
 scripts/              the deterministic gate
 tests/                wires the oracle and tier map into the gate
 ```
