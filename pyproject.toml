@@ -9,6 +9,21 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "openpyxl>=3.1",
+    # A RUNTIME dependency since the assistant shipped, and it was a dev one
+    # until the first deploy said so.
+    #
+    # `evidence/extract.py` imports httpx lazily and calls it a development
+    # dependency, which is true THERE: extraction runs at ingestion time on a
+    # workstation and the deployed API never reaches that code. The plain
+    # English restatement reuses the same client and runs inside a request, so
+    # on Render the import failed and every restatement refused with "httpx is
+    # not installed on this host".
+    #
+    # It refused rather than 500'd, and it said which of the two failures it
+    # was, because splitting `except Exception` into ImportError and HTTPError
+    # was the fix for a lint suppression. The gate that objected to a `# noqa`
+    # is the reason this was one sentence to diagnose instead of an afternoon.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -21,7 +36,6 @@ dev = [
     "pytest-xdist>=3.8",
     "ruff>=0.6",
     "mypy>=1.11",
-    "httpx>=0.27",
     # The workbook reader is the only untyped third-party surface in the
     # project, and it is the layer that turns spreadsheet cells into money.
     "types-openpyxl>=3.1",
