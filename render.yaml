@@ -67,6 +67,33 @@ services:
       # schema is a green health check over an empty demo.
       - key: LEDGER_SCHEMA
         value: demo
+      # WHETHER THIS DEPLOYMENT PAYS FOR PLAIN-ENGLISH RESTATEMENTS.
+      #
+      # `/holdings/{id}/explain` is the only route here that costs money per
+      # request: every other one reads Postgres, this one calls a model. An
+      # unauthenticated GET that spends money is a URL anyone can loop, so it is
+      # off unless this says otherwise, and `/passages` — which is free and runs
+      # no model at all — is unaffected either way.
+      #
+      # Its own key rather than DECISION_ACTORS below. Gating it on that reused
+      # an existing switch and silently coupled two unrelated questions: turning
+      # the assistant on would also have opened the decision-recording WRITE
+      # surface on the public deployment.
+      #
+      # Declared here rather than left to the dashboard because both deployment
+      # failures this feature has had were of one shape — something true on a
+      # workstation that the repository never wrote down. A variable that gates
+      # spending is the last one that should be invisible in the spec, and its
+      # absence fails quietly: the pane 404s, which reads as "never built"
+      # rather than "a setting was lost".
+      - key: ASSISTANT_ENABLED
+        sync: false
+      # THE MODEL BEHIND THAT ROUTE. `sync: false`: a key never belongs in a
+      # file that is committed. Absent, the restatement refuses in its own
+      # words — "no model is configured" — rather than failing the request, so a
+      # deployment that forgets it loses a paragraph and never a finding.
+      - key: OPENROUTER_API_KEY
+        sync: false
       # WHO MAY RECORD A DECISION. Unset, `api/decisions.py` refuses every write
       # with 403 and the frontend renders no control at all, which is how the
       # PUBLIC deployment stays read-only without the code having two versions.
