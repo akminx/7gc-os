@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { GapObservation, RequirementAssessment } from "./contracts";
-import { GapAction, openRequirements } from "./Gap";
+import { askedElsewhere, GapAction, openRequirements } from "./Gap";
 
 afterEach(cleanup);
 
@@ -173,7 +173,56 @@ describe("the gap, the action and the why", () => {
   it("says so when the API recorded no reason and no action at all", () => {
     render(<GapAction assessment={BASE} gaps={[]} />);
     expect(screen.getByText(/records no reason code/)).toBeDefined();
-    expect(screen.getByText(/No next action is recorded/)).toBeDefined();
+    expect(screen.getByText(/Nothing is being requested under this requirement/)).toBeDefined();
+  });
+});
+
+/**
+ * Lucra at FY2024, which is where this was found on screen.
+ *
+ * Fair-value support rests on a non-binding term sheet: the policy table
+ * answers that with a reason and NO action, because the fix is the executed
+ * Series A-1 agreement and existence-and-cost is already requesting it. The
+ * action line said "Nobody has been asked for anything yet" next to an open
+ * request with company counsel.
+ *
+ * Scoped to the requirement that sentence was true. Read as English it was
+ * false, and it is the kind of false that stops a reader chasing something
+ * still outstanding — so the three cases are pinned separately here.
+ */
+describe("an empty action line, and what it is entitled to say about the rest of the row", () => {
+  it("claims nothing about siblings it was not given", () => {
+    render(<GapAction assessment={BASE} gaps={[]} />);
+    expect(screen.getByText(/Nothing is being requested under this requirement\./)).toBeDefined();
+    expect(screen.queryByText(/Nobody has been asked/)).toBeNull();
+    expect(screen.queryByText(/the request is filed under/)).toBeNull();
+  });
+
+  it("points at the requirement carrying the request rather than calling the holding unasked", () => {
+    render(<GapAction assessment={BASE} gaps={[]} row={[BASE, WITH_COUNSEL]} />);
+    expect(screen.getByText(/the request is filed under/)).toBeDefined();
+    expect(screen.getByText("R1 · existence and cost")).toBeDefined();
+    expect(screen.queryByText(/Nobody has been asked/)).toBeNull();
+  });
+
+  it("still says nobody has been asked when the whole row asks for nothing", () => {
+    render(<GapAction assessment={BASE} gaps={[]} row={[BASE, { ...BASE, requirement: "R3" }]} />);
+    expect(screen.getByText(/Nobody has been asked for anything yet/)).toBeDefined();
+    expect(screen.queryByText(/the request is filed under/)).toBeNull();
+  });
+
+  /**
+   * Asserted on the function rather than through the component, because
+   * through the component it cannot fail: the branch only renders when the
+   * open requirement has no actions, and a requirement with no actions is
+   * excluded by the `next_actions` test whether or not it is excluded by code.
+   * Rendered, this would have been a test that passes for the wrong reason.
+   */
+  it("excludes the open requirement itself, not merely requirements without actions", () => {
+    const openWithAction = { ...BASE, next_actions: ["REQUEST_FROM_COMPANY"] };
+    expect(
+      askedElsewhere([openWithAction, WITH_COUNSEL], openWithAction).map((a) => a.requirement),
+    ).toEqual(["R1"]);
   });
 });
 

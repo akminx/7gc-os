@@ -2521,3 +2521,34 @@ button.why[aria-expanded="true"] {
   font-weight: 400;
   color: var(--muted);
 }
+
+/* ── The assistant strip ──────────────────────────────────────────────────
+   Two windows side by side under the evidence trail, sharing one requirement
+   picker. They are two views of one selection, so they sit in one frame; a
+   layout that let them drift apart would put a restatement of one request
+   beside passages retrieved for another. */
+.assist__strip { margin-top: 1rem; }
+.assist__picker { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem; }
+.assist__tab {
+  font: inherit; font-size: 0.82rem; padding: 0.3rem 0.7rem; cursor: pointer;
+  border: 1px solid var(--rule, #d5d5d5); border-radius: 999px;
+  background: transparent; color: inherit;
+}
+.assist__tab--on { background: var(--ink, #222); color: var(--paper, #fff); border-color: var(--ink, #222); }
+.assist__panes { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 900px) { .assist__panes { grid-template-columns: 1fr; } }
+.assist__label { font-weight: 600; font-size: 0.85rem; margin: 0 0 0.4rem; }
+.assist__row { display: flex; gap: 0.4rem; }
+.assist__input { flex: 1; font: inherit; padding: 0.4rem 0.55rem; border: 1px solid var(--rule, #d5d5d5); border-radius: 4px; }
+.assist__go { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; border: 1px solid var(--rule, #d5d5d5); border-radius: 4px; background: transparent; color: inherit; }
+.assist__note { font-size: 0.82rem; opacity: 0.85; margin: 0.6rem 0; }
+.assist__note--failed { color: var(--bad, #a11); }
+.assist__note--empty, .assist__note--refused { border-left: 3px solid var(--rule, #d5d5d5); padding-left: 0.6rem; }
+.assist__hits { list-style: none; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.9rem; }
+.assist__hit { border-left: 3px solid var(--rule, #d5d5d5); padding-left: 0.7rem; }
+.assist__cite { display: flex; flex-wrap: wrap; gap: 0.5rem; font-size: 0.75rem; opacity: 0.8; margin: 0.35rem 0 0; }
+.assist__matched { font-size: 0.72rem; opacity: 0.65; margin: 0.2rem 0 0; }
+.assist__prose { margin: 0.4rem 0; line-height: 1.5; }
+/* Quieter than the paragraph it describes: it is the account of how that
+   paragraph was produced, which a reader needs available and not first. */
+.assist__provenance { font-size: 0.72rem; opacity: 0.7; margin: 0.5rem 0 0; font-style: italic; }

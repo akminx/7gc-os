@@ -1,0 +1,242 @@
+{
+  "VERDICT": {
+    "not_assessed": {
+      "label": "not assessed",
+      "glyph": "?",
+      "meaning": "Nobody has looked. This is not a finding of any kind."
+    },
+    "not_applicable": {
+      "label": "not applicable",
+      "glyph": "∅",
+      "meaning": "The requirement does not arise for this position at this date."
+    },
+    "missing": {
+      "label": "missing",
+      "glyph": "✕",
+      "meaning": "Evidence that should exist was not located."
+    },
+    "insufficient": {
+      "label": "insufficient",
+      "glyph": "▲",
+      "meaning": "Evidence exists but cannot support the requirement."
+    },
+    "partial": {
+      "label": "partial",
+      "glyph": "◐",
+      "meaning": "Evidence supports part of the requirement. Two partials never compose to sufficient."
+    },
+    "conflicting": {
+      "label": "conflicting",
+      "glyph": "⇄",
+      "meaning": "Claims contradict. Dominates every other verdict until a human resolution supersedes."
+    },
+    "sufficient": {
+      "label": "sufficient",
+      "glyph": "✓",
+      "meaning": "The requirement is met by the cited evidence."
+    }
+  },
+  "REQUIREMENT": {
+    "R1": {
+      "label": "R1 · existence and cost",
+      "paragraph": "¶1",
+      "letter": "Letter ¶1 — executed transaction documents supporting acquisition, share counts, price per share and settlement of funds",
+      "meaning": "Applies to every holding at every date."
+    },
+    "R2": {
+      "label": "R2 · fair-value support",
+      "paragraph": "¶2",
+      "letter": "Letter ¶2 — fair value support as of this measurement date",
+      "meaning": "Applies to every holding at every date."
+    },
+    "R3": {
+      "label": "R3 · unchanged-mark calibration",
+      "paragraph": "¶3",
+      "letter": "Letter ¶3 — management's assessment that the last round price remains representative at this date",
+      "meaning": "Applies when the mark did not move and material support is stale."
+    },
+    "R4": {
+      "label": "R4 · realization support",
+      "paragraph": "¶4",
+      "letter": "Letter ¶4 — merger consideration, distribution notices or other support for proceeds received",
+      "meaning": "Applies to realised lots only."
+    },
+    "R5": {
+      "label": "R5 · pro-forma identification",
+      "paragraph": "closing ¶",
+      "letter": "Letter, closing paragraph — identify any positions marked on a pro forma basis pending executed documentation",
+      "meaning": "A labelling requirement for pro-forma marks. Labelling correctly is not support."
+    }
+  },
+  "SHORTFALL_ORIGIN": {
+    "expired": {
+      "label": "support existed and expired",
+      "meaning": "A document on file once covered this. Its own stated reliance window does not reach this measurement date, so it is out of date rather than absent. The letter asks the valuer who wrote it to re-issue."
+    },
+    "never_located": {
+      "label": "no support has been located anywhere",
+      "meaning": "It was searched for and not found, and no record says who holds it. There is nothing to re-date and nobody named to ask, so the letter goes to the company."
+    },
+    "held_elsewhere": {
+      "label": "it exists, and the fund does not hold it",
+      "meaning": "A record names the document and it is outside the fund's repository. The letter goes to whoever holds it, which is a different letter from the one asking a company to produce a document nobody can find."
+    },
+    "insufficient_authority": {
+      "label": "the document exists and cannot carry this",
+      "meaning": "Evidence is on file, and either whose word it is or whether it is signed falls short of what the requirement asks."
+    },
+    "unresolved": {
+      "label": "a decision or a step is outstanding",
+      "meaning": "The evidence is on file and something a human owes has not been recorded yet."
+    }
+  },
+  "REASON_CODE": {
+    "SUPPORT_OUTSIDE_ITS_OWN_RELIANCE_WINDOW": {
+      "label": "support is outside its own reliance window",
+      "origin": "expired",
+      "meaning": "The source states the period it may be relied on for, and this measurement date is not in it. The evidence is on file and out of date."
+    },
+    "NO_APPLICABLE_SUPPORT_NOT_LOCATED": {
+      "label": "no applicable support · the document was not located",
+      "origin": "never_located",
+      "meaning": "It was searched for in the fund's repository and not found."
+    },
+    "NO_APPLICABLE_SUPPORT_WITH_COUNSEL": {
+      "label": "no applicable support · the document is with counsel",
+      "origin": "held_elsewhere",
+      "meaning": "It exists, outside the fund's repository, in counsel's hands."
+    },
+    "NO_APPLICABLE_SUPPORT_REFERENCED_LOCATION_UNSPECIFIED": {
+      "label": "no applicable support · referenced, location unstated",
+      "origin": "held_elsewhere",
+      "meaning": "A record refers to the document and states nowhere it can be found."
+    },
+    "DOCUMENT_NOT_LOCATED": {
+      "label": "the document was not located",
+      "origin": "never_located",
+      "meaning": "Searched for in the fund's repository and not found."
+    },
+    "DOCUMENT_WITH_COUNSEL": {
+      "label": "the document is with counsel",
+      "origin": "held_elsewhere",
+      "meaning": "It exists and the fund does not hold it. Existence and cost is partial, not missing."
+    },
+    "DOCUMENT_LOCATION_UNSPECIFIED": {
+      "label": "the document is referenced with no location",
+      "origin": "held_elsewhere",
+      "meaning": "Custody has to be established before anyone can request it."
+    },
+    "PRESS_CANNOT_SUPPORT_FAIR_VALUE": {
+      "label": "press cannot support a fair value",
+      "origin": "insufficient_authority",
+      "meaning": "A published report of a round is not evidence of this fund's position in it. The article may be entirely accurate and still cannot carry the mark."
+    },
+    "MANAGEMENT_ASSERTION_WITHOUT_PRIMARY_SOURCE": {
+      "label": "a management assertion with no primary source",
+      "origin": "insufficient_authority",
+      "meaning": "The fund's own record of its own holding, with nothing outside it agreeing."
+    },
+    "NON_BINDING_TERM_SHEET": {
+      "label": "a non-binding term sheet",
+      "origin": "insufficient_authority",
+      "meaning": "Terms nobody is committed to. An unsigned document is different evidence from a signed one."
+    },
+    "PRO_FORMA_PENDING_EXECUTION": {
+      "label": "pro forma, pending execution",
+      "origin": "insufficient_authority",
+      "meaning": "The figures assume a closing that the corpus does not show as executed."
+    },
+    "UNCOVERED_SECURITY_CLASS": {
+      "label": "no evidence covers the class the fund holds",
+      "origin": "never_located",
+      "meaning": "Something on file prices a class, and it is not this one. Priced class and held class are different facts."
+    },
+    "CROSS_CLASS_POLICY_DECISION_REQUIRED": {
+      "label": "a cross-class inference needs a recorded policy decision",
+      "origin": "unresolved",
+      "meaning": "Carrying a price from one security class to another is a valuation judgement, and no human has recorded it."
+    },
+    "CLOSING_SET_PENDING": {
+      "label": "the closing set has not arrived",
+      "origin": "unresolved",
+      "meaning": "Executed documents are said to be coming and are not here yet."
+    },
+    "MARK_UNCHANGED_WITH_STALE_SUPPORT": {
+      "label": "the mark did not move and its support is stale",
+      "origin": "expired",
+      "meaning": "R3 · an unchanged carrying value needs a calibration statement once the evidence under it has aged."
+    },
+    "NO_MANAGEMENT_BASIS_MEMO": {
+      "label": "the third party's memo, and no memo from management",
+      "origin": "insufficient_authority",
+      "meaning": "Letter ¶2 asks for two things where a mark is based on something other than a financing round: the underlying source AND management's memo describing the basis of the mark. The valuer's memo is a real and authoritative half of that conjunction. The other half does not exist anywhere in this fund's records."
+    },
+    "SETTLEMENT_WITHOUT_SHARE_TERMS": {
+      "label": "settlement confirmed, share terms not",
+      "origin": "insufficient_authority",
+      "meaning": "Letter ¶1 asks for share counts, price per share AND settlement of funds. This evidences the third limb only: it proves the fund paid and says nothing about what the fund received. On its own an auditor could not establish the position from it."
+    },
+    "OFF_CLASS_EVIDENCE_NOT_RELIED": {
+      "label": "evidence about a class the fund does not hold, not counted",
+      "origin": "unresolved",
+      "meaning": "A document on file prices a different security class from the one held. It is named rather than dropped — it is in scope, and it is what makes this holding cross-class — but pricing one class off another's evidence is a valuation-policy act and is not performed until that decision is recorded."
+    },
+    "NO_SUPPORT_FOR_A_HELD_CLASS": {
+      "label": "every price that could support this mark is for a class the fund does not hold",
+      "origin": "insufficient_authority",
+      "meaning": "Not an absence of evidence: there are documents and they state prices, for a class this position is not. `insufficient` rather than `missing` for that reason. Any figure on file against the held class is a historic one — an original issue price restated in a later table — and what shares first sold for does not support what they are worth now. The derivation has always refused this case, and the verdict now agrees with it."
+    }
+  },
+  "NEXT_ACTION": {
+    "REQUEST_UPDATED_VALUATION": {
+      "label": "request an updated valuation",
+      "recipient": "the valuer who issued the memo on file",
+      "meaning": "The memo exists and its reliance window has closed. Ask for a re-issue as of this measurement date."
+    },
+    "REQUEST_FROM_COMPANY": {
+      "label": "request from the company",
+      "recipient": "the portfolio company",
+      "meaning": "Nothing on file covers this. Ask the company for the underlying document."
+    },
+    "REQUEST_FROM_COUNSEL": {
+      "label": "request from counsel",
+      "recipient": "the company's outside counsel",
+      "meaning": "The document exists and counsel holds it."
+    },
+    "REQUEST_WITH_LOCATION": {
+      "label": "establish custody, then request",
+      "recipient": "the fund's own records, first",
+      "meaning": "A record refers to the document without saying where it is. Custody comes first."
+    },
+    "REQUEST_EXECUTED_DOC": {
+      "label": "request the executed document",
+      "recipient": "whoever holds the signed original",
+      "meaning": "What is on file is unsigned. Signed and proposed are different evidence."
+    },
+    "REQUEST_PRIMARY_EVIDENCE": {
+      "label": "request primary evidence",
+      "recipient": "the company or its administrator",
+      "meaning": "What is on file reports the event rather than being it."
+    },
+    "REQUEST_SUPPORT_FOR_CLASS": {
+      "label": "request support for the class held",
+      "recipient": "the portfolio company",
+      "meaning": "Evidence on file prices a different security class than the one the fund holds."
+    },
+    "RECORD_VALUATION_POLICY_DECISION": {
+      "label": "record a valuation policy decision",
+      "recipient": "the fund's valuation committee",
+      "meaning": "No letter goes out. A human owes a recorded judgement."
+    },
+    "DRAFT_MANAGEMENT_ASSESSMENT": {
+      "label": "draft a management assessment",
+      "recipient": "fund management",
+      "meaning": "R3 · the unchanged mark needs a written calibration before it can close."
+    },
+    "REQUEST_MANAGEMENT_BASIS_MEMO": {
+      "label": "request management's memo on the basis of the mark",
+      "recipient": "fund management",
+      "meaning": "Letter ¶2 · what the mark is BASED ON. Deliberately not the same request as R3's calibration assessment, which is ¶3(b) and asks whether a last round price remains representative at a later date. Different paragraphs, different documents, different questions."
+    }
+  }
+}

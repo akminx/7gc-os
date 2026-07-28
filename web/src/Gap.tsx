@@ -36,6 +36,9 @@ import {
  * same way a verdict gets a glyph.
  */
 
+/** "R1 · existence and cost and R4 · realization support", without index arithmetic. */
+const NAMES = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
 /** The gap observation recorded against one requirement, or none. */
 function observationFor(
   gaps: GapObservation[],
@@ -139,15 +142,70 @@ function GapLine({
   );
 }
 
-function ActionLine({ assessment }: { assessment: RequirementAssessment }) {
+/**
+ * Which OTHER requirements for this holding carry a request.
+ *
+ * A requirement with nothing to ask for is not the same as a holding nobody has
+ * asked about, and for four measurement dates this component said it was.
+ * Lucra at FY2024 is the case: its fair-value support rests on a non-binding
+ * term sheet, which the policy table answers with a reason and no action —
+ * because the fix is the executed Series A-1 agreement, and existence-and-cost
+ * is already asking for exactly that. One document, one request, filed once.
+ *
+ * So the sentence read "Nobody has been asked for anything yet" beside an open
+ * request with company counsel. Scoped to the requirement it was true; read as
+ * English it was false, and it is the kind of false that makes a reader stop
+ * chasing something that is still outstanding.
+ */
+export function askedElsewhere(
+  row: RequirementAssessment[],
+  assessment: RequirementAssessment,
+): RequirementAssessment[] {
+  return row.filter((a) => a.requirement !== assessment.requirement && a.next_actions.length > 0);
+}
+
+function ActionLine({
+  assessment,
+  row,
+}: {
+  assessment: RequirementAssessment;
+  row: RequirementAssessment[] | undefined;
+}) {
+  //: Three states, not two. `undefined` is a caller that did not supply the
+  //: rest of the row, and the honest answer there is the scoped fact alone —
+  //: guessing at siblings we were not given is how the first version got it
+  //: wrong in the other direction.
+  const elsewhere = row === undefined ? undefined : askedElsewhere(row, assessment);
   return (
     <div className="gaw__line gaw__line--action">
       <dt className="gaw__label">action</dt>
       <dd className="gaw__body">
         {assessment.next_actions.length === 0 ? (
           <p className="gaw__none">
-            No next action is recorded against this requirement. Nobody has been asked for anything
-            yet.
+            {elsewhere === undefined ? (
+              <>Nothing is being requested under this requirement.</>
+            ) : elsewhere.length === 0 ? (
+              <>
+                Nothing is being requested under this requirement, and nothing is being requested
+                under any other one for this holding at this date. Nobody has been asked for
+                anything yet.
+              </>
+            ) : (
+              <>
+                Nothing is being requested under this requirement, because the request is filed
+                under{" "}
+                {/* Joined by `Intl.ListFormat` rather than by index arithmetic.
+                    The first version placed its separators with
+                    `i === elsewhere.length - 1`, which the §5.3 boundary check
+                    reads — correctly, since it cannot see intent — as the page
+                    computing on a number the API owns. */}
+                <strong>
+                  {NAMES.format(elsewhere.map((a) => REQUIREMENT[a.requirement].label))}
+                </strong>
+                . One missing document is asked for once. Check there before treating this as
+                unasked.
+              </>
+            )}
           </p>
         ) : (
           <ul className="gaw__actions">
@@ -204,15 +262,22 @@ function WhyLine({ observation }: { observation: GapObservation | undefined }) {
 export function GapAction({
   assessment,
   gaps,
+  row,
 }: {
   assessment: RequirementAssessment;
   gaps: GapObservation[];
+  /**
+   * Every requirement assessed for this holding at this date, including the
+   * open one. Optional because the action line degrades to a scoped statement
+   * without it rather than to a wrong one.
+   */
+  row?: RequirementAssessment[];
 }) {
   const observation = observationFor(gaps, assessment);
   return (
     <dl className="gaw">
       <GapLine assessment={assessment} observation={observation} />
-      <ActionLine assessment={assessment} />
+      <ActionLine assessment={assessment} row={row} />
       <WhyLine observation={observation} />
     </dl>
   );

@@ -1,14 +1,16 @@
-import type { Approval } from "./contracts";
+import type { Approval, RequirementCode } from "./contracts";
 import { FIXTURE_FUNDS, FIXTURE_HOLDING, FIXTURE_PACKET } from "./fixture";
 import type {
   DecisionRequest,
   DocumentResponse,
   EvalsResponse,
+  ExplainResponse,
   ExportResponse,
   FundsResponse,
   HoldingResponse,
   PacketDownload,
   PacketResponse,
+  PassagesResponse,
 } from "./responses";
 
 /**
@@ -387,4 +389,57 @@ export type Async<T> =
  */
 export function failureDetail(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Ask the corpus a question and get its own words back.
+ *
+ * No fixture fallback, deliberately, and it is the only loader here without
+ * one. Every other read surface may honestly serve the bundled Dream stub and
+ * say `source: "fixture"` beside it. A passage cannot work that way: it is a
+ * quotation attributed to a named document at a page and a span, and a stub
+ * quotation is the precise failure the citation machinery exists to prevent.
+ * So this throws, and the pane renders the refusal.
+ */
+export async function findPassages(
+  holdingId: string,
+  on: string,
+  requirement: RequirementCode,
+  question: string,
+): Promise<PassagesResponse> {
+  if (API === "")
+    throw new Error(
+      "No API is configured, so this browser is showing the bundled fixture. There are no documents to search.",
+    );
+  const url =
+    `${API}/holdings/${encodeURIComponent(holdingId)}/passages` +
+    `?on=${encodeURIComponent(on)}&requirement=${encodeURIComponent(requirement)}` +
+    (question.trim() === "" ? "" : `&q=${encodeURIComponent(question)}`);
+  return (await fetchJson(
+    url,
+    ["outcome", "passages", "query"],
+    "passage search",
+  )) as PassagesResponse;
+}
+
+/**
+ * This row, restated in plain English — or the reason there is no paragraph.
+ *
+ * A refusal is a 200 and a normal answer, so it is not thrown. The caller
+ * renders `text` when the guard accepted the model's words and `refusal` when
+ * it did not, and the structured row underneath is complete either way.
+ */
+export async function explainRow(
+  holdingId: string,
+  on: string,
+  requirement: RequirementCode,
+): Promise<ExplainResponse> {
+  if (API === "")
+    throw new Error(
+      "No API is configured, so this browser is showing the bundled fixture. There is no row to restate.",
+    );
+  const url =
+    `${API}/holdings/${encodeURIComponent(holdingId)}/explain` +
+    `?on=${encodeURIComponent(on)}&requirement=${encodeURIComponent(requirement)}`;
+  return (await fetchJson(url, ["outcome", "row"], "row restatement")) as ExplainResponse;
 }

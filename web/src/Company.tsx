@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AssistStrip } from "./Assist";
 import { CoverageMap } from "./Coverage";
 import type { HoldingRow } from "./contracts";
 import type { Async } from "./data";
@@ -26,6 +27,7 @@ import { Workspace } from "./Workspace";
 export function Company({
   fundId,
   periodId,
+  measurementDate,
   rows,
   recomputations,
   selected,
@@ -33,6 +35,7 @@ export function Company({
 }: {
   fundId: string;
   periodId: string;
+  measurementDate: string;
   rows: HoldingRow[];
   recomputations: Record<string, Recomputation> | null;
   selected: string | null;
@@ -125,6 +128,14 @@ export function Company({
               claims={evidence.data.evidence}
               gaps={row.gaps}
             />
+          </Section>
+
+          <Section
+            title="Ask about this company"
+            note="Type a question and read the documents' own words, or read the finding restated in plain English."
+            hint="The search runs no language model: it matches your words against the stored documents and quotes what it finds, with the page. The plain-English panel does use one, and everything it writes is checked against the record before it is shown."
+          >
+            <AssistStrip holdingId={evidence.data.holding_id} measurementDate={measurementDate} />
           </Section>
 
           {/* The full inventory, folded away. It is the appendix to the trail

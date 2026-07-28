@@ -40,6 +40,7 @@ from api import ledger
 from api.config import SchemaNameError, dsn, resolve_schema
 from api.decisions import decisions_router
 from api.evals import evals
+from api.lookup import lookup_router
 from api.reconciliation import router as reconciliation_router
 from api.serialize import fact_json, packet_json, totals_json
 from packages.contracts.fixtures.dream import DREAM_ROW, dream_packet
@@ -60,6 +61,12 @@ router.include_router(decisions_router)
 # wrong. Making the shape carry the distinction is what stops that, rather than
 # a note asking the next reader to remember it.
 router.include_router(reconciliation_router)
+# `/holdings/{id}/passages`. GET, and the only route in the application whose
+# answer is a verbatim slice of a document rather than a projection over rows.
+# No model runs in it: the reader's English goes to `plainto_tsquery`, and what
+# comes back carries the page and the span, so a passage can be re-verified
+# against the document rather than trusted.
+router.include_router(lookup_router)
 
 #: Kept so the app is demonstrable without a database. Step 0's one holding.
 _FIXTURE_ROWS = {DREAM_ROW.holding_id: DREAM_ROW}

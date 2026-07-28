@@ -22,6 +22,7 @@ async function mount(
   return render(
     <Company
       fundId="fund_ii"
+      measurementDate="2025-12-31"
       periodId="fund_ii_25q4"
       rows={rows}
       recomputations={recomputations}

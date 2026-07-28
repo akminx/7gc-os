@@ -2,10 +2,12 @@ import type {
   Claim,
   DecisionStatus,
   DecisionType,
+  ExecutionStatus,
   Money,
   Packet,
   PacketTotals,
   RequirementCode,
+  SourceClass,
   SourceFact,
 } from "./contracts";
 
@@ -447,4 +449,68 @@ export interface BlindSpot {
   what: string;
   why: string;
   measured_by: string;
+}
+
+/**
+ * `GET /holdings/{id}/passages` — the corpus answering in its own words.
+ *
+ * There is no `source` field and no fixture branch, unlike every other
+ * response here. A passage is a QUOTATION attributed to a document, with a
+ * page and a span; the read surfaces may honestly fall back to the bundled
+ * Dream stub and label it, but there is no honest way to label a quotation the
+ * fund does not hold. The route answers 503 instead, and `data.ts` carries that
+ * refusal to the pane rather than inventing a passage to fill it.
+ */
+export interface RetrievedPassage {
+  claim_id: string;
+  claim_key: string;
+  holding_id: string;
+  document_version_id: string;
+  filename: string;
+  source_class: SourceClass;
+  execution_status: ExecutionStatus;
+  issued_date: string;
+  page: number;
+  quote: string;
+  span_start: number;
+  span_end: number;
+  /**
+   * The stems that actually matched. Rendered, so a reader can see WHY a
+   * passage came back — a ranked list with no account of its own relevance is
+   * an ordering the reader has to take on faith.
+   */
+  matched: string[];
+}
+
+export interface PassagesResponse {
+  source: Source;
+  query: { text: string; supplied: boolean; requirement: RequirementCode; on: string };
+  /**
+   * `found` or `none_matched`, never an empty array standing for both. A
+   * corpus that addresses this nowhere and a component that failed to load
+   * render identically otherwise.
+   */
+  outcome: "found" | "none_matched";
+  passages: RetrievedPassage[];
+}
+
+/**
+ * `GET /holdings/{id}/explain` — the row restated, or the reason it was not.
+ *
+ * Both outcomes are a 200 and both are normal. `text` is present only when the
+ * guard in `evidence/explain.py` accepted the model's answer: every figure in
+ * it already appears in the row, and no verdict word other than this row's own.
+ * `refusal` says which check failed, in the guard's words.
+ *
+ * The pane renders the structured row either way. This is a paragraph ABOVE a
+ * complete record, never a replacement for one — so a refusal costs the reader
+ * a paragraph they never saw, not the finding.
+ */
+export interface ExplainResponse {
+  source: Source;
+  row: Record<string, unknown>;
+  outcome: "explained" | "refused";
+  text: string | null;
+  refusal: string | null;
+  model: string;
 }

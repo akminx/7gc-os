@@ -510,7 +510,9 @@ export function EvidenceTrail({
           because the third line is a quotation, which needs a line length a
           reader can hold. In a 22rem column the fund's own sentence broke every
           four words and read as a caption. */}
-      {openAssessment !== undefined && <GapAction assessment={openAssessment} gaps={gaps} />}
+      {openAssessment !== undefined && (
+        <GapAction assessment={openAssessment} gaps={gaps} row={assessments} />
+      )}
     </>
   );
 }

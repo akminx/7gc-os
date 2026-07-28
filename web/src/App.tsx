@@ -131,6 +131,7 @@ function Surfaces({ packet }: { packet: PacketResponse }) {
         <Company
           fundId={packet.fund_id}
           periodId={packet.period.id}
+          measurementDate={packet.period.period_date}
           rows={packet.rows}
           recomputations={packet.recomputations}
           selected={selected}

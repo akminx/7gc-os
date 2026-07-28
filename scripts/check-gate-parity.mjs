@@ -119,7 +119,7 @@ export function checkClaudeMd(ROOT) {
   const missing = candidates
     .filter(([, t]) => !ignored.has(t.replace(/\/$/, "")))
     .map(([n, t]) => `${n}: \`${t}\``);
-  if (missing.length) return ["WARN", "paths referenced but not found:\n" + missing.join("\n")];
+  if (missing.length) return ["WARN", `paths referenced but not found:\n${missing.join("\n")}`];
   return ["OK", "referenced paths exist"];
 }
 

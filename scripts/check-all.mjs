@@ -30,6 +30,15 @@ import {
 } from "./check-gate-parity.mjs";
 import { checkUiVocabulary, checkWebBoundary } from "./check-web-arch.mjs";
 
+/** `labels.ts` → `glossary.json`, regenerated and compared. */
+function checkGlossary() {
+  const run = spawnSync(process.execPath, [join(ROOT, "scripts", "emit-glossary.mjs"), "--check"], {
+    encoding: "utf8",
+  });
+  if (run.status === 0) return ["OK", ""];
+  return ["FAIL", (run.stderr || run.stdout || "").trim()];
+}
+
 const ROOT = (() => {
   try {
     return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -98,7 +107,7 @@ function load(name, fallback) {
 
 function save(name, data) {
   mkdirSync(BUD, { recursive: true });
-  writeFileSync(join(BUD, name), JSON.stringify(data, null, 2) + "\n");
+  writeFileSync(join(BUD, name), `${JSON.stringify(data, null, 2)}\n`);
 }
 
 function toolBin(project, name) {
@@ -190,7 +199,7 @@ function checkTests(projects, fix, ratchet) {
   if (!ran) return ["FAIL", "vitest not installed — required check cannot SKIP"];
   if (fails.length) {
     const note = missing.length ? `\n(no vitest found for: ${missing.join(", ")})` : "";
-    return ["FAIL", "tests failed\n" + fails.join("\n") + note];
+    return ["FAIL", `tests failed\n${fails.join("\n")}${note}`];
   }
   if (total === null)
     return ["FAIL", "tests pass but coverage report missing — install @vitest/coverage-v8"];
@@ -263,7 +272,7 @@ function checkFileSizes(fix) {
   if (over.length)
     return [
       "FAIL",
-      "split these files:\n" + over.map(([rel, n]) => `${rel} = ${n} lines (max ${mx})`).join("\n"),
+      `split these files:\n${over.map(([rel, n]) => `${rel} = ${n} lines (max ${mx})`).join("\n")}`,
     ];
   return ["OK", `all source files <= ${mx} lines`];
 }
@@ -293,7 +302,7 @@ function checkDebt(fix, ratchet) {
   if (hits.length > cap)
     return [
       "FAIL",
-      `${hits.length} debt markers > ceiling ${cap}\n` + hits.slice(0, 20).join("\n"),
+      `${hits.length} debt markers > ceiling ${cap}\n${hits.slice(0, 20).join("\n")}`,
     ];
   return ["OK", `${hits.length} debt markers <= ceiling ${cap}`];
 }
@@ -356,7 +365,7 @@ export function checkDeps(projects) {
   if (!ran)
     return ["FAIL", "no lockfile to audit — the dependency check cannot SKIP (run npm install)"];
   if (vulns.length)
-    return ["FAIL", "vulnerable dependencies (high/critical):\n" + vulns.join("\n")];
+    return ["FAIL", `vulnerable dependencies (high/critical):\n${vulns.join("\n")}`];
   return ["OK", "no high/critical dependency CVEs"];
 }
 
@@ -379,6 +388,12 @@ export function main() {
     ["tests + coverage", () => checkTests(projects, fix, ratchet), false],
     ["web boundary §5.3", () => checkWebBoundary(ROOT), false],
     ["UI vocabulary", () => checkUiVocabulary(ROOT), false],
+    // The definitions the UI shows and the definitions the assistant sends to a
+    // model are one file, generated from `labels.ts`. That argument is only true
+    // while someone checks it: without this line the generator existed, worked,
+    // and ran nowhere, so the first edit to a gloss would have split the two
+    // vocabularies silently. A guard that is never executed cannot fail.
+    ["glossary in step", checkGlossary, false],
     ["duplicate code", checkDups, false],
     ["file sizes", () => checkFileSizes(fix), false],
     ["debt markers", () => checkDebt(fix, ratchet), false],
